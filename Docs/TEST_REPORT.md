@@ -17,3 +17,9 @@
 主机侧 PM 计时器回归测试参见 `Firmware/Tests/host`；不能替代目标 MCU 集成编译和实机验证。
 
 根菜单四项的静态源码检查完成，Main/Data 不展示未经验证的传感器值；OLED RST 实际布线和电平仍待上板核验。
+
+## 已报告的 Keil 链接错误（本次修正）
+
+构建者报告 `L6218E: Undefined symbol u8x8_capture_*` 共六项，调用点位于 `u8g2_buffer.o`。这些符号属于未包含的 PBM/XBM 捕获导出实现，不影响当前 SSD1315 常规渲染。已改为仅在显式启用 `U8G2_ENABLE_BUFFER_CAPTURE` 时编译导出函数，并将 coroOS 文件移动至 `MDK-ARM/Scheduler`、更新 `uvprojx`。
+
+**修复后的完整 Keil 链接仍待用户本地重建确认**；此条记录不表示编译或上板验证已通过。

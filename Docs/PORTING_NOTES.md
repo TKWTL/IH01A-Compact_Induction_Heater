@@ -4,7 +4,7 @@
 
 | 原项目 | IH01A 处理 |
 |---|---|
-| DPC27A coroOS | 源码保留，TIME_Millis 映射 HAL_GetTick |
+| DPC27A coroOS | 原文件原内容迁入 `Firmware/MDK-ARM/Scheduler/`，Keil 编译路径及头文件路径同步调整；TIME_Millis 映射 HAL_GetTick |
 | DPC27A 定点 MiaoUI + 裁剪 u8g2 | 保留 MIT/BSD 授权，调整 128x64 和 SSD1315 驱动，移除 Dashboard 依赖 |
 | DPC27A 双按键 | 全部重写为 L/R/ENTR/EXIT 低有效 4 键 |
 | SH1107 80x128 R1/R3 | 改 SSD1315 128x64 R0/R2，SPI1 硬件 NSS |
@@ -19,3 +19,5 @@
 这只能降低阻塞，不构成最坏情况时序保证，必须用 PD 抓包验证。
 
 根菜单仅 Main / Settings / Data / About 四项。Main 和 Data 暂为占位，Settings 保留 Sleep/Display 配置。当前字库只能显示英文标签，中文字体仍待移植。
+
+链接修复：初次 Keil 构建报告 `u8x8_capture_*` 六个未定义符号，原因是精简版 u8g2 没有链接 PBM/XBM 图像导出实现。对 `u8g2_buffer.c` 和 `u8g2.h` 的导出 API 同时加 `U8G2_ENABLE_BUFFER_CAPTURE` 开关，默认关闭；后续恢复导出功能需要加入完整上游 `u8x8_capture.c`。

@@ -18,7 +18,7 @@ while (1):
 ```
 
 - `Peripheral/Time` 使用 HAL_GetTick() 作为 1ms 时基。原 `SysTick_Handler` 中 `HAL_IncTick()` 与 `USBPD_DPM_TimerCounter()` 不变。
-- `Project/Scheduler/coroOS` 为无栈协作式 Protothreads 风格，不支持抢占，跨 `THRD_YIELD/DELAY` 的变量必须 static 或来自外部句柄。
+- `MDK-ARM/Scheduler/coroOS` 为无栈协作式 Protothreads 风格，不支持抢占，跨 `THRD_YIELD/DELAY` 的变量必须 static 或来自外部句柄。
 - `BSP/Buttons` 4键30ms稳定消抖：L(PA12)=UP、R(PA11)=DOWN、ENTR(PC7)=确认、EXIT(PD3)=返回，均低有效；L/R 约400ms后每100ms重复，ENTR/EXIT松手触发。休眠唤醒键事件被吞，不会误触菜单。
 - `APP/MiaoUI` 来自 DPC27A 的 Q10 定点版本，基于裁剪 u8g2；SSD1315 128×64 `U8G2_R0`。根菜单仅四项：Main（主界面）、Settings（设置）、Data（数据）、About（关于）。主界面/数据页是不可控制加热器的占位页；中文字库与通用弹窗尚未实现。
 - `APP/framework` 使用 DPC27A 的 PB02B 式真实冻结倒计时，注册 OLED 和 MCU 节点，`PM_MAX_SLEEP_DEPTH` 仍为 `UI_OFF`，只发 OLED 0xAE/0xAF 并停止菜单绘制；不改变 USBPD、PWM、ADC、COMP 的运行状态。
@@ -37,3 +37,7 @@ u8g2 和 DMA 前的帧拷贝区共占：1024B u8g2帧缓冲 + 1024B活动帧 + 1
 
 **本次固件不允许 GUI/PM 启动加热器。** 原有 PWM_EN PC6 上电低电平、不调用 TIM1 输出使能。
 TIM1、比较器、过流检测与 USBPD 仍属于原始 CubeMX/USBPD 工程，后续加热算法须另行做安全状态机与硬件保护验证。
+
+## u8g2 精简版链接边界
+
+`u8g2_buffer.c` 的 PBM/XBM 帧缓冲导出函数依赖 upstream 的 `u8x8_capture.c`，IH01A 不使用该图像导出功能。默认不定义 `U8G2_ENABLE_BUFFER_CAPTURE`，其四个导出函数及头文件声明不参与编译，因此不再引入六个 `u8x8_capture_*` 未定义符号。SSD1315 的帧缓冲绘制、页面传输和显示刷新均不受此开关影响。

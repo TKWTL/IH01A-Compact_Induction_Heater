@@ -337,7 +337,7 @@
               <MiscControls />
               <Define>USE_FULL_LL_DRIVER,STM32G071xx,USBPD_PORT_COUNT=1,_SNK,USBPDCORE_LIB_PD3_CONFIG_MINSNK,USE_HAL_DRIVER</Define>
               <Undefine />
-              <IncludePath>../Core/Inc;../APP;../APP/MiaoUI;../APP/framework;../BSP/Buttons;../BSP/Display;../Peripheral/Time;../Project/Scheduler;../ThirdParty/u8g2;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../USBPD/App;../USBPD/Target;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Middlewares/ST/STM32_USBPD_Library/Core/inc;../Middlewares/ST/STM32_USBPD_Library/Devices/STM32G0XX/inc</IncludePath>
+              <IncludePath>../Core/Inc;../APP;../APP/MiaoUI;../APP/framework;../BSP/Buttons;../BSP/Display;../Peripheral/Time;./Scheduler;../ThirdParty/u8g2;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../USBPD/App;../USBPD/Target;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Middlewares/ST/STM32_USBPD_Library/Core/inc;../Middlewares/ST/STM32_USBPD_Library/Devices/STM32G0XX/inc</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -3408,7 +3408,7 @@
             <File>
               <FileName>coroOS.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Project/Scheduler/coroOS.c</FilePath>
+              <FilePath>./Scheduler/coroOS.c</FilePath>
             </File>
           </Files>
         </Group>

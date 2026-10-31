@@ -183,6 +183,10 @@ void u8g2_UpdateDisplay(u8g2_t *u8g2)
 
 /*============================================*/
 
+/* The SSD1315 firmware does not export framebuffers as PBM/XBM.  This
+ * optional host-side feature needs u8x8_capture.c from full upstream u8g2.
+ * Leave it disabled unless that source is deliberately added to the build. */
+#ifdef U8G2_ENABLE_BUFFER_CAPTURE
 /* vertical_top memory architecture */
 void u8g2_WriteBufferPBM(u8g2_t *u8g2, void (*out)(const char *s))
 {
@@ -210,3 +214,5 @@ void u8g2_WriteBufferXBM2(u8g2_t *u8g2, void (*out)(const char *s))
   u8x8_capture_write_xbm_pre(u8g2_GetBufferTileWidth(u8g2), u8g2_GetBufferTileHeight(u8g2), out);
   u8x8_capture_write_xbm_buffer(u8g2_GetBufferPtr(u8g2), u8g2_GetBufferTileWidth(u8g2), u8g2_GetBufferTileHeight(u8g2), u8x8_capture_get_pixel_2, out);
 }
+
+#endif /* U8G2_ENABLE_BUFFER_CAPTURE */
