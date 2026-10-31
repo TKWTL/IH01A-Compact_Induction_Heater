@@ -18,8 +18,8 @@ static ui_t s_ui;
 THRD_DECLARE(thread_ui)
 {
     THRD_BEGIN;
-    /* The OLED reset/panel supply are hardware controlled. Never busy-wait
-     * during early USB-PD negotiation. VDD/VCC and reset must be stable. */
+    /* OLED RES# follows shared MCU NRST. External VCC may require its own
+     * power sequencing; wait cooperatively without starving USB-PD. */
     THRD_DELAY(250u);
     diapInit();
     MiaoUi_Setup(&s_ui);

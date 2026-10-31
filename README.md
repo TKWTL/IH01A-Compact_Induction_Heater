@@ -5,7 +5,7 @@ STM32G071CBU6 感应加热器固件/硬件仓库（当前仅完成基础框架�
 ## 固件基础（2026-10-31）
 
 - **MCU**：STM32G071CBU6，64MHz，128KiB Flash，36KiB RAM。
-- **GUI**：DPC27A 定点整数 MiaoUI + 裁剪 u8g2，SSD1315 128×64，4-wire SPI1，VCC 外部供电、禁用电荷泵。
+- **GUI**：DPC27A 定点整数 MiaoUI + 裁剪 u8g2，SSD1315 128×64，4-wire SPI1，VCC 外部供电、禁用电荷泵；OLED RES# 默认与 STM32 PF2/NRST 共网。
 - **按键**：L（PA12）、R（PA11）、ENTR（PC7）、EXIT（PD3），均上拉、低有效。
 - **协作调度**：coroOS；主循环始终先调用原有 `USBPD_DPM_Run()`。
 - **PM**：来自 PB02B/DPC27A 的冻结式空闲倒计时，最大等级 **UI_OFF**。
@@ -19,3 +19,5 @@ STM32G071CBU6 感应加热器固件/硬件仓库（当前仅完成基础框架�
 不得在未经 PWM/比较器/USB-PD 安全验证前将此版本用于实际加热负载。
 
 许可：本仓库根目录 `LICENSE` 及 `THIRD_PARTY_NOTICES.md`。
+
+UI 根菜单仅 **Main / Settings / Data / About**（主界面、设置、数据、关于）。Main/Data 为占位，完整中文字体仍未实现。

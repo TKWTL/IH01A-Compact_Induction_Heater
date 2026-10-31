@@ -20,15 +20,16 @@ while (1):
 - `Peripheral/Time` 使用 HAL_GetTick() 作为 1ms 时基。原 `SysTick_Handler` 中 `HAL_IncTick()` 与 `USBPD_DPM_TimerCounter()` 不变。
 - `Project/Scheduler/coroOS` 为无栈协作式 Protothreads 风格，不支持抢占，跨 `THRD_YIELD/DELAY` 的变量必须 static 或来自外部句柄。
 - `BSP/Buttons` 4键30ms稳定消抖：L(PA12)=UP、R(PA11)=DOWN、ENTR(PC7)=确认、EXIT(PD3)=返回，均低有效；L/R 约400ms后每100ms重复，ENTR/EXIT松手触发。休眠唤醒键事件被吞，不会误触菜单。
-- `APP/MiaoUI` 来自 DPC27A 的 Q10 定点版本，基于裁剪 u8g2；默认 SSD1315 128×64 原生横屏 `U8G2_R0`，不含中文字库和完整弹窗管理器。
+- `APP/MiaoUI` 来自 DPC27A 的 Q10 定点版本，基于裁剪 u8g2；SSD1315 128×64 `U8G2_R0`。根菜单仅四项：Main（主界面）、Settings（设置）、Data（数据）、About（关于）。主界面/数据页是不可控制加热器的占位页；中文字库与通用弹窗尚未实现。
 - `APP/framework` 使用 DPC27A 的 PB02B 式真实冻结倒计时，注册 OLED 和 MCU 节点，`PM_MAX_SLEEP_DEPTH` 仍为 `UI_OFF`，只发 OLED 0xAE/0xAF 并停止菜单绘制；不改变 USBPD、PWM、ADC、COMP 的运行状态。
 
 ## 显示硬件和供电约束
 
 SSD1315 四线 SPI：PB3=SCK、PB5=MOSI、PA15=硬件NSS/CS、PB4=D/C。
 `BSP/Display/ssd1315_display.c` 初始化时明确写 `8D 10` 禁用电荷泵，**绝不使用 `8D 14`**。
-本板 OLED **VCC 由外部提供**，MCU 源码无屏幕 RESET 或 VCC 使能 GPIO；因此假设复位/电源排序已由硬件实现，
-固件仅在启动后250ms发初始化命令。若外部VCC后到、RES没有复位脉冲，软件不能单独弥补，需在样机上核实。
+OLED **VCC 由外部提供**。默认硬件约定：**SSD1315 RES# 与 STM32G071 PF2/NRST 直接共网**，无额外屏幕复位 GPIO。STM32G0 的 NRST_MODE 应保持出厂默认的 Reset input/output：外部复位和内部复位均使 NRST 拉低，内部复位低脉冲最短 20µs（ST AN5096）。如果选项字节改为 Reset input only/GPIO，就无法用内部复位同步复位 OLED。
+共网复位无法在 MCU 正常执行时单独重置 OLED，且仍须确保 SSD1315 的 RES# 电压门限、复位脉宽和外部 VCC 上电释放顺序满足实际面板要求。
+固件在 MCU 启动后协作式等待 250ms 再初始化，这并不保证晚到的外部 VCC 在释放复位前已稳定；需测量实机电源与 NRST 波形。PCB 连线本次尚未独立核查。
 u8g2 和 DMA 前的帧拷贝区共占：1024B u8g2帧缓冲 + 1024B活动帧 + 1024B待发帧 = 3072B。
 首版每轮使用阻塞 HAL_SPI_Transmit 发送一页，尚未使用 SPI DMA；必须在实机确认 PD 时序最坏情况。
 

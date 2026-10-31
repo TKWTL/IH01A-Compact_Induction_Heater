@@ -1,5 +1,6 @@
 /* SSD1315 (128x64), 4-wire SPI1 / STM32G071.
- * PA15 HW NSS, PB3 SCK, PB5 MOSI, PB4 D/C. OLED reset not MCU-connected.
+ * PA15 HW NSS, PB3 SCK, PB5 MOSI, PB4 D/C.
+ * OLED RES# shares STM32G071 PF2/NRST; no dedicated reset GPIO.
  * The panel's VCC is externally powered; the u8g2 sequence disables the
  * internal charge pump (8D 10). Never issue 8D 14 here.
  * SPI1 is dedicated to OLED. No DMA used in the baseline: one 128-byte page
@@ -61,8 +62,10 @@ static uint8_t U8X8_Byte(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_p
 static uint8_t U8X8_GPIO(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
 {
     (void)u8x8; (void)arg_int; (void)arg_ptr;
-    /* RESET is not on an MCU pin: no fake reset toggles.
-     * Initial 250ms startup wait is in thread_ui, outside USBPD critical loop. */
+    /* OLED RES# and MCU NRST share one net, so the application cannot
+     * pulse display reset without resetting itself. NRST_MODE must remain
+     * reset input/output for internal resets to appear on the pin.
+     * The initial 250ms settle time is provided by thread_ui. */
     switch(msg)
     {
     case U8X8_MSG_GPIO_AND_DELAY_INIT:

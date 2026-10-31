@@ -5,7 +5,7 @@
 - `APP/app_tasks.c`：coroOS UI/PM协作任务。
 - `APP/framework/`：PB02B/DPC27A 移植的 UI_OFF 电源框架。
 - `APP/MiaoUI/`：DPC27A 定点整数 MiaoUI，英文最小菜单。
-- `BSP/Display/`：SSD1315 128x64 4-wire SPI，外部 VCC，电荷泵禁用(8D 10)。
+- `BSP/Display/`：SSD1315 128×64 4-wire SPI，外部 VCC，电荷泵禁用(8D 10)；OLED RES# 与 STM32 PF2/NRST 共网，无复位 GPIO。
 - `BSP/Buttons/`：四个低有效按键。
 - `Peripheral/Time/`：1ms HAL tick。
 - `Project/Scheduler/`：无栈 coroOS。
@@ -17,3 +17,5 @@
 
 **约束：** GUI/PM 不启动加热 PWM；USBPD_DPM_Run 每轮先执行；PM 深度仅 UI_OFF。
 本次不宣称已完成 Keil 编译或上板，详见 `Docs/TEST_REPORT.md`。
+
+根菜单：**Main / Settings / Data / About**（主界面／设置／数据／关于）。Main 与 Data 尚无实际业务功能。共享 NRST 为默认硬件约定，等待网表及实机时序核实。
