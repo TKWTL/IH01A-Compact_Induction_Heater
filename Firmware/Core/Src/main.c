@@ -34,6 +34,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "app_tasks.h"
 
 /* USER CODE END Includes */
 
@@ -122,12 +123,14 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  APP_Tasks_Init();
   while (1)
   {
     /* USER CODE END WHILE */
     USBPD_DPM_Run();
 
     /* USER CODE BEGIN 3 */
+    APP_Tasks_RunOnce();
   }
   /* USER CODE END 3 */
 }

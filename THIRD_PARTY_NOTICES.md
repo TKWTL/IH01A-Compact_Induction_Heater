@@ -1,32 +1,24 @@
-# Third-party notices(第三方组件声明)
+# Third-party Notices（第三方组件声明）
 
-项目自写代码采用 **GNU AGPL-3.0-only**(见 `LICENSE`)。
+本仓库自身代码的默认许可见根目录 `LICENSE`（GNU AGPL-3.0-only）。
+引入的第三方源码保留原版权、许可证与使用限制；不得以仓库许可证覆盖上游许可证。
 
-本文件登记所有随仓库分发的第三方组件(厂商库、开源库、参考实现等)的来源、许可证
-与使用边界。**上游的版权与许可通知不得被本文件或仓库级 AGPL 声明替换或减免**;
-源码内保留原始文件头,二进制分发需在文档中再现相应声明。
+## MiaoUI（MIT）
+- 作者：JFeng-Z，来源：DPC27A 定点整数移植。
+- 文件：`Firmware/APP/MiaoUI/`；许可证：`Firmware/APP/MiaoUI/LICENSE`。
+- IH01A 修改：128x64 参数、四按键映射、SSD1315 显示适配。
+- `images/image.c/.h` 图标素材含单独的 GPL-3.0-or-later 来源声明，应保留其文件头和相应再分发义务。
 
-## 登记格式(每个组件一节)
+## u8g2 裁剪版（BSD-2-Clause）
+- 原项目：https://github.com/olikraus/u8g2，作者 Oliver Kraus。
+- 文件：`Firmware/ThirdParty/u8g2/`；许可证：`Firmware/ThirdParty/u8g2/LICENSE`。
+- IH01A 修改：SSD1315 128x64 驱动、1024B 全屏帧缓冲、外部 VCC 供电初始化。
 
-### <组件名称>
-- **来源**:(厂商 / 项目 / 链接)
-- **许可证**:(名称 + 许可证文件在仓库中的位置)
-- **使用边界**:是否裁剪 / 修改;再分发注意事项
+## coroOS / PM
+- 来源：TKWTL/DPC27A-Desktop_PD_Power_Converter 与 TKWTL/PB02B-Pocket_Powerbank。
+- coroOS 基于无栈 Protothreads 风格的项目实现；若另行分发为通用库，应复核原始实现的版权与许可。
+- PM 保留不依赖具体 MCU 的核心逻辑，IH01A 只配置 UI_OFF。
 
-## 已登记组件
-
-> 暂无。添加第一个组件时,按上面的格式在本节追加。
-
-<!-- 使用示例(替换为真实条目后删除本注释):
-
-### WCH CH32X035 器件库
-- 来源:Nanjing Qinheng Microelectronics(沁恒),`Firmware/Project/Core/`
-- 许可证:保留上游版权与使用声明
-- 使用边界:仅保留器件头文件、启动与系统文件,不做修改
-
-### u8g2(裁剪版)
-- 来源:U8g2,Oliver Kraus,`Firmware/ThirdParty/u8g2/`
-- 许可证:BSD-2-Clause(见 `Firmware/ThirdParty/u8g2/LICENSE`)
-- 使用边界:仅保留所需图形函数与项目自定义显示后端
-
--->
+## STM32 HAL/LL、USB-PD
+- 来自原有 STM32CubeMX/Keil 工程；遵循各对应文件中 ST 的版权与许可说明。
+- 本次未重写、替换或扩大原始 USB-PD 协议栈授权范围。
