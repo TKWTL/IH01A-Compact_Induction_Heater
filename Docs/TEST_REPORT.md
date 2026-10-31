@@ -1,68 +1,36 @@
-# IH01A 基础移植测试记录
+# IH01A 集成测试记录（截至 2026-10-31）
 
-此阶段没有连接实机或执行 Keil 完整编译。以下项目均为 **待验证**，不能标为通过。
+## 实机已验证：用户反馈
 
-| 验证项 | 期望行为 | 状态 |
+| 项目 | 结果 | 证据范围 |
 |---|---|---|
-| 工程编译 | ARMClang/Keil无错误，Flash<128KiB、RAM<36KiB | 待编译 |
-| OLED RST 共网 | PF2/NRST 连 SSD1315 RES#，默认 NRST_MODE；内外复位均触发屏幕复位 | 待测 |
-| OLED 外部VCC | 外部 VCC 稳定时序及共网 RES# 复位低脉冲满足 SSD1315 要求 | 待测 |
-| 电荷泵 | SSD1315发送8D 10、绝不发送8D 14 | 源码静态检查通过，待抓SPI |
-| SPI OLED | PA15/PB3/PB5/PB4；128×64 正常画面 | 待测 |
-| 四键低电平 | L上、R下、ENTR确认、EXIT退出 | 待测 |
-| UI_OFF | 关屏但 USBPD、风扇/保护机制不中断 | 待测 |
-| USBPD | 插拔、协商、通信负载下稳定 | 待测 |
-| PWM 安全 | 首版所有操作都不使能加热PWM | 待测 |
+| Keil 构建并在 STM32G071 运行 | 已能运行 | 用户已烧录并调试；完整日志/Flash-RAM map 未收集 |
+| SSD1315 OLED 显示 | 通过基础功能 | 已正常显示；显示方向由用户修正为 `U8G2_R2` |
+| 四键/UI 操作 | 通过基础功能 | 用户报告可正常操作 |
+| UI_OFF 休眠/唤醒 | 通过基础功能 | 用户报告休眠正常 |
+| C 运行库零堆配置 | 不通过 | `HeapSize=0` 时启动卡住，调用栈涉及 `_init_alloc/_RT...` |
+| C 堆 `0x400`（1KiB） | 通过基础启动 | `.ioc` 与 Keil 启动汇编一致；当前可运行，不代表压力工况的裕量已足够 |
+| USBPD 与 coroOS 共存 | 基础运行通过 | PD `UserExecute` 钩子驱动调度；多档 PD 协商与极限时序尚未测 |
 
-主机侧 PM 计时器回归测试参见 `Firmware/Tests/host`；不能替代目标 MCU 集成编译和实机验证。
+## 尚未完成的验收
 
-根菜单四项的静态源码检查完成，Main/Data 不展示未经验证的传感器值；OLED RST 实际布线和电平仍待上板核验。
+| 类别 | 待验证内容 |
+|---|---|
+| 内存 | map / 静态 RAM；堆高水位及栈高水位；连续操作与多次插拔后余量 |
+| USB-PD | 5/9/12/15/20V 支持档位按实际 PDO 检查；连接、断开、重协商及异常恢复；协议分析仪验证 |
+| 时序 | UI/SPI 最长阻塞时间及 USBPD 状态机服务间隔；充电头/供电波动下的表现 |
+| OLED 电气 | NRST 共网和外部 VCC 时序、SPI NSS/DC/数据波形、电荷泵命令核对 |
+| PM | 不同休眠超时、多次唤醒、按键保持、USB-PD 事件发生于 UI_OFF 时的行为 |
+| 加热安全 | PWM_EN 默认关闭；电流、电压、温度采样标定与硬件故障闭锁，均待设计/测试 |
 
-## 已报告的 Keil 链接错误（本次修正）
+## 已解决的问题（保留回归依据）
 
-构建者报告 `L6218E: Undefined symbol u8x8_capture_*` 共六项，调用点位于 `u8g2_buffer.o`。这些符号属于未包含的 PBM/XBM 捕获导出实现，不影响当前 SSD1315 常规渲染。已改为仅在显式启用 `U8G2_ENABLE_BUFFER_CAPTURE` 时编译导出函数，并将 coroOS 文件移动至 `MDK-ARM/Scheduler`、更新 `uvprojx`。
+1. `u8g2_buffer.o` 因 PBM/XBM 捕获模块缺失而报 `L6218E`：精简版关闭相关导出接口。
+2. ArmClang `BKPT 0xAB` / C 运行库启动问题：提供非 semihosting 重定向；实测确认零堆不可启动、当前 1KiB 堆配置可运行。**不能仅据此断定动态分配由 USB-PD 导致**。
+3. `mini_stdio.c` 的 `putchar` 宏重定义编译失败：通过 `#undef putchar`、`putc` 适配修正。
+4. `USBPD_DPM_Run()` 为非 RTOS 无限循环，原 `main()` 后置 coroOS 语句不可达：改从 `USBPD_DPM_UserExecute()` 的 USER CODE 调度。
+5. OLED 方向：用户已在项目中将初始方向更正为 `U8G2_R2`；本次清理不覆盖该修改。
 
-**修复后的完整 Keil 链接仍待用户本地重建确认**；此条记录不表示编译或上板验证已通过。
+已删除用于上述调度定位的 `g_ih01a_*` 临时监测变量；用于 mini_printf 的 `g_runtime_log` 和致命退出记录保留。
 
-## Keil 调试阻塞于 _ttywrch（用户提供反汇编）
-
-报告位置约 `0x08000CEA: BKPT 0xAB`，属于 ARM semihosting；
-由于未获得 Call Stack，无法断定是 C 库启动、输出、断言还是退出报告。
-当前工程使用 ARMCLANG 6.24 标准库，无参数 `main()`。
-修订措施：`MDK-ARM/retarget.c` 保证无命令行参数启动，不使用 semihosting，
-重定向 `_ttywrch` / `fputc` 到 128B 调试环，`_sys_exit` 保留可观察退出状态；
-`APP/framework` 拆分为独立 Keil 编译组。修复后尚需实机断点核对及 Rebuild。
-
-**若链接出现 L6915E**：表示还有其他没有被重定向的 C 库 semihosting
-函数，不应删除 `__use_no_semihosting` 绕过；应依据报错逐一处理。
-
-## Mini formatter and UTF-8 feature checklist
-
-- Confirm `printf("%02X %ld %s", ...)` and `snprintf` use PB02B mini_format.
-- Confirm Unsupported `%f` is not used anywhere in the application/PD paths
-  and no semihosting dependency is introduced by the strong formatter symbols.
-- Confirm `u8g2_DrawUTF8` resolves without undefined symbols, decodes UTF-8
-  into BMP codepoints, and displays ASCII using the original font.
-- Add a future CJK subset font for visual validation of Chinese glyphs.
-- **ARMClang build and hardware display/USBPD tests pending.**
-- User to set CubeMX `HeapSize=0x1000` locally; not modified in this commit.
-
-## ARMClang 6 mini_stdio.c compiling failure (2026-10-31)
-
-Keil ARMCLANG `stdio.h` defines `putchar(c)` as `putc(c, stdout)`, so a
-literal `int putchar(int ch)` declaration in `mini_stdio.c` was expanded
-by the preprocessor, producing three errors. Fixed by `#undef putchar`
-before the function definition, and supplying `putc()` as an alternate
-entrypoint for call sites that retain the header macro. The `puts`
-implementation no longer tests for null, because the C library declares
-its argument `nonnull`; callers must supply valid strings.
-Needs a new ARMCLANG Rebuild; no Keil target build has been run here.
-
-## 用户报告 USBPD_DPM_Run() 内循环导致 OLED 黑屏
-
-源码核实：非 RTOS 分支 `USBPD_DPM_Run()` 自带无限循环，
-此前放在 main 其后的 coroOS 调用不可达。本次在
-`USBPD_DPM_UserExecute` 的 CubeMX USER CODE 钩子中调用
-`APP_Tasks_RunOnce()`，保留 PD CAD/PE 状态机执行顺序。
-增加四个 Watch 变量用于检查回调、协程、OLED 初始化、UI 运行。
-需板端确认刷屏不会破坏 PD 时序，OLED 已被正常初始化并有 SPI 信号。
+本表中“通过”只代表用户明确报告的基础实机操作，不代表功率加热、PD 边界工况或系统可靠性验证已经完成。

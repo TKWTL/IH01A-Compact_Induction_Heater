@@ -1,23 +1,19 @@
 # IH01A · Compact Induction Heater
 
-STM32G071CBU6 感应加热器固件/硬件仓库（当前仅完成基础框架移植，非可交付加热控制固件）。
+STM32G071CBU6 感应加热器固件/硬件项目。当前已完成**基础控制面板联调**，尚未实现可投入使用的加热控制与保护闭环。
 
-## 固件基础（2026-10-31）
+## 当前实机状态（2026-10-31）
 
-- **MCU**：STM32G071CBU6，64MHz，128KiB Flash，36KiB RAM。
-- **GUI**：DPC27A 定点整数 MiaoUI + 裁剪 u8g2，SSD1315 128×64，4-wire SPI1，VCC 外部供电、禁用电荷泵；OLED RES# 默认与 STM32 PF2/NRST 共网。
-- **按键**：L（PA12）、R（PA11）、ENTR（PC7）、EXIT（PD3），均上拉、低有效。
-- **协作调度**：coroOS；主循环始终先调用原有 `USBPD_DPM_Run()`。
-- **PM**：来自 PB02B/DPC27A 的冻结式空闲倒计时，最大等级 **UI_OFF**。
-- **安全**：此版本不会通过 GUI 使能加热 PWM；加热控制算法与保护联动尚未实现。
+- 用户已在实机确认：OLED 正常显示、四键操作、UI_OFF 休眠与唤醒正常。
+- OLED：SSD1315 128×64，SPI1，外部 VCC、禁用内部电荷泵；RES# 与 STM32 PF2/NRST 共网。用户已修正显示方向，现使用 `U8G2_R2`。
+- 固件：ST USB-PD 非 RTOS 主循环中，由 `USBPD_DPM_UserExecute()` 调用 coroOS；PM 深度暂限 `UI_OFF`。
+- CubeMX / Keil：用户实测堆空间为 0 时程序卡住；**当前可运行配置为 0x400（1024 B）堆、0x400（1024 B）栈**。这不证明 1 KiB 是长期负载下的充分值，也不证明分配发生在 USB-PD 内。
+- 功能边界：Main / Settings / Data / About 四项菜单；Main/Data 尚为占位。加热 PWM 尚未接入 UI，不能用于实际加热负载。
 
-项目代码、引脚、架构和移植差异见 [Firmware/README.md](Firmware/README.md)、
-[Docs/FIRMWARE_ARCHITECTURE.md](Docs/FIRMWARE_ARCHITECTURE.md) 与
-[Docs/PORTING_NOTES.md](Docs/PORTING_NOTES.md)。
+> 屏幕显示、按键、UI_OFF 的成功为用户报告的实机结果；PD 多档协商与插拔压力测试、内存峰值、OLED/PD 实时性、过流/过温硬件保护等**尚未完成独立验收**。
 
-**当前状态：** 已接入 Keil 工程源文件，尚未完成 ARMClang 构建与上板测试。
-不得在未经 PWM/比较器/USB-PD 安全验证前将此版本用于实际加热负载。
+下一阶段优先事项与验收标准：**[Docs/NEXT_STAGE_PLAN.md](Docs/NEXT_STAGE_PLAN.md)**。
 
-许可：本仓库根目录 `LICENSE` 及 `THIRD_PARTY_NOTICES.md`。
+更多信息：[固件说明](Firmware/README.md) · [架构](Docs/FIRMWARE_ARCHITECTURE.md) · [测试记录](Docs/TEST_REPORT.md) · [移植说明](Docs/PORTING_NOTES.md)。
 
-UI 根菜单仅 **Main / Settings / Data / About**（主界面、设置、数据、关于）。Main/Data 为占位，完整中文字体仍未实现。
+许可：根目录 `LICENSE` 和 `THIRD_PARTY_NOTICES.md`。

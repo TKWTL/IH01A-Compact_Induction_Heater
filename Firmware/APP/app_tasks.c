@@ -16,31 +16,19 @@
 static coro_scheduler_t s_scheduler;
 static ui_t s_ui;
 
-/* Keil Watch diagnostics (stage 0=not started, 1=OLED init entered,
- * 2=OLED init returned, 3=MiaoUI setup returned). */
-volatile uint32_t g_ih01a_app_run_count;
-volatile uint32_t g_ih01a_ui_tick_count;
-volatile uint8_t g_ih01a_ui_stage;
-
 THRD_DECLARE(thread_ui)
 {
     THRD_BEGIN;
     /* OLED RES# follows shared MCU NRST. External VCC may require its own
      * power sequencing; wait cooperatively without starving USB-PD. */
     THRD_DELAY(250u);
-    g_ih01a_ui_stage = 1u;
     diapInit();
-    g_ih01a_ui_stage = 2u;
     MiaoUi_Setup(&s_ui);
-    g_ih01a_ui_stage = 3u;
     while(1)
     {
         THRD_DELAY(20u);
         if(!pm_api_ui_should_block() && !pm_api_is_unstable_wake())
-        {
-            ++g_ih01a_ui_tick_count;
             ui_loop(&s_ui);
-        }
     }
     THRD_END;
 }
@@ -96,16 +84,12 @@ static coro_pt_t s_states[2];
 
 void APP_Tasks_Init(void)
 {
-    g_ih01a_app_run_count = 0u;
-    g_ih01a_ui_tick_count = 0u;
-    g_ih01a_ui_stage = 0u;
     Buttons_Init();
     pm_api_init();
     CoroOS_Init(&s_scheduler,s_threads,s_states,2u);
 }
 void APP_Tasks_RunOnce(void)
 {
-    ++g_ih01a_app_run_count;
     CoroOS_RunOnce(&s_scheduler);
     SSD1315_Display_Service();
 }
