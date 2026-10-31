@@ -90,7 +90,7 @@ void SSD1315_Display_Init(u8g2_t *screen)
     s_power_dirty = 0u;
     s_contrast_dirty = 0u;
     s_frames = 0u;
-    u8g2_Setup_ssd1315_128x64_f(screen, U8G2_R0, U8X8_Byte, U8X8_GPIO);
+    u8g2_Setup_ssd1315_128x64_f(screen, U8G2_R2, U8X8_Byte, U8X8_GPIO);
     u8g2_InitDisplay(screen);
     u8g2_SetPowerSave(screen, 0u);
     u8g2_ClearBuffer(screen);

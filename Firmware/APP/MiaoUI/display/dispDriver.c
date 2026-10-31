@@ -144,7 +144,7 @@ uint16_t Disp_GetUTF8Width(const char *str) { return u8g2_GetUTF8Width(&u8g2, st
 
 void Disp_SetRotation(uint8_t rotation)
 {
-    u8g2_SetDisplayRotation(&u8g2, rotation ? U8G2_R2 : U8G2_R0);
+    u8g2_SetDisplayRotation(&u8g2, rotation ? U8G2_R0 : U8G2_R2);
 }
 
 void Disp_SetRotationMode(uint8_t rotation_mode)
