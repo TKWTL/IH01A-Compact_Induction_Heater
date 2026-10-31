@@ -23,3 +23,15 @@
 构建者报告 `L6218E: Undefined symbol u8x8_capture_*` 共六项，调用点位于 `u8g2_buffer.o`。这些符号属于未包含的 PBM/XBM 捕获导出实现，不影响当前 SSD1315 常规渲染。已改为仅在显式启用 `U8G2_ENABLE_BUFFER_CAPTURE` 时编译导出函数，并将 coroOS 文件移动至 `MDK-ARM/Scheduler`、更新 `uvprojx`。
 
 **修复后的完整 Keil 链接仍待用户本地重建确认**；此条记录不表示编译或上板验证已通过。
+
+## Keil 调试阻塞于 _ttywrch（用户提供反汇编）
+
+报告位置约 `0x08000CEA: BKPT 0xAB`，属于 ARM semihosting；
+由于未获得 Call Stack，无法断定是 C 库启动、输出、断言还是退出报告。
+当前工程使用 ARMCLANG 6.24 标准库，无参数 `main()`。
+修订措施：`MDK-ARM/retarget.c` 保证无命令行参数启动，不使用 semihosting，
+重定向 `_ttywrch` / `fputc` 到 128B 调试环，`_sys_exit` 保留可观察退出状态；
+`APP/framework` 拆分为独立 Keil 编译组。修复后尚需实机断点核对及 Rebuild。
+
+**若链接出现 L6915E**：表示还有其他没有被重定向的 C 库 semihosting
+函数，不应删除 `__use_no_semihosting` 绕过；应依据报错逐一处理。

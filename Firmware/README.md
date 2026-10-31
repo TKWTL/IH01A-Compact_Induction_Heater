@@ -21,3 +21,17 @@
 根菜单：**Main / Settings / Data / About**（主界面／设置／数据／关于）。Main 与 Data 尚无实际业务功能。共享 NRST 为默认硬件约定，等待网表及实机时序核实。
 
 链接说明：裁剪 u8g2 的 PBM/XBM 导出接口使用 `U8G2_ENABLE_BUFFER_CAPTURE` 条件编译，默认关闭，避免依赖未引入的 `u8x8_capture.c`。如需导出图像，需先加入与库版本匹配的 capture 实现。
+
+## Keil C 库与诊断
+
+Keil 工程选择 ARM Compiler 6.24 + 标准 C 库，新增 `Firmware/MDK-ARM/retarget.c`
+明确导出 `__ARM_use_no_argv` / `__use_no_semihosting`，防止无串口设备在
+`_ttywrch` 处通过 `BKPT 0xAB` 调用调试器。
+`_ttywrch`、`fputc` 不阻塞，只把最近 128 个字符保存到
+`g_runtime_log`；在 Keil Watch 中同时观察 `g_runtime_log_head`、
+`g_runtime_log_count`、`g_runtime_exit_seen`、`g_runtime_exit_code`。
+`_sys_exit` 为不可恢复错误出口，记录退出码后停止，以免错误状态继续运行。
+**请通过 Call Stack 查找最初调用 _ttywrch 的函数，而非据此认定问题已排除。**
+
+Keil Sources 分组 `IH01A/APP/framework` 已独立于 `IH01A/APP`，
+文件物理路径仍是 `Firmware/APP/framework`，共 7 个 PM 源文件。

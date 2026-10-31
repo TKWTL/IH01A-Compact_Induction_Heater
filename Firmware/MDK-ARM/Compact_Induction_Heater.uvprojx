@@ -386,6 +386,11 @@
               <FileType>2</FileType>
               <FilePath>startup_stm32g071xx.s</FilePath>
             </File>
+                      <File>
+              <FileName>retarget.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>retarget.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -3310,41 +3315,13 @@
               <FileType>1</FileType>
               <FilePath>../APP/app_tasks.c</FilePath>
             </File>
-            <File>
-              <FileName>pm_api.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../APP/framework/pm_api.c</FilePath>
-            </File>
-            <File>
-              <FileName>pm_policy.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../APP/framework/pm_policy.c</FilePath>
-            </File>
-            <File>
-              <FileName>pm_controller.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../APP/framework/pm_controller.c</FilePath>
-            </File>
-            <File>
-              <FileName>pm_device.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../APP/framework/pm_device.c</FilePath>
-            </File>
-            <File>
-              <FileName>pm_device_builtin.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../APP/framework/pm_device_builtin.c</FilePath>
-            </File>
-            <File>
-              <FileName>pm_sleep_timer.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../APP/framework/pm_sleep_timer.c</FilePath>
-            </File>
-            <File>
-              <FileName>pm_ui_register.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../APP/framework/pm_ui_register.c</FilePath>
-            </File>
+
+
+
+
+
+
+
             <File>
               <FileName>ui.c</FileName>
               <FileType>1</FileType>
@@ -3384,6 +3361,46 @@
               <FileName>text.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/MiaoUI/widget/text.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>IH01A/APP/framework</GroupName>
+          <Files>
+            <File>
+              <FileName>pm_api.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/framework/pm_api.c</FilePath>
+            </File>
+            <File>
+              <FileName>pm_policy.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/framework/pm_policy.c</FilePath>
+            </File>
+            <File>
+              <FileName>pm_controller.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/framework/pm_controller.c</FilePath>
+            </File>
+            <File>
+              <FileName>pm_device.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/framework/pm_device.c</FilePath>
+            </File>
+            <File>
+              <FileName>pm_device_builtin.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/framework/pm_device_builtin.c</FilePath>
+            </File>
+            <File>
+              <FileName>pm_sleep_timer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/framework/pm_sleep_timer.c</FilePath>
+            </File>
+            <File>
+              <FileName>pm_ui_register.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/framework/pm_ui_register.c</FilePath>
             </File>
           </Files>
         </Group>

@@ -41,3 +41,13 @@ TIM1、比较器、过流检测与 USBPD 仍属于原始 CubeMX/USBPD 工程，�
 ## u8g2 精简版链接边界
 
 `u8g2_buffer.c` 的 PBM/XBM 帧缓冲导出函数依赖 upstream 的 `u8x8_capture.c`，IH01A 不使用该图像导出功能。默认不定义 `U8G2_ENABLE_BUFFER_CAPTURE`，其四个导出函数及头文件声明不参与编译，因此不再引入六个 `u8x8_capture_*` 未定义符号。SSD1315 的帧缓冲绘制、页面传输和显示刷新均不受此开关影响。
+
+## Semihosting 与调试运行
+
+ARM Compiler 6.24（标准 C 库）通过 `MDK-ARM/retarget.c` 定义
+`__ARM_use_no_argv`（无参数 main 的启动优化）和
+`__use_no_semihosting`（若其他 C 库路径仍需 semihosting 则链接报错）。
+此文件提供非阻塞 `_ttywrch` / `fputc` 监测环形缓冲，保留
+`_sys_exit` 的致命退出停机与退出码记录，不向 USBPD 调度器引入阻塞 I/O。
+待在 ARMCLANG 6.24 执行 Rebuild 以核实不再包含 BKPT 0xAB。
+Keil 源文件组织按 APP、APP/framework 分组，仍引用原位置中的 PM 源码。
