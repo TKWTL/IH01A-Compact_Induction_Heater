@@ -386,7 +386,7 @@
               <FileType>2</FileType>
               <FilePath>startup_stm32g071xx.s</FilePath>
             </File>
-                      <File>
+            <File>
               <FileName>retarget.c</FileName>
               <FileType>1</FileType>
               <FilePath>retarget.c</FilePath>
@@ -3305,9 +3305,6 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>::CMSIS</GroupName>
-        </Group>
-        <Group>
           <GroupName>IH01A/APP</GroupName>
           <Files>
             <File>
@@ -3315,13 +3312,6 @@
               <FileType>1</FileType>
               <FilePath>../APP/app_tasks.c</FilePath>
             </File>
-
-
-
-
-
-
-
             <File>
               <FileName>ui.c</FileName>
               <FileType>1</FileType>
@@ -3427,7 +3417,7 @@
               <FileType>1</FileType>
               <FilePath>./Scheduler/coroOS.c</FilePath>
             </File>
-                      <File>
+            <File>
               <FileName>mini_format.c</FileName>
               <FileType>1</FileType>
               <FilePath>../BSP/Console/mini_format.c</FilePath>
@@ -3548,6 +3538,9 @@
               <FilePath>../ThirdParty/u8g2/u8x8_string.c</FilePath>
             </File>
           </Files>
+        </Group>
+        <Group>
+          <GroupName>::CMSIS</GroupName>
         </Group>
       </Groups>
     </Target>
