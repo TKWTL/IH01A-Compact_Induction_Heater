@@ -8,13 +8,16 @@
 ```text
 MX_USBPD_Init()
 APP_Tasks_Init()
-while (1):
-    USBPD_DPM_Run()       <-- 每轮首先执行，绝不放入会等待的 UI 协程
-    APP_Tasks_RunOnce()
+main() -> USBPD_DPM_Run()      <-- ST 非 RTOS 函数永不返回
+  loop:
+    USBPD_CAD_Process()          <-- ST 定时门控
+    USBPD_PE_StateMachine_SNK()  <-- ST 定时门控
+    USBPD_DPM_UserExecute()      <-- USER CODE
+      APP_Tasks_RunOnce()
         coroOS:
-            thread_input_pm (10ms，含 PM 50ms poll)
-            thread_ui       (20ms，首次延迟250ms再初始化OLED)
-        SSD1315_Display_Service()   <-- 每轮最多发 1 页（128B）
+          thread_input_pm (10ms, PM 50ms poll)
+          thread_ui       (20ms, 首次延迟250ms OLED init)
+        SSD1315_Display_Service() <-- 每次至多 1 页
 ```
 
 - `Peripheral/Time` 使用 HAL_GetTick() 作为 1ms 时基。原 `SysTick_Handler` 中 `HAL_IncTick()` 与 `USBPD_DPM_TimerCounter()` 不变。
@@ -51,3 +54,22 @@ ARM Compiler 6.24（标准 C 库）通过 `MDK-ARM/retarget.c` 定义
 `_sys_exit` 的致命退出停机与退出码记录，不向 USBPD 调度器引入阻塞 I/O。
 待在 ARMCLANG 6.24 执行 Rebuild 以核实不再包含 BKPT 0xAB。
 Keil 源文件组织按 APP、APP/framework 分组，仍引用原位置中的 PM 源码。
+
+## USB-PD 主循环与 coroOS 的实际接入
+
+原版 ST 的无 RTOS `USBPD_DPM_Run()` 含有无限循环，在 main 中的
+`APP_Tasks_RunOnce()` 不可能被执行。当前使用
+`USBPD/Target/usbpd_dpm_user.c` 中的 CubeMX `USER CODE`
+`USBPD_DPM_UserExecute` 钩子，在 CAD/PE 后调用一次 coroOS，
+不修改 PD 中间件核心及 SysTick 定时计数。
+
+Keil Watch 诊断：
+`g_ih01a_pd_user_execute_count`（回调次数）；
+`g_ih01a_app_run_count`（调度次数）；
+`g_ih01a_ui_stage`（0=尚未初始化，1=开始 OLED 初始化，
+2=OLED 初始化已返回，3=MiaoUI 初始化已返回）；
+`g_ih01a_ui_tick_count`（UI 执行次数）。
+若回调与调度增加但 stage=0，检查 HAL_GetTick 和初始 250ms 延时。
+若 stage=3 且 UI tick 增长但屏幕黑屏，检查 SPI1 NSS/SCK/MOSI/D-C、
+SSD1315 供电电压、外部 VCC 与共网 NRST 时序。
+PD + OLED 时序的板端验证尚未完成。

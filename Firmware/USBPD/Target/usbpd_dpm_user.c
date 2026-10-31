@@ -34,7 +34,7 @@
 #include "stdio.h"
 #endif /* _TRACE */
 /* USER CODE BEGIN Includes */
-
+#include "app_tasks.h"
 /* USER CODE END Includes */
 
 /** @addtogroup STM32_USBPD_APPLICATION
@@ -104,7 +104,8 @@
   */
 
 /* USER CODE BEGIN Private_Variables */
-
+/* Incremented by the PD main loop's user hook. View in Keil Watch. */
+volatile uint32_t g_ih01a_pd_user_execute_count;
 /* USER CODE END Private_Variables */
 /**
   * @}
@@ -165,7 +166,12 @@ void USBPD_DPM_WaitForTime(uint32_t Time)
 void USBPD_DPM_UserExecute(void const *argument)
 {
 /* USER CODE BEGIN USBPD_DPM_UserExecute */
-
+  (void)argument;
+  /* USBPD_DPM_Run() does not return in ST's non-RTOS loop.
+   * CAD and PE are serviced before this hook in every iteration.
+   * APP_Tasks_RunOnce() must remain cooperative and non-blocking. */
+  ++g_ih01a_pd_user_execute_count;
+  APP_Tasks_RunOnce();
 /* USER CODE END USBPD_DPM_UserExecute */
 }
 

@@ -130,7 +130,7 @@ int main(void)
     USBPD_DPM_Run();
 
     /* USER CODE BEGIN 3 */
-    APP_Tasks_RunOnce();
+    /* coroOS now runs through USBPD_DPM_UserExecute() USER CODE. */
   }
   /* USER CODE END 3 */
 }

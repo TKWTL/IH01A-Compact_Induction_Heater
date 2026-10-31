@@ -15,7 +15,7 @@
 新增 C 文件已登记至 IH01A/APP、IH01A/BSP+Time+Scheduler、IH01A/u8g2 三组。
 原有 CubeMX 生成区仅在 main.c USER CODE 中挂接 APP_Tasks；后续重新生成 CubeMX 代码时须保留 USER CODE。
 
-**约束：** GUI/PM 不启动加热 PWM；USBPD_DPM_Run 每轮先执行；PM 深度仅 UI_OFF。
+**约束：** GUI/PM 不启动加热 PWM；非 RTOS 的 USBPD_DPM_Run 是无限循环，coroOS 在 USBPD_DPM_UserExecute USER CODE 回调中执行；PM 深度仅 UI_OFF。
 本次不宣称已完成 Keil 编译或上板，详见 `Docs/TEST_REPORT.md`。
 
 根菜单：**Main / Settings / Data / About**（主界面／设置／数据／关于）。Main 与 Data 尚无实际业务功能。共享 NRST 为默认硬件约定，等待网表及实机时序核实。
@@ -63,3 +63,11 @@ does not by itself prove that the USBPD stack allocated the heap;
 the USBPD minimal sink uses `USBPD_PE_GetMemoryConsumption()` to query
 stack memory. Do not confuse FreeRTOS TOTAL_HEAP_SIZE with the C heap;
 IH01A is non-RTOS. Stack stays at 0x400 pending a stack-usage check.
+
+## 无 RTOS 调度入口
+
+ST 的 `USBPD_DPM_Run()` 永不返回；应用初始化仍位于其之前，
+coroOS 由 `USBPD_DPM_UserExecute()` USER CODE 触发。
+Keil Watch 变量：`g_ih01a_pd_user_execute_count`、
+`g_ih01a_app_run_count`、`g_ih01a_ui_stage`（0–3）、
+`g_ih01a_ui_tick_count`。

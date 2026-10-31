@@ -57,3 +57,12 @@ entrypoint for call sites that retain the header macro. The `puts`
 implementation no longer tests for null, because the C library declares
 its argument `nonnull`; callers must supply valid strings.
 Needs a new ARMCLANG Rebuild; no Keil target build has been run here.
+
+## 用户报告 USBPD_DPM_Run() 内循环导致 OLED 黑屏
+
+源码核实：非 RTOS 分支 `USBPD_DPM_Run()` 自带无限循环，
+此前放在 main 其后的 coroOS 调用不可达。本次在
+`USBPD_DPM_UserExecute` 的 CubeMX USER CODE 钩子中调用
+`APP_Tasks_RunOnce()`，保留 PD CAD/PE 状态机执行顺序。
+增加四个 Watch 变量用于检查回调、协程、OLED 初始化、UI 运行。
+需板端确认刷屏不会破坏 PD 时序，OLED 已被正常初始化并有 SPI 信号。
