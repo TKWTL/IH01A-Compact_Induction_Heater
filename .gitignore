@@ -7,11 +7,28 @@
 .settings/
 *.launch
 
+# ---- Keil MDK 构建产物 / 本地状态(规则取自 PB02B-Pocket_PowerBank) ----
+# Keil 按工程名建立输出目录,里面的 .axf/.htm/.lnp/.dep 每次编译都会变
+/Firmware/MDK-ARM/Compact_Induction_Heater/
+*.axf
+*.htm
+*.lnp
+*.dep
+*.crf
+*.iex
+*.scvd
+*.bak
+*.ini
+*.dbg*
+# Keil 的窗口布局(uvguix)与 CubeMX 工程元数据:随机器/随打开就变,不入库
+*.uvguix
+*.uvguix.*
+*.mxproject
+*.code-workspace
+
 # ---- 构建产物 ----
 /obj/
 /Firmware/obj/
-/Firmware/Project/obj/*
-!/Firmware/Project/obj/.gitkeep
 build/
 *.o
 *.d
@@ -34,6 +51,15 @@ Thumbs.db
 # ---- 脚本工具本地环境 ----
 .venv/
 __pycache__/
+
+# ---- 必须保留进版本库的工程文件(防止上面的通配误伤) ----
+!*.uvprojx
+!*.uvoptx
+!*.ioc
+!*.sct
+!*.c
+!*.h
+!*.s
 
 # ---- 内部调试笔记(示例:需要时取消注释并改为实际路径) ----
 # Firmware/**/debug_notes.md
