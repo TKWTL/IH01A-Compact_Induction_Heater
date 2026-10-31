@@ -34,3 +34,23 @@
 已删除用于上述调度定位的 `g_ih01a_*` 临时监测变量；用于 mini_printf 的 `g_runtime_log` 和致命退出记录保留。
 
 本表中“通过”只代表用户明确报告的基础实机操作，不代表功率加热、PD 边界工况或系统可靠性验证已经完成。
+
+## 2026-10-31 DMA / display test / input follow-up (pending target validation)
+
+Code inspection showed SPI1 TX DMA configured as DMA1_Channel1, but
+SSD1315_Display_Service used blocking HAL_SPI_Transmit for commands and
+pixel data. Runtime transmit is now asynchronous DMA via
+HAL_SPI_Transmit_DMA, using stable source buffers, HAL Tx complete/error
+callbacks, nonblocking page-state progress, and a timeout/error reset.
+The short u8g2 initialization commands remain synchronous.
+**Keil build / SPI waveform / PD time-budget verification not yet run.**
+
+DPC27A's Burnin_Page was reviewed and adapted for the IH01A Display
+submenu (before Screen Flip): immediate 128x64 all-white framebuffer,
+any new key action exits. Manual testing must avoid prolonged full-white
+output due to OLED pixel aging.
+
+Input timing changed from 30/400/100ms to 60/800/200ms
+(debounce/DAS/repeat). ParameterSetting_Widget now handles UI_ACTION_UP
+with a negative step so L decrements. 16-bit held_ticks avoids earlier
+saturation stopping repeated actions after a long hold.

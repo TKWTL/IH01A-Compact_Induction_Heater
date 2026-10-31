@@ -1,20 +1,31 @@
-/* SSD1315 (128x64), 4-wire SPI1 / STM32G071.
- * PA15 HW NSS, PB3 SCK, PB5 MOSI, PB4 D/C.
- * OLED RES# shares STM32G071 PF2/NRST; no dedicated reset GPIO.
- * The panel's VCC is externally powered; the u8g2 sequence disables the
- * internal charge pump (8D 10). Never issue 8D 14 here.
- * SPI1 is dedicated to OLED. No DMA used in the baseline: one 128-byte page
- * is transmitted per cooperative service pass so USBPD_DPM_Run() remains
- * scheduled between pages. TX failures are retried on the next pass.
+/* SSD1315 128x64 on SPI1: nonblocking DMA for runtime page transfers.
+ *
+ * CubeMX SPI1 TX: DMA1_Channel1, DMA_REQUEST_SPI1_TX, 8-bit, normal.
+ * The u8g2 display init still uses blocking transfers (prior to s_ready).
+ * Runtime refresh keeps command/data D/C changes between completed DMA
+ * transactions and holds DMA source storage stable until completion.
+ *
+ * PA15 hardware NSS, PB3 SCK, PB5 MOSI, PB4 D/C.
+ * Display RES# follows STM32 PF2/NRST; OLED VCC is externally supplied.
+ * No charge pump: the SSD1315 init sequence must keep 8D 10.
  */
 #include "ssd1315_display.h"
 #include "spi.h"
 #include "main.h"
 #include <string.h>
 
+enum {
+    OLED_DMA_IDLE = 0,
+    OLED_DMA_PAGE_COMMAND,
+    OLED_DMA_PAGE_DATA,
+    OLED_DMA_POWER,
+    OLED_DMA_CONTRAST
+};
+
 static u8g2_t *s_screen;
 static uint8_t s_active[SSD1315_FB_SIZE];
 static uint8_t s_pending[SSD1315_FB_SIZE];
+static uint8_t s_cmd[3];             /* DMA must never reference a stack buffer */
 static uint8_t s_has_pending;
 static uint8_t s_active_frame;
 static uint8_t s_page;
@@ -23,20 +34,15 @@ static uint8_t s_power_requested;
 static uint8_t s_power_dirty;
 static uint8_t s_contrast_dirty;
 static uint8_t s_contrast;
+static uint8_t s_transmitted_value;
 static uint8_t s_ready;
 static uint32_t s_frames;
+static volatile uint8_t s_dma_phase;
+static volatile uint8_t s_dma_complete;
+static volatile uint8_t s_dma_failed;
+static uint32_t s_dma_started_ms;
 
-static uint8_t spi_send(const uint8_t *buf, uint16_t len, uint8_t data_mode)
-{
-    if(HAL_SPI_GetState(&hspi1) != HAL_SPI_STATE_READY)
-        return 0u;
-    if(data_mode)
-        LL_GPIO_SetOutputPin(D_C_GPIO_Port, D_C_Pin);
-    else
-        LL_GPIO_ResetOutputPin(D_C_GPIO_Port, D_C_Pin);
-    return (HAL_SPI_Transmit(&hspi1, (uint8_t *)buf, len, 2u) == HAL_OK) ? 1u : 0u;
-}
-
+/* Only used by u8g2 init, which runs before runtime DMA begins. */
 static uint8_t U8X8_Byte(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
 {
     (void)u8x8;
@@ -51,7 +57,6 @@ static uint8_t U8X8_Byte(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_p
         else LL_GPIO_ResetOutputPin(D_C_GPIO_Port, D_C_Pin);
         return 1u;
     case U8X8_MSG_BYTE_SEND:
-        /* arg_int is at most 255 for the trimmed u8g2 byte interface. */
         return (HAL_SPI_Transmit(&hspi1, (uint8_t *)arg_ptr,
                                  arg_int, 2u) == HAL_OK) ? 1u : 0u;
     default:
@@ -61,15 +66,12 @@ static uint8_t U8X8_Byte(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_p
 
 static uint8_t U8X8_GPIO(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
 {
-    (void)u8x8; (void)arg_int; (void)arg_ptr;
-    /* OLED RES# and MCU NRST share one net, so the application cannot
-     * pulse display reset without resetting itself. NRST_MODE must remain
-     * reset input/output for internal resets to appear on the pin.
-     * The initial 250ms settle time is provided by thread_ui. */
+    (void)u8x8; (void)arg_ptr;
     switch(msg)
     {
     case U8X8_MSG_GPIO_AND_DELAY_INIT:
     case U8X8_MSG_GPIO_RESET:
+        /* Shared reset: do not pulse NRST from firmware. */
         return 1u;
     case U8X8_MSG_DELAY_MILLI:
         HAL_Delay(arg_int);
@@ -79,9 +81,48 @@ static uint8_t U8X8_GPIO(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_p
     }
 }
 
+/* Called from the USBPD user hook (thread context), never ISR. */
+static uint8_t oled_start_dma(uint8_t *data, uint16_t length,
+                              uint8_t data_mode, uint8_t phase)
+{
+    if(s_dma_phase != OLED_DMA_IDLE ||
+       HAL_SPI_GetState(&hspi1) != HAL_SPI_STATE_READY)
+        return 0u;
+
+    if(data_mode)
+        LL_GPIO_SetOutputPin(D_C_GPIO_Port, D_C_Pin);
+    else
+        LL_GPIO_ResetOutputPin(D_C_GPIO_Port, D_C_Pin);
+
+    s_dma_complete = 0u;
+    s_dma_failed = 0u;
+    s_dma_phase = phase;
+    s_dma_started_ms = HAL_GetTick();
+    if(HAL_SPI_Transmit_DMA(&hspi1, data, length) != HAL_OK)
+    {
+        s_dma_phase = OLED_DMA_IDLE;
+        return 0u;
+    }
+    return 1u;
+}
+
+/* The DMA IRQ only records completion: no SPI re-entry, memcpy or UI work. */
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    if(hspi->Instance == SPI1 && s_dma_phase != OLED_DMA_IDLE)
+        s_dma_complete = 1u;
+}
+
+void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
+{
+    if(hspi->Instance == SPI1 && s_dma_phase != OLED_DMA_IDLE)
+        s_dma_failed = 1u;
+}
+
 void SSD1315_Display_Init(u8g2_t *screen)
 {
     if(screen == 0) return;
+    s_ready = 0u;
     s_screen = screen;
     s_page = 0u;
     s_has_pending = 0u;
@@ -89,7 +130,11 @@ void SSD1315_Display_Init(u8g2_t *screen)
     s_power_save = 0u;
     s_power_dirty = 0u;
     s_contrast_dirty = 0u;
+    s_dma_phase = OLED_DMA_IDLE;
+    s_dma_complete = 0u;
+    s_dma_failed = 0u;
     s_frames = 0u;
+    /* Keep user-corrected initial display rotation. */
     u8g2_Setup_ssd1315_128x64_f(screen, U8G2_R2, U8X8_Byte, U8X8_GPIO);
     u8g2_InitDisplay(screen);
     u8g2_SetPowerSave(screen, 0u);
@@ -103,11 +148,13 @@ void SSD1315_Display_RequestFlush(const uint8_t *framebuffer)
     memcpy(s_pending, framebuffer, SSD1315_FB_SIZE);
     s_has_pending = 1u;
 }
+
 void SSD1315_Display_RequestContrast(uint8_t value)
 {
     s_contrast = value;
     s_contrast_dirty = 1u;
 }
+
 void SSD1315_Display_RequestPowerSave(uint8_t enable)
 {
     s_power_requested = enable ? 1u : 0u;
@@ -116,41 +163,85 @@ void SSD1315_Display_RequestPowerSave(uint8_t enable)
 
 void SSD1315_Display_Service(void)
 {
-    uint8_t cmd[3];
     if(!s_ready || s_screen == 0) return;
+
+    if(s_dma_phase != OLED_DMA_IDLE)
+    {
+        uint8_t phase = s_dma_phase;
+
+        if(!s_dma_complete && !s_dma_failed)
+        {
+            /* Missing IRQ must not leave the display state machine stuck. */
+            if((uint32_t)(HAL_GetTick() - s_dma_started_ms) <= 50u)
+                return;
+            s_dma_failed = 1u;
+        }
+
+        if(s_dma_failed)
+        {
+            /* Rare error/timeout recovery; keep page for retry.
+             * Only the error path calls the blocking HAL abort routine. */
+            (void)HAL_SPI_Abort(&hspi1);
+            s_dma_phase = OLED_DMA_IDLE;
+            s_dma_complete = 0u;
+            s_dma_failed = 0u;
+            return;
+        }
+
+        s_dma_phase = OLED_DMA_IDLE;
+        s_dma_complete = 0u;
+
+        switch(phase)
+        {
+        case OLED_DMA_PAGE_COMMAND:
+            /* Next transaction starts only after the page command finishes,
+             * otherwise D/C could switch in the middle of a DMA transfer. */
+            (void)oled_start_dma(&s_active[(uint16_t)s_page * SSD1315_WIDTH],
+                                 SSD1315_WIDTH, 1u, OLED_DMA_PAGE_DATA);
+            return;
+        case OLED_DMA_PAGE_DATA:
+            if(++s_page >= 8u)
+            {
+                s_active_frame = 0u;
+                s_page = 0u;
+                s_frames++;
+            }
+            return;
+        case OLED_DMA_POWER:
+            s_power_save = s_transmitted_value;
+            s_power_dirty = (s_power_requested != s_transmitted_value);
+            return;
+        case OLED_DMA_CONTRAST:
+            s_contrast_dirty = (s_contrast != s_transmitted_value);
+            return;
+        default:
+            return;
+        }
+    }
+
     if(s_active_frame)
     {
-        cmd[0] = (uint8_t)(0xB0u | s_page);
-        cmd[1] = 0x00u;
-        cmd[2] = 0x10u;
-        if(!spi_send(cmd, 3u, 0u)) return;
-        if(!spi_send(&s_active[(uint16_t)s_page * SSD1315_WIDTH],
-                     SSD1315_WIDTH, 1u)) return;
-        s_page++;
-        if(s_page >= 8u)
-        {
-            s_active_frame = 0u;
-            s_page = 0u;
-            s_frames++;
-        }
+        s_cmd[0] = (uint8_t)(0xB0u | s_page);
+        s_cmd[1] = 0x00u;
+        s_cmd[2] = 0x10u;
+        (void)oled_start_dma(s_cmd, 3u, 0u, OLED_DMA_PAGE_COMMAND);
         return;
     }
 
     if(s_power_dirty)
     {
-        cmd[0] = s_power_requested ? 0xAEu : 0xAFu;
-        if(!spi_send(cmd, 1u, 0u)) return;
-        s_power_save = s_power_requested;
-        s_power_dirty = 0u;
+        s_transmitted_value = s_power_requested;
+        s_cmd[0] = s_transmitted_value ? 0xAEu : 0xAFu;
+        (void)oled_start_dma(s_cmd, 1u, 0u, OLED_DMA_POWER);
         return;
     }
 
     if(s_contrast_dirty)
     {
-        cmd[0] = 0x81u;
-        cmd[1] = s_contrast;
-        if(!spi_send(cmd, 2u, 0u)) return;
-        s_contrast_dirty = 0u;
+        s_transmitted_value = s_contrast;
+        s_cmd[0] = 0x81u;
+        s_cmd[1] = s_transmitted_value;
+        (void)oled_start_dma(s_cmd, 2u, 0u, OLED_DMA_CONTRAST);
         return;
     }
 
@@ -160,5 +251,6 @@ void SSD1315_Display_Service(void)
     s_active_frame = 1u;
     s_page = 0u;
 }
+
 uint8_t SSD1315_Display_IsReady(void) { return s_ready; }
 uint32_t SSD1315_Display_GetFrameCount(void) { return s_frames; }

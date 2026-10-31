@@ -23,6 +23,31 @@ static uint8_t disp_contrast_raw(int level)
 static ui_item_t s_contrast_item;
 static ui_item_t s_background_item;
 static ui_item_t s_rotation_item;
+static ui_item_t s_burnin_item;
+
+/* Adapted from DPC27A service_pages.c: a pass-based MiaoUI WORD page.
+ * An action is left unconsumed so the UI state machine exits on ANY key. */
+static void Disp_BurninPage(ui_t *ui)
+{
+    static uint8_t white_shown;
+
+    if(ui == 0) return;
+    if(ui->action != UI_ACTION_NONE)
+    {
+        white_shown = 0u;
+        return;
+    }
+
+    if(!white_shown)
+    {
+        uint8_t white = 1u;
+        Disp_SetMaxClipWindow();
+        Disp_SetDrawColor(&white);
+        Disp_DrawBox(0u, 0u, UI_HOR_RES, UI_VER_RES);
+        Disp_SendBuffer();
+        white_shown = 1u;
+    }
+}
 
 void Create_Disp_Parameters(ui_t *ui)
 {
@@ -66,6 +91,7 @@ void Add_Disp_Items(ui_page_t *parent_page)
 {
     AddItem(" Contrast", UI_ITEM_DATA, 0, &s_contrast_item, parent_page, 0, 0);
     AddItem(" Background", UI_ITEM_DATA, 0, &s_background_item, parent_page, 0, 0);
+    AddItem(" Burn-in Test", UI_ITEM_WORD, 0, &s_burnin_item, parent_page, 0, Disp_BurninPage);
     AddItem(" Screen Flip", UI_ITEM_DATA, 0, &s_rotation_item, parent_page, 0, 0);
 }
 

@@ -42,3 +42,14 @@ USB-PD 的 1ms 定时仍由 `SysTick_Handler` 中原有 `USBPD_DPM_TimerCounter(
 仍为**控制面板联调版本**，未建立加热负载所需的硬件过流保护、温度/供电联锁、PWM 输出安全状态机或受控启停流程。软件和 GUI 不启动加热 PWM。
 
 下一阶段：`Docs/NEXT_STAGE_PLAN.md`。
+
+## SPI1 DMA runtime transport
+
+CubeMX provides SPI1 TX DMA1_Channel1 and the IRQ. Display init retains
+u8g2's brief blocking SPI commands. Thereafter the display service starts
+DMA commands then DMA page data as separate transactions; ISR callbacks
+record completion and no transfer starts from IRQ context. The
+SSD1315_Display_Service advances the state during the PD user callback.
+Command and framebuffer storage remain valid while DMA is in flight.
+At most one DMA operation starts in each call. Verify timing and NSS/DC
+with a logic analyzer before treating USB-PD interleaving as validated.

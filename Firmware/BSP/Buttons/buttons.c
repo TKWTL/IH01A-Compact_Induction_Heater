@@ -1,12 +1,16 @@
-/* Four independent active-low keys, >=30ms stable debounce.
- * L/R repeat after 400ms every 100ms; ENTR/EXIT act on release.
- * UI wake consumes the first press and suppresses its following release.
+/* Four independent active-low keys, sampled every 10ms.
+ * Debounce 60ms; L/R DAS 800ms, autorepeat every 200ms.
+ * ENTR/EXIT act on release; UI wake consumes the initial press.
  */
+#define IH_BTN_DEBOUNCE_TICKS 6u
+#define IH_BTN_DAS_TICKS      80u
+#define IH_BTN_REPEAT_TICKS   20u
 #include "buttons.h"
 #include "main.h"
 
 typedef struct {
-    uint8_t last_raw, stable_down, consecutive, held_ticks, suppressed;
+    uint8_t last_raw, stable_down, consecutive, suppressed;
+    uint16_t held_ticks;
 } button_state_t;
 static button_state_t s_state[4];
 static uint8_t s_actions, s_press, s_wake;
@@ -29,7 +33,7 @@ void Buttons_Init(void)
     {
         s_state[i].last_raw=button_raw(i);
         s_state[i].stable_down=s_state[i].last_raw;
-        s_state[i].consecutive=3u;
+        s_state[i].consecutive=IH_BTN_DEBOUNCE_TICKS;
         s_state[i].held_ticks=0u;
         s_state[i].suppressed=s_state[i].stable_down;
     }
@@ -44,14 +48,14 @@ void Buttons_Poll10ms(void)
         button_state_t *b=&s_state[i];
         if(raw==b->last_raw)
         {
-            if(b->consecutive<3u) b->consecutive++;
+            if(b->consecutive<IH_BTN_DEBOUNCE_TICKS) b->consecutive++;
         }
         else
         {
             b->last_raw=raw;
             b->consecutive=1u;
         }
-        if(b->consecutive>=3u && b->stable_down!=raw)
+        if(b->consecutive>=IH_BTN_DEBOUNCE_TICKS && b->stable_down!=raw)
         {
             b->stable_down=raw;
             b->held_ticks=0u;
@@ -69,8 +73,9 @@ void Buttons_Poll10ms(void)
         }
         if(b->stable_down && b->last_raw && i<2u && !b->suppressed)
         {
-            if(b->held_ticks<250u) b->held_ticks++;
-            if(b->held_ticks>=40u && ((b->held_ticks-40u)%10u)==0u)
+            if(b->held_ticks<65535u) b->held_ticks++;
+            if(b->held_ticks>=IH_BTN_DAS_TICKS &&
+               ((b->held_ticks-IH_BTN_DAS_TICKS)%IH_BTN_REPEAT_TICKS)==0u)
                 s_actions |= s_bits[i];
         }
     }

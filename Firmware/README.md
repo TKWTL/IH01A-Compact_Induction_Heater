@@ -41,3 +41,23 @@ GUI/PM 不使能加热 PWM，原有 TIM1/COMP/ADC/UCPD 的配置暂不改动。
 未建立过流/过温/失电安全联锁及闭环前，**不得使用实际加热线圈进行带功率调试**。
 
 下一阶段见 `Docs/NEXT_STAGE_PLAN.md`。
+
+## OLED SPI1 DMA and Burn-in Test
+
+Although SPI1 DMA1_Channel1 was already initialized by CubeMX, the old
+SSD1315_Display_Service used blocking HAL_SPI_Transmit. Runtime page
+commands, 128-byte page payloads, contrast and power-save commands now
+use HAL_SPI_Transmit_DMA with a persistent command buffer and per-transfer
+completion/error flags; D/C changes only after HAL reports completion.
+The u8g2 initialization sequence still uses short blocking transfers before
+DMA is started. Keep CubeMX DMA1_Channel1 IRQ and SPI1 IRQ enabled.
+
+Settings > Display now includes "Burn-in Test" before "Screen Flip".
+The page fills all 128x64 pixels with white and ANY L/R/ENTR/EXIT event
+exits back to the menu. **Avoid prolonged full-white exposure**; OLED
+aging and permanent retention are possible. No fixed timeout was added.
+
+Buttons sampled every 10ms: debounce 60ms, L/R initial-repeat delay
+(DAS) 800ms and repeat interval 200ms. ENTR/EXIT remain release-based;
+the longer 16-bit hold counter avoids repeat freeze after ~2.5s.
+L / UP now decrements integer/decimal parameter widgets, R / DOWN increments.
