@@ -89,7 +89,7 @@ void MX_UCPD2_Init(void)
   LL_DMA_SetMemorySize(DMA1, LL_DMA_CHANNEL_7, LL_DMA_MDATAALIGN_BYTE);
 
   /* UCPD2 interrupt Init */
-  NVIC_SetPriority(UCPD1_2_IRQn, 0);
+  NVIC_SetPriority(UCPD1_2_IRQn, 1);
   NVIC_EnableIRQ(UCPD1_2_IRQn);
 
   /* USER CODE BEGIN UCPD2_Init 1 */
