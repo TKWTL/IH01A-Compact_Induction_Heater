@@ -9,6 +9,15 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+/* ArmClang 6 stdio.h declares putchar as a function-like macro:
+ *   #define putchar(c) putc((c), stdout)
+ * Undefine it here before providing the actual function symbol.
+ * putc() is also implemented below so callers retaining the macro
+ * are redirected to the same nonblocking log sink. */
+#ifdef putchar
+#undef putchar
+#endif
+
 extern void IH_RuntimePutChar(char ch);
 
 static void mini_log_sink(char ch, void *ctx)
@@ -50,8 +59,6 @@ int snprintf(char *dst, size_t capacity, const char *fmt, ...)
 /* ArmClang can replace constant printf("text\n") with puts(). */
 int puts(const char *str)
 {
-    if(str == 0)
-        str = "(null)";
     while(*str)
         IH_RuntimePutChar(*str++);
     IH_RuntimePutChar('\n');
@@ -62,6 +69,13 @@ int putchar(int ch)
 {
     IH_RuntimePutChar((char)ch);
     return (unsigned char)ch;
+}
+
+/* Calls using the macro from stdio.h resolve to putc(), not putchar(). */
+int putc(int ch, FILE *stream)
+{
+    (void)stream;
+    return putchar(ch);
 }
 
 /* No file-system console. stdout and stderr are the same diagnostic ring. */

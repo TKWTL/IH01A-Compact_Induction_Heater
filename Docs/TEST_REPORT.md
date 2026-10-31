@@ -46,3 +46,14 @@
 - Add a future CJK subset font for visual validation of Chinese glyphs.
 - **ARMClang build and hardware display/USBPD tests pending.**
 - User to set CubeMX `HeapSize=0x1000` locally; not modified in this commit.
+
+## ARMClang 6 mini_stdio.c compiling failure (2026-10-31)
+
+Keil ARMCLANG `stdio.h` defines `putchar(c)` as `putc(c, stdout)`, so a
+literal `int putchar(int ch)` declaration in `mini_stdio.c` was expanded
+by the preprocessor, producing three errors. Fixed by `#undef putchar`
+before the function definition, and supplying `putc()` as an alternate
+entrypoint for call sites that retain the header macro. The `puts`
+implementation no longer tests for null, because the C library declares
+its argument `nonnull`; callers must supply valid strings.
+Needs a new ARMCLANG Rebuild; no Keil target build has been run here.
