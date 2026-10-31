@@ -21,3 +21,14 @@
 根菜单仅 Main / Settings / Data / About 四项。Main 和 Data 暂为占位，Settings 保留 Sleep/Display 配置。当前字库只能显示英文标签，中文字体仍待移植。
 
 链接修复：初次 Keil 构建报告 `u8x8_capture_*` 六个未定义符号，原因是精简版 u8g2 没有链接 PBM/XBM 图像导出实现。对 `u8g2_buffer.c` 和 `u8g2.h` 的导出 API 同时加 `U8G2_ENABLE_BUFFER_CAPTURE` 开关，默认关闭；后续恢复导出功能需要加入完整上游 `u8x8_capture.c`。
+
+## 2026-10-31 mini_format / UTF-8
+
+Extracted PB02B `Bootstrap/inc/mini_format.h` and
+`Bootstrap/src/mini_format.c` unchanged into `BSP/Console`.
+`mini_stdio.c` redirects the common printf family to the RAM ring
+without floating-point formatting or semihosting.
+`U8G2_WITH_UNICODE` enables 16-bit Unicode glyph lookup; existing
+UTF-8 decoding is reused and the standard MiaoUI text wrapper now calls
+`u8g2_DrawUTF8`. CJK glyphs are not yet bundled.
+Local CubeMX heap recommendation 0x1000, **configuration not changed**.

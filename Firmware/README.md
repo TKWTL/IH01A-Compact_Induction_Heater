@@ -35,3 +35,31 @@ Keil 工程选择 ARM Compiler 6.24 + 标准 C 库，新增 `Firmware/MDK-ARM/re
 
 Keil Sources 分组 `IH01A/APP/framework` 已独立于 `IH01A/APP`，
 文件物理路径仍是 `Firmware/APP/framework`，共 7 个 PM 源文件。
+
+## Mini printf (BSP)
+
+`BSP/Console/mini_format.c/.h` copies PB02B/Bootstrap's small integer
+formatter. `mini_stdio.c` supplies global `printf`, `vprintf`,
+`snprintf`, `vsnprintf`, `puts`, `putchar`, `fprintf`,
+and `vfprintf`, so the project no longer pulls in the full libc
+floating-point formatters for those functions. `printf` output is saved
+to `g_runtime_log` in RAM by `retarget.c`; it is not sent to UART.
+Supported specifiers are `%% c s d i u x X` (width, 0/- and one l).
+**No %f, %p, precision, * widths or long long**. Replace such formats
+with integer/scaled-integer conversions before using this library.
+
+## Unicode preparation
+
+`U8G2_WITH_UNICODE` is enabled and MiaoUI `Disp_DrawStr` now forwards
+UTF-8 to u8g2. A separate CJK glyph font is required before Chinese appears.
+Current ASCII font has no Chinese; 4-byte Unicode beyond BMP is unsupported.
+
+## Local CubeMX heap setting (not changed here)
+
+The checked-in `.ioc` has `ProjectManager.HeapSize=0x000`.
+Set **Minimum Heap Size = 0x1000 (4096 bytes)** in local CubeMX, regenerate,
+build, and inspect RAM usage. The C runtime call chain `_init_alloc/_RT...`
+does not by itself prove that the USBPD stack allocated the heap;
+the USBPD minimal sink uses `USBPD_PE_GetMemoryConsumption()` to query
+stack memory. Do not confuse FreeRTOS TOTAL_HEAP_SIZE with the C heap;
+IH01A is non-RTOS. Stack stays at 0x400 pending a stack-usage check.

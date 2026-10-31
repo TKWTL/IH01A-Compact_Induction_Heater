@@ -38,10 +38,10 @@ volatile uint32_t g_runtime_log_count;
 volatile uint32_t g_runtime_exit_seen;
 volatile int32_t  g_runtime_exit_code;
 
-static void runtime_record_char(int value)
+void IH_RuntimePutChar(char ch)
 {
     uint32_t head = g_runtime_log_head;
-    g_runtime_log[head] = (uint8_t)value;
+    g_runtime_log[head] = (uint8_t)ch;
     g_runtime_log_head = (head + 1u) & (IH_RUNTIME_LOG_CAPACITY - 1u);
     if(g_runtime_log_count < IH_RUNTIME_LOG_CAPACITY)
         ++g_runtime_log_count;
@@ -50,7 +50,7 @@ static void runtime_record_char(int value)
 /* Runtime diagnostics from assert/exit may reach _ttywrch directly. */
 void _ttywrch(int ch)
 {
-    runtime_record_char(ch);
+    IH_RuntimePutChar((char)ch);
 }
 
 /* A printf/putchar future call records the characters without transmitting
@@ -58,7 +58,7 @@ void _ttywrch(int ch)
 int fputc(int ch, FILE *stream)
 {
     (void)stream;
-    runtime_record_char(ch);
+    IH_RuntimePutChar((char)ch);
     return ch;
 }
 

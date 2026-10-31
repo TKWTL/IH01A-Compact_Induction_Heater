@@ -35,3 +35,14 @@
 
 **若链接出现 L6915E**：表示还有其他没有被重定向的 C 库 semihosting
 函数，不应删除 `__use_no_semihosting` 绕过；应依据报错逐一处理。
+
+## Mini formatter and UTF-8 feature checklist
+
+- Confirm `printf("%02X %ld %s", ...)` and `snprintf` use PB02B mini_format.
+- Confirm Unsupported `%f` is not used anywhere in the application/PD paths
+  and no semihosting dependency is introduced by the strong formatter symbols.
+- Confirm `u8g2_DrawUTF8` resolves without undefined symbols, decodes UTF-8
+  into BMP codepoints, and displays ASCII using the original font.
+- Add a future CJK subset font for visual validation of Chinese glyphs.
+- **ARMClang build and hardware display/USBPD tests pending.**
+- User to set CubeMX `HeapSize=0x1000` locally; not modified in this commit.

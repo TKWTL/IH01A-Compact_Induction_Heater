@@ -26,6 +26,7 @@ void Disp_SetFont(const uint8_t *font);
 void Disp_DrawPixel(uint16_t x, uint16_t y);
 void Disp_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
 uint16_t Disp_Putchar(uint16_t x, uint16_t y, uint16_t encoding);
+/* UTF-8 default, Unicode BMP glyphs require matching Unicode u8g2 font. */
 uint16_t Disp_DrawStr(uint16_t x, uint16_t y, const char *str);
 void Disp_SetDrawColor(void *color);
 void Disp_SetBitmapMode(uint8_t is_transparent);
@@ -45,7 +46,7 @@ void Disp_SetBufferCurrTileRow(uint8_t row);
 uint16_t Disp_DrawUTF8(uint16_t x, uint16_t y, const char *str);
 uint16_t Disp_GetUTF8Width(const char *str);
 
-/* MiaoUI uses two landscape directions (R1/R3). Full R0..R3 remains exposed
+/* IH01A uses R0/R2 native landscape. Full R0..R3 remains exposed
  * for bring-up/testing through Disp_SetRotationMode(). */
 void Disp_SetRotation(uint8_t rotation);
 void Disp_SetRotationMode(uint8_t rotation_mode);
