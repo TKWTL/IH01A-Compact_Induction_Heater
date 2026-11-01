@@ -203,3 +203,38 @@ PDP 用 140 W 而**不是** 84 W：Sink PDO 与请求电流都是 5 A，PDP 写 
 [PD n] SETINFO a=26 b=0x00000004     ← PE 交来收到的 Source EPR PDO
 [PD n] EPR_EVT a=0 b=0x0000D00D      ← 请求已投递但 1s 内 PE 完全静默
 ```
+
+### 2026-11-02 板端复测：PE 收下请求但完全静默（GETINFO 证据）
+
+冷启动日志（新固件）：
+
+```
+[PD 431] SETINFO a=2 b=0x00000004    RDO_POSITION
+[PD 431] SETINFO a=6 b=0x00000004    RCV_REQ_PDO
+[PD 594] SPR_CAPS a=6 b=0x0A81912C
+[PD 594] SETINFO a=4 b=0x00000018    RCV_SRC_PDO, 24 B = 6 个 PDO
+[PD 602] NOTIFY a=90                 POWER_STATE_CHANGE
+[PD 858] NOTIFY a=16 / a=32          显式合同 / STATE_SNK_READY
+[PD 1538] NOTIFY a=120               TAME 超时（tAMETimeout = 1100 ms）
+[PD 7114] EPR_ENTER a=0              USBPD_OK（请求已投递）
+[PD 7819] EPR_ENTER a=3              USBPD_BUSY（700 ms 后仍"进行中"）
+[PD 8820] EPR_EVT a=0 b=0x0000D00D   PE 静默 1 s
+```
+
+**关键证据：整段日志没有任何 `GETINFO a=30/25`。** 也就是说 PE 收下 EPR 请求后**从未向应用索取 EPR Sink PDP / EPR Sink PDO**——不是"我们给的数据不对"，而是"PE 根本没走到构造 EPR_Mode 那一步"。同时也没有任何 `EPR_EVT`。`NOTIFY a=120` 是 `USBPD_NOTIFY_TAMETIMEOUT`（Alternate Mode Entry，1100 ms），属于 SPR 阶段的 SVDM 超时，与 EPR 无直接关系，但说明对端有过 VDM 交互。
+
+### 2026-11-02 与 CH32X035 参照项目的差异（同作者已量产验证的 28 V 基线）
+
+参照：`E:\Embedded_Full_ENG_Path\Desktop_PD_Power_Converter\Firmware\Peripheral\PD\pd_snk_debug.md`（以及 `CH32X035_DemoBoard` 同结构）。**它是 CH32X035 自研 PHY + 自研策略层，不是 ST FULL 栈，所以不能直接验证 ST 的内部行为**；但它是"源端期待什么样的 Sink 行为"的实测基线：
+
+| 事项 | 参照实现（稳定进 28 V） | 本项目改动前 | 处理 |
+|---|---|---|---|
+| 首个 SPR Request | 20 V / **5 A**、PDO5、EPR-capable（帧 `82 10 F4 D1 47 51`，RDO `0x5147D1F4`） | 20 V / **3 A**、EPR-capable（`0x5144B12C`） | **已改**：`IH01A_PD_SPR_MAX_MA=5000`，Sink PDO5 = 20 V/5 A；3 A 线缆时源端 PDO 只给 3 A，请求自动仍是 3 A |
+| EPR 入口前 | 先发 `Get_Source_Cap_Extended`，按源端 PDP 自适应 Enter（140 W 兜底，上限 224 W） | 固定 140 W（`SNK_PDP_EPR`） | ST PE 不暴露该消息的发送接口；先看 ST 自己会不会发 |
+| Enter 被拒 | PDP>140 W 时 120 ms 后以 140 W 重试一次 | 不自动重试，只允许手动 `pd epr` | 保持（安全优先），待 EPR 能进再谈 |
+| 时序 | Get 延迟 120 ms、caps 超时 500 ms、Enter 超时 550 ms、KeepAlive 375 ms/ACK 100 ms | ST 栈内部管理；我们只有 2.5 s 能力超时 | 观测中 |
+| sender-response 关键路径 | 禁止 printf/阻塞/毫秒延时 | diag 是队列，只在主循环 `PD_Diag_Service()` 打印；PD 回调里无阻塞 | 已符合 |
+| 每次接入只试一次 EPR | 是（`PD_EPR_FailedForAttach`） | 是（`s_epr_enter_once`） | 已符合 |
+| Hard Reset | VBUS 供电板不主动发 HR，避免自己掉电 | SPR 阶段复位后 PE 会发 HR，且等 vSafe0V | 见上文 §硬复位：`WAIT_VBUS_VSAFE0V → FAILED` 是带电复位场景的死结 |
+
+本轮 Rebuild：**0 Error(s), 0 Warning(s)**，`Code=78,848 RO=4,000 RW-data=468 ZI=21,180`（策略改动只换常量，代码尺寸不变）；host 单测 7/7 通过（`test_pd_select.c` 新增 20 V/3 A 与 20 V/5 A 两个钳位断言）。

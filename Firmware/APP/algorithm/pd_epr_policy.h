@@ -24,4 +24,12 @@
  */
 #define IH01A_EPR_SINK_PDP_W       140u
 #define IH01A_EPR_SINK_CURRENT_MA  5000u
+
+/* SPR current ceiling. The reference EPR-capable sink baseline opens with a
+ * 20 V/5 A EPR-capable Request before EPR_Mode, so the SPR policy now asks
+ * for what the Source PDO offers up to 5 A. Safety comes from the Source
+ * side: a 3 A (non e-marked) cable makes the Source advertise a 3 A PDO, and
+ * the request is clamped to the PDO current, so 5 A can only happen on a
+ * 5 A e-marked cable. */
+#define IH01A_PD_SPR_MAX_MA        5000u
 #endif

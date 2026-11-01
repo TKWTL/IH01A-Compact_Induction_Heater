@@ -21,6 +21,13 @@ int main(void)
     pdo[6]=fixed(32000,3000); /* invalid/nonstandard */
     assert(PD_Input_BestFixed((const uint8_t *)pdo,sizeof(pdo),
                              &pos,&mv,&ma));
+    /* 20V/5A PDO: the request follows the PDO up to IH01A_PD_SPR_MAX_MA. */
+    assert(pos==3u && mv==20000u && ma==PD_INPUT_MAX_MA);
+    assert(ma==5000u);
+    /* A 3A cable makes the Source advertise 3A; the request stays at 3A. */
+    pdo[2]=fixed(20000,3000);
+    assert(PD_Input_BestFixed((const uint8_t *)pdo,sizeof(pdo),
+                             &pos,&mv,&ma));
     assert(pos==3u && mv==20000u && ma==3000u);
     pdo[2]=fixed(15000,2000);
     assert(PD_Input_BestFixed((const uint8_t *)pdo,sizeof(pdo),

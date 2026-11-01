@@ -1,10 +1,15 @@
 #ifndef IH01A_PD_SELECT_H
 #define IH01A_PD_SELECT_H
 #include <stdint.h>
-/* SPR ≤20V/3A and EPR Fixed <32V/5A. Requests use ST typed RDO in pd_input.c. */
+#include "algorithm/pd_epr_policy.h"
+/* SPR ≤20V and EPR Fixed <32V/5A. Requests use ST typed RDO in pd_input.c.
+ * The SPR current ceiling follows IH01A_PD_SPR_MAX_MA: the reference
+ * EPR-capable baseline opens with a 20 V/5 A EPR-capable Request, and the
+ * real value is still bounded by the Source PDO and the cable e-marker
+ * (a 3 A cable makes the Source advertise 3 A, so 3 A is what we get). */
 #define PD_INPUT_MAX_MV 32000u
 #define PD_INPUT_SPR_MAX_MV 20000u
-#define PD_INPUT_MAX_MA 3000u /* SPR legacy policy; unchanged */
+#define PD_INPUT_MAX_MA IH01A_PD_SPR_MAX_MA
 #define PD_INPUT_EPR_MAX_MA 5000u /* Only for genuine EPR 5A-qualified contract */
 uint8_t PD_Input_BestFixed(const uint8_t *data,uint32_t bytes,
                            uint8_t *position,uint32_t *voltage_mv,

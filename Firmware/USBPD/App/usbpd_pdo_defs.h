@@ -94,7 +94,7 @@ uint32_t PORT0_PDO_ListSNK[USBPD_MAX_NB_PDO] =
   /* PDO 2 */ ((180U << 10) | 300U), /* 9V 3A */
   /* PDO 3 */ ((240U << 10) | 300U), /* 12V 3A */
   /* PDO 4 */ ((300U << 10) | 300U), /* 15V 3A */
-  /* PDO 5 */ ((400U << 10) | 300U), /* 20V 3A */
+  /* PDO 5 */ ((400U << 10) | 500U), /* 20V 5A - EPR-capable baseline opening */
   /* PDO 6 */ (0x00000000U),
   /* PDO 7 */ (0x00000000U),
 };
