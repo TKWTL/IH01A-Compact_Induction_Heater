@@ -16,6 +16,7 @@ static uint8_t s_count, s_manual, s_epr_count;
 static uint8_t s_epr_mode, s_epr_enter_once, s_epr_exit_queued;
 static uint8_t s_epr_copy_valid, s_epr_user_requested;
 static uint32_t s_selected_rdo, s_copy_pdo, s_attach_ms, s_contract_ms;
+static uint32_t s_epr_mode_since_ms;
 static uint32_t s_spr_rdo,s_spr_mv,s_spr_ma;
 static uint8_t s_spr_pos;
 static PD_InputSnapshot s_state;
@@ -47,6 +48,7 @@ void PD_Input_Init(void)
     s_count=s_manual=s_epr_count=s_epr_mode=s_epr_enter_once=0u;
     s_epr_exit_queued=s_epr_copy_valid=s_epr_user_requested=0u;
     s_selected_rdo=s_copy_pdo=s_attach_ms=s_contract_ms=0u;
+    s_epr_mode_since_ms=0u;
     s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
 }
 void PD_Input_Attach(uint8_t attached)
@@ -64,6 +66,7 @@ void PD_Input_Reset(void)
     s_epr_user_requested=0u;
     s_epr_exit_queued=0u;
     s_selected_rdo=s_copy_pdo=0u;
+    s_epr_mode_since_ms=0u;
     s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
     memset(s_caps,0,sizeof(s_caps));
     memset(s_epr_caps,0,sizeof(s_epr_caps));
@@ -151,6 +154,7 @@ void PD_Input_EPR_Notify(uint32_t event)
     {
     case USBPD_NOTIFY_EPRMODE_SUCCEEDED:
         s_epr_mode=1u;
+        s_epr_mode_since_ms=HAL_GetTick();
         s_epr_count=0u;
         s_epr_copy_valid=0u;
         PD_Diag_Record(PD_DIAG_EPR_MODE,1u,event);
@@ -159,6 +163,7 @@ void PD_Input_EPR_Notify(uint32_t event)
     case USBPD_NOTIFY_EPRMODE_INVALID:
     case USBPD_NOTIFY_EPRMODE_EXIT:
         s_epr_mode=0u;
+        s_epr_mode_since_ms=0u;
         s_epr_count=0u;
         s_epr_copy_valid=0u;
         s_epr_exit_queued=0u;
@@ -193,9 +198,10 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
     uint32_t mv,ma,p;
     if(!rdo||!type||!s_state.attached)return 0u;
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
-    if(s_epr_mode && s_epr_count>=8u)
+    if(s_epr_mode)
     {
-        if(PD_Input_BestEPRFixed((const uint8_t *)s_epr_caps,
+        if(!s_epr_exit_queued && s_epr_count>=8u &&
+           PD_Input_BestEPRFixed((const uint8_t *)s_epr_caps,
            (uint32_t)s_epr_count*4u,&pos,&mv,&ma,&p) &&
            mv==28000u && ma==5000u)
         {
@@ -221,9 +227,19 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
             *type=USBPD_CORE_PDO_TYPE_FIXED;
             return 1u;
         }
-        /* No suitable 28V/5A Fixed EPR PDO: stay at SPR voltage and exit EPR. */
-        s_epr_user_requested=0u;
-        s_epr_exit_queued=1u;
+        /* Do not pass a SPR RDO to the FULL PE while in EPR mode.
+         * An EPR_REQUEST needs a valid EPR RDO+CopyPDO pair.
+         * Missing/truncated/unsupported EPR caps are an exit condition.
+         */
+        if(s_epr_count>=8u)
+        {
+            s_epr_user_requested=0u;
+            s_epr_exit_queued=1u;
+            PD_Diag_Record(PD_DIAG_EPR_MODE,0u,0xBAD0u);
+        }
+        *rdo=0u;
+        *type=USBPD_CORE_PDO_TYPE_FIXED;
+        return 0u;
     }
 #endif
     if(s_state.attempted&&!s_manual)
@@ -263,6 +279,13 @@ void PD_Input_EPR_Poll(void)
 {
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
     if(!s_state.attached)return;
+    if(s_epr_mode && s_epr_count==0u &&
+       (uint32_t)(HAL_GetTick()-s_epr_mode_since_ms)>2500u)
+    {
+        s_epr_user_requested=0u;
+        s_epr_exit_queued=1u;
+        PD_Diag_Record(PD_DIAG_EPR_MODE,0u,0xBAD1u);
+    }
     if(s_epr_exit_queued)
     {
         s_epr_exit_queued=0u; /* only one exit attempt */
