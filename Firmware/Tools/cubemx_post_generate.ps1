@@ -21,6 +21,7 @@
 [CmdletBinding()]
 param(
     [string]$RepoRoot = ''
+    ,[switch]$SkipUsbpdRestore
 )
 
 $ErrorActionPreference = 'Stop'
@@ -49,6 +50,16 @@ if ($dirty -ne '') {
     $actions.Add('uvprojx already matches git, nothing to restore')
 }
 
+# --- 1b. USBPD 源码(手工维护)若被 CubeMX 覆盖过, 一并恢复 ------------------
+if (-not $SkipUsbpdRestore) {
+    $usbpdRel = 'Firmware/USBPD'
+    $usbpdDirty = (& git -C $RepoRoot status --porcelain -- $usbpdRel | Out-String).Trim()
+    if ($usbpdDirty -ne '') {
+        & git -C $RepoRoot checkout -- $usbpdRel
+        if ($LASTEXITCODE -ne 0) { throw 'git checkout Firmware/USBPD failed' }
+        $actions.Add('Firmware/USBPD restored from git (CubeMX had overwritten it)')
+    }
+}
 $text = Get-Content -LiteralPath $projectPath -Raw
 $originalText = $text
 $nl = if ($text -match "`r`n") { "`r`n" } else { "`n" }
