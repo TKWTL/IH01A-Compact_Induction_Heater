@@ -234,6 +234,12 @@ static uint32_t PD_EncodeFixedRDO(uint8_t pos,uint32_t ma,uint8_t epr)
     request.FixedVariableRDO.NoUSBSuspend=1u;
 #if defined(USBPDCORE_EPR)
     request.FixedVariableRDO.EPR_Capable=epr?1u:0u;
+    /* PD3.1: an EPR-capable Sink also declares Unchunked Extended Messages
+     * support in the Request RDO. With this bit at 0 the Source answered our
+     * EPR_Request with a Hard Reset (no Reject, no Not_Supported), which is a
+     * protocol-error reaction, so the request itself must carry the bit. */
+    request.FixedVariableRDO.UnchunkedExtendedMessage=
+        IH01A_EPR_28V5A_HARDWARE_APPROVED?1u:0u;
 #else
     (void)epr;
 #endif
