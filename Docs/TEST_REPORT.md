@@ -54,3 +54,19 @@ Input timing changed from 30/400/100ms to 60/800/200ms
 (debounce/DAS/repeat). ParameterSetting_Widget now handles UI_ACTION_UP
 with a negative step so L decrements. 16-bit held_ticks avoids earlier
 saturation stopping repeated actions after a long hold.
+
+## 2026-11-01 unified OLED DMA + Source PDO dynamic PAGE_TEXT
+
+Implementation pending Keil/hardware verification:
+- All SSD1315 SPI transfers use HAL_SPI_Transmit_DMA. Initialization
+  waits for the DMA TxComplete callback with timeout; runtime transfer
+  continues asynchronously. No HAL_SPI_Transmit reference in the OLED
+  driver. Verify DMA1_Channel1 IRQ is serviced during startup.
+- `USBPD_CORE_DATATYPE_RCV_SRC_PDO` updates a static 7-element snapshot.
+  Statistics -> PD in shows Fixed, Variable, Battery, PPS information from
+  actual Source_Capabilities, not guessed/current contract. Detach,
+  stack reset and hard reset clear stale PDO entries.
+- Seven fixed row labels, 32 bytes each; `PAGE_TEXT` clipping widened
+  locally. Initial/no PD message is `No PD Source`, other rows blank.
+- Host regression source `test_pd_source_stats.c` added. No ARMClang
+  build, host test run or target PD analyzer results claimed yet.

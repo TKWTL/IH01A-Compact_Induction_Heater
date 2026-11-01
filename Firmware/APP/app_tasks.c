@@ -28,7 +28,10 @@ THRD_DECLARE(thread_ui)
     {
         THRD_DELAY(20u);
         if(!pm_api_ui_should_block() && !pm_api_is_unstable_wake())
+        {
+            IH_Statistics_Poll();
             ui_loop(&s_ui);
+        }
     }
     THRD_END;
 }

@@ -3801,6 +3801,11 @@
               <FilePath>../APP/app_tasks.c</FilePath>
             </File>
             <File>
+              <FileName>pd_source_stats.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/pd_source_stats.c</FilePath>
+            </File>
+            <File>
               <FileName>ui.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/MiaoUI/core/ui.c</FilePath>

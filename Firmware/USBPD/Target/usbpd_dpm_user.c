@@ -35,6 +35,7 @@
 #endif /* _TRACE */
 /* USER CODE BEGIN Includes */
 #include "app_tasks.h"
+#include "pd_source_stats.h"
 /* USER CODE END Includes */
 
 /** @addtogroup STM32_USBPD_APPLICATION
@@ -181,7 +182,9 @@ void USBPD_DPM_UserExecute(void const *argument)
 void USBPD_DPM_UserCableDetection(uint8_t PortNum, USBPD_CAD_EVENT State)
 {
 /* USER CODE BEGIN USBPD_DPM_UserCableDetection */
-DPM_USER_DEBUG_TRACE(PortNum, "ADVICE: update USBPD_DPM_UserCableDetection");
+  if(PortNum == USBPD_PORT_0 &&
+     (State == USBPD_CAD_EVENT_DETACHED || State == USBPD_CAD_EVENT_EMC))
+      PD_SourceStats_Clear();
 /* USER CODE END USBPD_DPM_UserCableDetection */
 }
 
@@ -214,7 +217,11 @@ void USBPD_DPM_UserTimerCounter(uint8_t PortNum)
 void USBPD_DPM_Notification(uint8_t PortNum, USBPD_NotifyEventValue_TypeDef EventVal)
 {
 /* USER CODE BEGIN USBPD_DPM_Notification */
-  /* Manage event notified by the stack? */
+  /* Stale capabilities must disappear after the stack stops or resets. */
+  if(PortNum == USBPD_PORT_0 &&
+     (EventVal == USBPD_NOTIFY_USBSTACK_STOP ||
+      EventVal == USBPD_NOTIFY_USBSTACK_START))
+      PD_SourceStats_Clear();
   switch(EventVal)
   {
 //    case USBPD_NOTIFY_POWER_EXPLICIT_CONTRACT :
@@ -266,7 +273,10 @@ void USBPD_DPM_Notification(uint8_t PortNum, USBPD_NotifyEventValue_TypeDef Even
 void USBPD_DPM_HardReset(uint8_t PortNum, USBPD_PortPowerRole_TypeDef CurrentRole, USBPD_HR_Status_TypeDef Status)
 {
 /* USER CODE BEGIN USBPD_DPM_HardReset */
-  DPM_USER_DEBUG_TRACE(PortNum, "ADVICE: update USBPD_DPM_HardReset");
+  (void)CurrentRole;
+  (void)Status;
+  if(PortNum == USBPD_PORT_0)
+      PD_SourceStats_Clear();
 /* USER CODE END USBPD_DPM_HardReset */
 }
 
@@ -321,6 +331,10 @@ void USBPD_DPM_SetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
   /* Check type of information targeted by request */
   switch(DataId)
   {
+  case USBPD_CORE_DATATYPE_RCV_SRC_PDO:
+    if(PortNum == USBPD_PORT_0)
+        PD_SourceStats_Receive(Ptr, Size);
+    break;
 //  case USBPD_CORE_DATATYPE_RDO_POSITION:      /*!< Reset the PDO position selected by the sink only */
     // break;
 //  case USBPD_CORE_DATATYPE_RCV_SRC_PDO:       /*!< Storage of Received Source PDO values        */

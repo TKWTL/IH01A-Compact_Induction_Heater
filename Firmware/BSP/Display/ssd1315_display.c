@@ -1,7 +1,7 @@
 /* SSD1315 128x64 on SPI1: nonblocking DMA for runtime page transfers.
  *
  * CubeMX SPI1 TX: DMA1_Channel1, DMA_REQUEST_SPI1_TX, 8-bit, normal.
- * The u8g2 display init still uses blocking transfers (prior to s_ready).
+ * u8g2 startup uses the SAME TX DMA primitive, waiting for IRQ completion.
  * Runtime refresh keeps command/data D/C changes between completed DMA
  * transactions and holds DMA source storage stable until completion.
  *
@@ -16,6 +16,7 @@
 
 enum {
     OLED_DMA_IDLE = 0,
+    OLED_DMA_INIT,
     OLED_DMA_PAGE_COMMAND,
     OLED_DMA_PAGE_DATA,
     OLED_DMA_POWER,
@@ -42,7 +43,14 @@ static volatile uint8_t s_dma_complete;
 static volatile uint8_t s_dma_failed;
 static uint32_t s_dma_started_ms;
 
-/* Only used by u8g2 init, which runs before runtime DMA begins. */
+/* Shared DMA primitive for both startup commands and cooperative runtime.
+ * The startup path may wait; ordinary page refresh never waits.
+ * DMA1_Channel1_IRQn and SPI1_IRQn must remain enabled in CubeMX. */
+static uint8_t oled_start_dma(uint8_t *data, uint16_t length,
+                              uint8_t data_mode, uint8_t phase);
+static uint8_t s_u8x8_dc;
+
+/* Called only during u8g2 initialization, before s_ready. */
 static uint8_t U8X8_Byte(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
 {
     (void)u8x8;
@@ -53,12 +61,33 @@ static uint8_t U8X8_Byte(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_p
     case U8X8_MSG_BYTE_END_TRANSFER:
         return 1u;
     case U8X8_MSG_BYTE_SET_DC:
-        if(arg_int) LL_GPIO_SetOutputPin(D_C_GPIO_Port, D_C_Pin);
+        s_u8x8_dc = (arg_int != 0u);
+        if(s_u8x8_dc) LL_GPIO_SetOutputPin(D_C_GPIO_Port, D_C_Pin);
         else LL_GPIO_ResetOutputPin(D_C_GPIO_Port, D_C_Pin);
         return 1u;
     case U8X8_MSG_BYTE_SEND:
-        return (HAL_SPI_Transmit(&hspi1, (uint8_t *)arg_ptr,
-                                 arg_int, 2u) == HAL_OK) ? 1u : 0u;
+    {
+        uint32_t start;
+        uint8_t success;
+        if(arg_int == 0u) return 1u;
+        if(!oled_start_dma((uint8_t *)arg_ptr, (uint16_t)arg_int,
+                           s_u8x8_dc, OLED_DMA_INIT))
+            return 0u;
+        start = HAL_GetTick();
+        /* Init only. No UI/PD scheduler is running yet; DMA IRQ completes
+         * this transfer. Never use this wait in the runtime service. */
+        while(!s_dma_complete && !s_dma_failed &&
+              ((uint32_t)(HAL_GetTick() - start) < 20u))
+        {
+        }
+        success = (s_dma_complete && !s_dma_failed) ? 1u : 0u;
+        if(!success)
+            (void)HAL_SPI_Abort(&hspi1);
+        s_dma_phase = OLED_DMA_IDLE;
+        s_dma_complete = 0u;
+        s_dma_failed = 0u;
+        return success;
+    }
     default:
         return 0u;
     }
@@ -133,6 +162,7 @@ void SSD1315_Display_Init(u8g2_t *screen)
     s_dma_phase = OLED_DMA_IDLE;
     s_dma_complete = 0u;
     s_dma_failed = 0u;
+    s_u8x8_dc = 0u;
     s_frames = 0u;
     /* Keep user-corrected initial display rotation. */
     u8g2_Setup_ssd1315_128x64_f(screen, U8G2_R2, U8X8_Byte, U8X8_GPIO);

@@ -10,6 +10,8 @@
 #include "display/dispDriver.h"
 #include "images/image.h"
 #include "framework/pm_ui_register.h"
+#include "pd_source_stats.h"
+#include <stdint.h>
 
 static ui_page_t s_root, s_settings, s_display, s_system;
 static ui_page_t s_statistics, s_pd_in, s_stat_sys;
@@ -17,6 +19,39 @@ static ui_item_t s_main, s_settings_item, s_display_item, s_system_item,
                  s_statistics_item, s_pd_in_item, s_stat_sys_item, s_about;
 static ui_item_t s_back, s_back_display, s_back_system,
                  s_back_statistics, s_back_pd_in, s_back_stat_sys;
+
+/* Static PAGE_TEXT content: capacity for every USB-PD Source PDO.
+ * Row strings persist for the lifetime of the menu; no dynamic allocation. */
+#define PD_UI_ROW_CAPACITY 32u
+static ui_item_t s_pd_rows[PD_SOURCE_MAX_PDOS];
+static char s_pd_text[PD_SOURCE_MAX_PDOS][PD_UI_ROW_CAPACITY];
+static uint32_t s_pd_revision = 0xFFFFFFFFu;
+
+void IH_Statistics_Poll(void)
+{
+    uint32_t revision = PD_SourceStats_Revision();
+    uint8_t i;
+
+    if(revision == s_pd_revision)
+        return;
+
+    for(i = 0u; i < PD_SOURCE_MAX_PDOS; i++)
+    {
+        PD_SourceStats_FormatRow(i, s_pd_text[i], sizeof(s_pd_text[i]));
+        s_pd_rows[i].x = UI_PAGE_INIT_X;
+#if ( UI_TITLE_ROLL == 1 )
+        s_pd_rows[i].rollState = UI_ITEM_ROLL_STOP;
+#endif
+    }
+    s_pd_revision = revision;
+}
+
+/* PD rows are informational only; selecting one exits immediately. */
+static void IH_PD_RowNoop(ui_t *ui)
+{
+    if(ui != 0 && ui->action == UI_ACTION_NONE)
+        ui->action = UI_ACTION_BACK;
+}
 
 void Create_Parameter(ui_t *ui) { Create_Disp_Parameters(ui); }
 
@@ -45,6 +80,7 @@ static void IH_MainPage(ui_t *ui)
 }
 void Create_MenuTree(ui_t *ui)
 {
+    uint8_t i;
     (void)ui;
     AddPage("[Menu]", &s_root, UI_PAGE_ICON, 0);
     AddItem("-Main", UI_ITEM_WORD, img_dashboard, &s_main, &s_root, 0, IH_MainPage);
@@ -66,7 +102,12 @@ void Create_MenuTree(ui_t *ui)
         AddItem("[Menu]", UI_ITEM_RETURN, 0, &s_back_statistics, &s_statistics, &s_root, 0);
         AddItem("-PD in", UI_ITEM_PARENTS, 0, &s_pd_in_item, &s_statistics, &s_pd_in, 0);
         AddPage("[PD in]", &s_pd_in, UI_PAGE_TEXT, &s_statistics);
+            s_pd_in.wideText = 1u;  /* allow complete Fixed 5.0V 3.0A labels */
             AddItem("[Return]", UI_ITEM_RETURN, 0, &s_back_pd_in, &s_pd_in, &s_statistics, 0);
+            IH_Statistics_Poll();
+            for(i = 0u; i < PD_SOURCE_MAX_PDOS; i++)
+                AddItem(s_pd_text[i], UI_ITEM_WORD, 0,
+                        &s_pd_rows[i], &s_pd_in, 0, IH_PD_RowNoop);
         AddItem("-System", UI_ITEM_PARENTS, 0, &s_stat_sys_item, &s_statistics, &s_stat_sys, 0);
         AddPage("[System]", &s_stat_sys, UI_PAGE_TEXT, &s_statistics);
             AddItem("[Return]", UI_ITEM_RETURN, 0, &s_back_stat_sys, &s_stat_sys, &s_statistics, 0);

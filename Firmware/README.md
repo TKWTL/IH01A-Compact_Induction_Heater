@@ -6,7 +6,7 @@
 
 - `APP/app_tasks.c`：coroOS 协程，UI 首次延迟 250ms 初始化。
 - `APP/framework/`：从 PB02B/DPC27A 迁移的 PM（最大休眠等级仅 UI_OFF）。
-- `APP/MiaoUI/`：定点 MiaoUI，根菜单 Main / Settings / Data / About；主界面/数据仍为占位。
+- `APP/MiaoUI/`：定点 MiaoUI，根菜单 Main / Settings / Statistics / About；Statistics → PD in 显示来自协议栈的 Source PDO。
 - `BSP/Display/`：SSD1315、SPI1，屏幕外部供电、内部电荷泵禁用（`8D 10`）；屏幕 RES# 与 MCU NRST 共网，默认 `U8G2_R2`。
 - `BSP/Buttons/`：四键低有效与去抖、唤醒首键屏蔽。
 - `BSP/Console/`：PB02B `mini_format` 与整数版 `printf/snprintf` 适配。
@@ -19,7 +19,7 @@
 ST 非 RTOS `USBPD_DPM_Run()` 自带无限循环，**不会返回到 `main()`**。因此必须在
 `USBPD/Target/usbpd_dpm_user.c` 的 `USBPD_DPM_UserExecute()` USER CODE 内
 调用一次 `APP_Tasks_RunOnce()`。此调用在 PD CAD/PE 任务之后执行。
-OLED 采用每次最多一页 128B 的 SPI 发送，但仍是阻塞 `HAL_SPI_Transmit`，需要验证 PD 事件的最坏时延。
+OLED 运行时以 DMA 分事务发送命令和 128B 页面；初始化也统一调用 DMA，等待其完成后继续。需要验证 PD 事件的最坏时延。
 
 ## 经实机核实的堆要求
 
@@ -49,8 +49,10 @@ SSD1315_Display_Service used blocking HAL_SPI_Transmit. Runtime page
 commands, 128-byte page payloads, contrast and power-save commands now
 use HAL_SPI_Transmit_DMA with a persistent command buffer and per-transfer
 completion/error flags; D/C changes only after HAL reports completion.
-The u8g2 initialization sequence still uses short blocking transfers before
-DMA is started. Keep CubeMX DMA1_Channel1 IRQ and SPI1 IRQ enabled.
+u8g2 initialization sends commands through the same DMA entry but waits for
+IRQ completion before returning; runtime does not block for completion.
+Keil should no longer need HAL_SPI_Transmit for OLED. Keep CubeMX
+DMA1_Channel1 IRQ and SPI1 IRQ enabled.
 
 Settings > Display now includes "Burn-in Test" before "Screen Flip".
 The page fills all 128x64 pixels with white and ANY L/R/ENTR/EXIT event
@@ -61,3 +63,22 @@ Buttons sampled every 10ms: debounce 60ms, L/R initial-repeat delay
 (DAS) 800ms and repeat interval 200ms. ENTR/EXIT remain release-based;
 the longer 16-bit hold counter avoids repeat freeze after ~2.5s.
 L / UP now decrements integer/decimal parameter widgets, R / DOWN increments.
+
+## Statistics / PD in: real Source Capabilities
+
+`APP/pd_source_stats.c` mirrors received `USBPD_CORE_DATATYPE_RCV_SRC_PDO`
+from `USBPD_DPM_SetDataInfo()`; up to 7 objects, 28 raw bytes.
+`USBPD_DPM_UserCableDetection`, stack start/stop and hard reset clear
+stale data. The `Statistics -> PD in` PAGE_TEXT page owns seven static
+32-byte row labels, refreshed at 20ms UI polling only if the revision
+changed. The page expands text clipping while leaving other settings
+pages untouched. Sample:
+```text
+[Return]
+1. Fixed 5.0V 3.0A
+2. Fixed 9.0V 3.0A
+```
+Absent/unreported Source Capabilities: `No PD Source` on the first
+row and blank remaining rows. It reports advertised capabilities, NOT
+the negotiated RDO or measured output voltage. `%f` and heap use are
+not required. Unknown APDO subtypes are labeled but not fabricated.

@@ -311,7 +311,8 @@ typedef struct
 typedef struct ui_page_t {
     const char *pageName;           // 页面名称，使用指针存储
     UI_PAGE_TYPE type;              // 页面类型
-    UI_PAGE_STATE pageState;        // 页面的状态
+    UI_PAGE_STATE pageState;
+    uint8_t wideText;  /* Text-page labels may use full width (PD Source list). */        // 页面的状态
     // 使用内联函数封装成员变量，以提供更高的数据封装性和保护性
     struct {
         ui_item_pt parent;          // 父级项
@@ -379,6 +380,7 @@ void Create_Parameter(ui_t *ui);
 void Create_Text(ui_t *ui);
 void Create_MenuTree(ui_t *ui);
 void MiaoUi_Setup(ui_t *ui);
+void IH_Statistics_Poll(void);
 
 #ifdef __cplusplus
 }

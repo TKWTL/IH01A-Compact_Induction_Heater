@@ -26,7 +26,7 @@ USB-PD 的 1ms 定时仍由 `SysTick_Handler` 中原有 `USBPD_DPM_TimerCounter(
 - SSD1315 128×64：SPI1 PB3=SCK、PB5=MOSI、PA15=硬件 NSS/CS、PB4=D/C；初始 `U8G2_R2` 为用户修正后的方向。屏幕外部 VCC，初始化禁用电荷泵（`8D 10`）。
 - OLED RES# 与 STM32G071 PF2/NRST 共网，不使用独立复位 IO。应保持 NRST_MODE 的 Reset input/output 配置，并检查外部 VCC 与 NRST 的启动时序。
 - 四键：L(PA12)、R(PA11)、ENTR(PC7)、EXIT(PD3)，全部低有效。基础交互与 UI_OFF 用户已上板验证。
-- MiaoUI：Main、Settings、Data、About；Main/Data 暂无加热控制或实时传感器数据。UTF-8 路径已启用，中文字模未引入。
+- MiaoUI：Main、Settings、Statistics、About；Statistics/PD in 是真实 Source PDO 只读快照，Main 仍无加热控制。UTF-8 路径已启用，中文字模未引入。
 - PM：来自 PB02B/DPC27A，最高仅 UI_OFF，不停止 USB-PD 和安全外设。
 - coroOS：Protothreads 风格无栈协作调度，跨 `THRD_DELAY` 需要保持的局部数据应使用 static/外部存储。
 
@@ -34,7 +34,7 @@ USB-PD 的 1ms 定时仍由 `SysTick_Handler` 中原有 `USBPD_DPM_TimerCounter(
 
 - CubeMX `HeapSize=0x400`、`StackSize=0x400`；启动汇编设置一致。用户实测零堆时运行库初始化卡住，配置 1KiB 堆后基础功能恢复。最小/峰值需求未实测，不能把 `USBPD_PE_GetMemoryConsumption()` 当成实时堆占用。
 - u8g2 帧缓冲、活动/待发送帧各 1024B，共 3072B 静态屏幕缓冲。
-- `HAL_SPI_Transmit` 按页阻塞，仍须测量最坏执行时长与 PD 状态机服务间隔。在未测出负载和时序裕量前不主张接入更多阻塞性任务。
+- SSD1315 初始化也改用 DMA 并同步等待完成，正常页面刷新则异步推进；仍须测量最坏执行时长与 PD 状态机服务间隔。在未测出负载和时序裕量前不主张接入更多阻塞性任务。
 - `BSP/Console` 精简 printf 使用 RAM 日志环，保留必要的 C 库重定向和退出诊断；移除的仅是本轮问题专用 PD/UI 调度计数器。
 
 ## 安全边界
@@ -45,11 +45,22 @@ USB-PD 的 1ms 定时仍由 `SysTick_Handler` 中原有 `USBPD_DPM_TimerCounter(
 
 ## SPI1 DMA runtime transport
 
-CubeMX provides SPI1 TX DMA1_Channel1 and the IRQ. Display init retains
-u8g2's brief blocking SPI commands. Thereafter the display service starts
+CubeMX provides SPI1 TX DMA1_Channel1 and the IRQ. Display init now uses the same HAL_SPI_Transmit_DMA entry and waits for
+completion; it no longer calls HAL_SPI_Transmit. Thereafter the display service starts
 DMA commands then DMA page data as separate transactions; ISR callbacks
 record completion and no transfer starts from IRQ context. The
 SSD1315_Display_Service advances the state during the PD user callback.
 Command and framebuffer storage remain valid while DMA is in flight.
 At most one DMA operation starts in each call. Verify timing and NSS/DC
 with a logic analyzer before treating USB-PD interleaving as validated.
+
+## PD Source PDO static snapshot
+
+`USBPD_DPM_SetDataInfo(USBPD_CORE_DATATYPE_RCV_SRC_PDO)` copies valid
+4-byte-aligned Source PDO data (max seven objects) into
+`APP/pd_source_stats.c`; detach, stack stop and reset clear the mirror.
+`IH_Statistics_Poll()` formats fixed-size row labels at 20ms UI time,
+rather than doing formatted output inside time-critical PD callbacks.
+The Statistics/PD in `UI_PAGE_TEXT` uses seven statically allocated
+`UI_ITEM_WORD` rows and widens only that page's text clipping area.
+No heap allocation or UI page rebuilding is involved.
