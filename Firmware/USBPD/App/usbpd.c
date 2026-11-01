@@ -23,6 +23,7 @@
 
 /* USER CODE BEGIN 0 */
 #include "usart.h"
+#include "usbpd_dpm_conf.h"   /* DPM_Settings: PE feature bits, incl. EPR gates */
 #include <stdio.h>
 /* 0=not reached, 1=HW, 2=Core, 3=User, 4=OS ready;
  * >=0xE0: init failure. Inspect in Keil even if DMA TX cannot progress. */
@@ -91,6 +92,13 @@ void MX_USBPD_Init(void)
   }
   g_usbpd_full_stage=4u;
   printf("[PD_INIT] FULL v5.4.1 initialized\r\n");
+  /* Prove the runtime PE feature bits that gate EPR on the wire, not just
+   * the compile-time USBPDCORE_EPR macro. */
+  printf("[PD_INIT] PE cfg pd3=0x%04X unchunk=%lu scrCapaExt=%lu eprSnk=%lu\r\n",
+         (unsigned)DPM_Settings[USBPD_PORT_0].PE_PD3_Support.PD3_Support,
+         (unsigned long)DPM_Settings[USBPD_PORT_0].PE_PD3_Support.d.PE_UnchunkSupport,
+         (unsigned long)DPM_Settings[USBPD_PORT_0].PE_PD3_Support.d.Is_SrcCapaExt_Supported,
+         (unsigned long)DPM_Settings[USBPD_PORT_0].PE_PD3_Support.d.Is_EPR_Supported_SNK);
   DebugUART_Service();
 
   /* USER CODE BEGIN EnableIRQ */

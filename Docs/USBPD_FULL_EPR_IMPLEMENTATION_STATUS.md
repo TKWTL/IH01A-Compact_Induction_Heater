@@ -238,3 +238,27 @@ PDP 用 140 W 而**不是** 84 W：Sink PDO 与请求电流都是 5 A，PDP 写 
 | Hard Reset | VBUS 供电板不主动发 HR，避免自己掉电 | SPR 阶段复位后 PE 会发 HR，且等 vSafe0V | 见上文 §硬复位：`WAIT_VBUS_VSAFE0V → FAILED` 是带电复位场景的死结 |
 
 本轮 Rebuild：**0 Error(s), 0 Warning(s)**，`Code=78,848 RO=4,000 RW-data=468 ZI=21,180`（策略改动只换常量，代码尺寸不变）；host 单测 7/7 通过（`test_pd_select.c` 新增 20 V/3 A 与 20 V/5 A 两个钳位断言）。
+
+### 2026-11-02 根因候选：PE 运行时特性位把 EPR 关掉了（`PE_UnchunkSupport = 0`）
+
+同一套适配器 + 线缆在 CH32X035 上能稳定握手 28 V，说明源端、线缆、电源路径都没问题，**问题在本项目的 ST FULL 集成**。逐层排查后，DPM Core 与 ST 官方 `aafa359` **逐字节一致**（`src/usbpd_dpm_core.c` 只有我们加的诊断三处差异），所以问题落在 PE 的**运行时特性位**上。
+
+`USBPD_SettingsTypeDef`（`usbpd_def.h:3580`）里 EPR 相关的开关有三个，之前只开了最后一个：
+
+| 字段 | 改动前 | 说明 |
+|---|---|---|
+| `.PE_UnchunkSupport` | **FALSE** | Unchunked Extended Message 支持。EPR_Mode 是扩展控制消息、EPR_Source_Capabilities 是扩展消息，**PD3.1 要求 EPR 端口必须支持 unchunked** |
+| `.Is_SrcCapaExt_Supported` | **FALSE** | `Source_Capabilities_Extended`（SPR 阶段报告源端 PDP/EPR 能力的那条消息） |
+| `.Is_EPR_Supported_SNK` | TRUE（`..._HARDWARE_APPROVED`） | 头文件原话："EPR support need to use a library supporting EPR else it has no effect" |
+
+这正是"`USBPD_PE_Request_EPRModeEnter()` 返回 `USBPD_OK`、随后 PE 既不索取 `SNK_PDP_EPR` 也不发任何 EPR 通知"的合理机制：PE 认为本端口不具备 EPR 所需的扩展消息能力，于是把请求挂起（`BUSY`）而不构造报文。
+
+现已改为随 `IH01A_EPR_28V5A_HARDWARE_APPROVED` 一起打开，并在启动日志里把三个运行时位直接打出来（不是编译期宏，而是 PE 实际会看到的设置）：
+
+```
+[PD_INIT] PE cfg pd3=0x03xx unchunk=1 scrCapaExt=1 eprSnk=1
+```
+
+验收顺序：先确认 `REQUEST a=20000 b=0x5147D1F4`（20 V/5 A，SPR 未受影响），再 `pd epr` 看是否出现 `GETINFO a=30/25` 与 `EPR_EVT a=116/113/114`。
+
+Rebuild：0 Error / 0 Warning，`Code=78,884 RO=4,068 RW=468 ZI=21,180`。

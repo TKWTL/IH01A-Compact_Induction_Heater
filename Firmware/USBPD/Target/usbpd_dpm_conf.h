@@ -75,10 +75,17 @@ USBPD_SettingsTypeDef       DPM_Settings[USBPD_PORT_COUNT] =
     .CAD_AccesorySupport = USBPD_FALSE,         /* CAD accessory support                                   */
     .PE_PD3_Support.d =                           /*!< PD3 SUPPORT FEATURE                                              */
     {
-      .PE_UnchunkSupport                = USBPD_FALSE,  /* support Unchunked mode (valid only spec revision 3.0)   */
+      /* EPR needs Unchunked Extended Messages: EPR_Mode is an extended
+       * control message and EPR_Source_Capabilities is an extended message.
+       * With PE_UnchunkSupport = FALSE the PE accepts
+       * USBPD_PE_Request_EPRModeEnter() and then never builds the message,
+       * which is exactly the observed "EPR_ENTER a=0 then silence".
+       * Source_Capabilities_Extended is the SPR-mode message that reports
+       * the Source PDP/EPR capability, so it is enabled together with EPR. */
+      .PE_UnchunkSupport                = IH01A_EPR_28V5A_HARDWARE_APPROVED ? USBPD_TRUE : USBPD_FALSE,
       .PE_FastRoleSwapSupport           = USBPD_FALSE,   /* support fast role swap only spec revision 3.0            */
       .Is_GetPPSStatus_Supported        = USBPD_FALSE,  /*!< PPS message NOT supported by PE stack */
-      .Is_SrcCapaExt_Supported          = USBPD_FALSE,  /*!< Source_Capabilities_Extended message supported or not by DPM */
+      .Is_SrcCapaExt_Supported          = IH01A_EPR_28V5A_HARDWARE_APPROVED ? USBPD_TRUE : USBPD_FALSE,
       .Is_Alert_Supported               = USBPD_FALSE,   /*!< Alert message supported or not by DPM */
       .Is_GetStatus_Supported           = USBPD_FALSE,   /*!< Status message supported or not by DPM (Is_Alert_Supported should be enabled) */
       .Is_GetManufacturerInfo_Supported = USBPD_FALSE,  /*!< Manufacturer_Info message supported or not by DPM */
