@@ -366,23 +366,34 @@ void PD_Input_EPR_Poll(void)
     s_epr_stall_logged=0u;
     s_epr_probe=0u;
 #if IH01A_EPR_REENTER_ON_CONTRACT
-    /* Register the EPR entry from PE callback context instead of the idle
-     * main loop: the API validates that the last message was a Request, and
-     * the EPR machine is only executed from PE_STATE_GENERIC while the PE is
-     * processing a message. A same-value Request re-opens that context. */
+    /* We must register the EPR entry while the PE is processing a message
+     * (the API itself validates that the last message was a Request). So
+     * first provoke a complete Source_Capabilities -> Request -> PS_RDY
+     * cycle, then register from the POWER_EXPLICIT_CONTRACT notification. */
     {
-        uint32_t back=s_spr_rdo?s_spr_rdo:s_selected_rdo;
-        USBPD_StatusTypeDef rb=USBPD_PE_Send_Request(USBPD_PORT_0,back,
-                                                     USBPD_CORE_PDO_TYPE_FIXED);
-        PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A2u,(uint32_t)rb);
-        if(rb==USBPD_OK)
+        USBPD_StatusTypeDef r;
+        r=USBPD_PE_Request_CtrlMessage(USBPD_PORT_0,USBPD_CONTROLMSG_GET_SRC_CAP,
+                                       USBPD_SOPTYPE_SOP);
+        PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A4u,(uint32_t)r);
+        if(r==USBPD_OK)
         {
             g_epr_ctx_pending=1u;   /* consumed in USBPD_DPM_Notification() */
         }
         else
         {
-            USBPD_StatusTypeDef rc=(USBPD_StatusTypeDef)USBPD_PE_Request_EPRModeEnter(USBPD_PORT_0);
-            PD_Diag_Record(PD_DIAG_EPR_ENTER,(uint32_t)rc,s_state.position);
+            uint32_t back=s_spr_rdo?s_spr_rdo:s_selected_rdo;
+            USBPD_StatusTypeDef rb=USBPD_PE_Send_Request(USBPD_PORT_0,back,
+                                                         USBPD_CORE_PDO_TYPE_FIXED);
+            PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A2u,(uint32_t)rb);
+            if(rb==USBPD_OK)
+            {
+                g_epr_ctx_pending=1u;
+            }
+            else
+            {
+                USBPD_StatusTypeDef rc=(USBPD_StatusTypeDef)USBPD_PE_Request_EPRModeEnter(USBPD_PORT_0);
+                PD_Diag_Record(PD_DIAG_EPR_ENTER,(uint32_t)rc,s_state.position);
+            }
         }
     }
 #else

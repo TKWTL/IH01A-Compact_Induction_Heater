@@ -4,7 +4,7 @@
 #include "algorithm/pd_diag.h"
 #include "main.h"
 #include <stdio.h>
-#define PD_DIAG_CAP 32u
+#define PD_DIAG_CAP 128u
 typedef struct {
     uint32_t ms,a,b;
     uint8_t event;
@@ -29,9 +29,15 @@ void PD_Diag_Record(uint8_t code,uint32_t a,uint32_t b)
  * context, so only a queue record is made. */
 void PD_TxTrace(uint32_t type,uint32_t size)
 {
+    /* GoodCRC floods the queue so it is reported once; every other message
+     * type is reported every time - "was the Request really re-sent?" is
+     * exactly the question the EPR diagnosis needs to answer. */
     static uint32_t seen;
-    if(type<32u&&(seen&(1UL<<type))!=0u)return;
-    if(type<32u)seen|=1UL<<type;
+    if(type==1u)
+    {
+        if((seen&2UL)!=0u)return;
+        seen|=2UL;
+    }
     PD_Diag_Record(PD_DIAG_PD_TX,type,size);
 }
 void PD_TxReject(uint32_t type,uint32_t status)
