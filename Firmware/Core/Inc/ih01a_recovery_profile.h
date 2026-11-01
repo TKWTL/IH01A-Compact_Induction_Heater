@@ -12,5 +12,5 @@
  * 0 = original 64MHz PLL setup (LSE still disabled by 5V recovery).
  * Keep disabled in the actual production build.
  */
-#define IH01A_RECOVERY_CLOCK_HSI_ONLY 1
+#define IH01A_RECOVERY_CLOCK_HSI_ONLY 0
 #endif

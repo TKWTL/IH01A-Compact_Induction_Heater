@@ -201,3 +201,32 @@ initial reset-only trial.
 5. This branch is based on the remote recovery head;
    a user-owned local .uvoptx commit may need rebase after fetch,
    but must never be dropped or overwritten.
+
+## 2026-11-01: restore PLL64 + no-reset debug attachment preset
+
+- 5V recovery now sets `IH01A_RECOVERY_CLOCK_HSI_ONLY=0`:
+  normal HSI->PLL 64MHz system clock is restored, while RTC/LSE,
+  USBPD CAD/PE, TIM6/ADC and heater PWM remain disabled.
+- `uvprojx` disables Utilities -> **Update Target before Debugging**.
+- `uvoptx` disables **Load Application at Startup** and **Run to main()**
+  for target and simulator. These avoid auto-download and automatically
+  running to main, which would destroy the failure state.
+- **Driver-specific connection policy still requires one manual check**:
+  with Keil closed before updating XML, open
+  Project -> Options for Target -> Debug -> Settings -> Debug;
+  select **Connect: Normal**, uncheck **Reset after Connect**.
+  **Do not select Under Reset or with Pre-reset**. Save the dialog.
+  Keil persists this policy as opaque `CMSIS_AGDI` (or ST-Link) registry
+  command parameters in `uvoptx`; they are deliberately not guessed/
+  altered by an external editor. Entering the debugger is not proven
+  no-reset until this checkbox is verified in the IDE.
+- No-debug-entry-download means the new firmware must be built and
+  flashed separately *before* reproducing the cold-boot failure. Any
+  explicit flash download can reset or disturb the MCU. To capture a
+  failed reset, do not reflash first; connect normally, halt, read PC,
+  SP, g_recovery_early_stage and g_recovery_fault_code.
+- The existing Keil target cannot be assumed to have code-symbol
+  association on attach because automatic Load Application is disabled.
+  Keep .axf from the exact flashed build. Restore symbol loading through
+  a non-programming debugger method only after checking Keil's behavior;
+  avoid `LOAD` commands that may program target Flash.
