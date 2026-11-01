@@ -17,6 +17,11 @@ static uint8_t s_epr_mode, s_epr_enter_once, s_epr_exit_queued;
 static uint8_t s_epr_copy_valid, s_epr_user_requested;
 static uint8_t s_epr_any_event, s_epr_stall_logged, s_epr_probe;
 static uint8_t s_epr_local_pos;   /* 1 = EPR PDOs are numbered 1..6 */
+/* 0 = request the 1-based index inside EPR_Source_Capabilities (default),
+ * 1 = request the absolute position (index + 7). Selectable at runtime from
+ * the CLI so both conventions can be tried without reflashing. */
+static uint8_t s_epr_opos_absolute;
+void PD_Input_SetEPRObjectPosition(uint8_t absolute){s_epr_opos_absolute=absolute?1u:0u;}
 #if IH01A_EPR_DELAY_GETCAP
 static uint32_t s_epr_getcap_due_ms;
 static uint8_t  s_epr_getcap_sent;
@@ -275,9 +280,11 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
            mv==28000u && ma>=IH01A_EPR_REQUEST_MA)
         {
             uint32_t nrdo;
-            /* EPR_Source_Capabilities numbers its own PDOs 1..6; asking for
-             * slot 8 makes the Source answer with a Hard Reset. */
-            if(s_epr_local_pos && pos>(uint8_t)USBPD_MAX_NB_PDO)
+            /* Two conventions are in the field: the object position is either
+             * the 1-based index inside EPR_Source_Capabilities (1..6) or the
+             * absolute position continuing the SPR list (8..13). The internal
+             * slot is always 8..13; convert unless the absolute one is asked. */
+            if(s_epr_local_pos && pos>(uint8_t)USBPD_MAX_NB_PDO && !s_epr_opos_absolute)
                 pos=(uint8_t)(pos-(uint8_t)USBPD_MAX_NB_PDO);
             /* Request the configured current, never more than the PDO offers. */
             if(ma>IH01A_EPR_REQUEST_MA)ma=IH01A_EPR_REQUEST_MA;

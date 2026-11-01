@@ -27,10 +27,15 @@ static void cli_dispatch(void)
                (unsigned)IH01A_EPR_28V5A_HARDWARE_APPROVED,
                (unsigned)PD_Input_EPR_Active());
     }
-    else if(!strcmp(s_line,"pd epr"))
+    else if(!strcmp(s_line,"pd epr") || !strcmp(s_line,"pd epr8"))
     {
+        /* 'pd epr'  : object position = 1-based index inside EPR caps
+         * 'pd epr8' : object position = absolute 8..13 */
+        uint8_t absolute = strcmp(s_line,"pd epr8")==0 ? 1u : 0u;
+        PD_Input_SetEPRObjectPosition(absolute);
         if(PD_Input_ManualEPR())
-            printf("[CLI] EPR enter queued; verify 240W cable, monitor VBUS\r\n");
+            printf("[CLI] EPR enter queued (opos=%s); verify 240W cable\r\n",
+                   absolute ? "absolute" : "local");
         else
             printf("[CLI] EPR unavailable: need SPR contract, EPR source and approval\r\n");
     }
