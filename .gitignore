@@ -25,6 +25,10 @@
 *.uvguix.*
 *.mxproject
 *.code-workspace
+# 调试器/窗口/断点会话等本机状态:不含编译信息,Keil 打开时会自动重建,
+# 且每次打开关闭都会重写,是 uvprojx 之外最大的冲突来源,故不入库。
+# 谁决定编译哪些源码,以 uvprojx 为准。
+*.uvoptx
 
 # ---- 构建产物 ----
 /obj/
@@ -53,8 +57,8 @@ Thumbs.db
 __pycache__/
 
 # ---- 必须保留进版本库的工程文件(防止上面的通配误伤) ----
+# uvoptx 不在此列:它是本机调试状态,故意保持不跟踪
 !*.uvprojx
-!*.uvoptx
 !*.ioc
 !*.sct
 !*.c
