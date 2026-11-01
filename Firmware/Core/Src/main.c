@@ -38,6 +38,7 @@
 #include "framework/time_service.h"
 #include "conv_controller.h"
 #include "debug_uart.h"
+#include "ih01a_recovery_profile.h"
 #include <stdio.h>
 
 /* USER CODE END Includes */
@@ -131,17 +132,21 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
+#if !IH01A_RECOVERY_5V_ONLY
   MX_COMP1_Init();
   MX_COMP2_Init();
   MX_DAC1_Init();
+#endif
   MX_RTC_Init();
   MX_SPI1_Init();
+#if !IH01A_RECOVERY_5V_ONLY
   MX_TIM1_Init();
   MX_TIM15_Init();
   MX_ADC1_Init();
   MX_I2C1_Init();
   MX_TIM6_Init();
   MX_UCPD2_Init();
+#endif
   g_uart_boot_stage=1u;
   MX_USART1_UART_Init();
   g_uart_boot_stage=2u;
@@ -156,14 +161,37 @@ int main(void)
   /* USER CODE END 2 */
 
   /* USBPD initialisation ---------------------------------*/
+#if !IH01A_RECOVERY_5V_ONLY
   MX_USBPD_Init();
+#else
+  /* Leave UCPD peripheral and PE/CAD entirely OFF.
+   * External CC Rd alone keeps compliant USB-C sources at default 5V.
+   * This isolates firmware, UART and SSD1315 from PD contract resets. */
+  printf("[RECOVERY] USBPD OFF; passive Rd, 5V default only\r\n");
+#endif
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   APP_Tasks_Init();
   /* Safe read-only TIM6->ADC1->DMA control ISR; TIM1/PWM_EN remain OFF. */
+#if !IH01A_RECOVERY_5V_ONLY
   ConvController_Init();
+#else
+  printf("[RECOVERY] TIM6/ADC OFF; PWM remains disabled\r\n");
+  /* MX_TIM1_Init was intentionally skipped; PWM_EN must be low. */
+  LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port, PWM_EN_Pin);
+#endif
   g_uart_boot_stage=4u;
+#if IH01A_RECOVERY_5V_ONLY
+  while (1)
+  {
+    /* The non-RTOS APP coroutine shell normally runs from the USBPD
+     * user execute hook. With USBPD disabled, execute it directly.
+     * No PD deadlines exist in this special diagnostic firmware. */
+    APP_Tasks_RunOnce();
+    HAL_Delay(1u);
+  }
+#else
   while (1)
   {
     /* USER CODE END WHILE */
@@ -172,6 +200,7 @@ int main(void)
     /* USER CODE BEGIN 3 */
     /* coroOS now runs through USBPD_DPM_UserExecute() USER CODE. */
   }
+#endif
   /* USER CODE END 3 */
 }
 

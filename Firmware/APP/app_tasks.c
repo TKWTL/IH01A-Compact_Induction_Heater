@@ -17,17 +17,22 @@
 #include "algorithm/pd_diag.h"
 #include "temp_service.h"
 
+volatile uint32_t g_recovery_ui_stage;
 static coro_scheduler_t s_scheduler;
 static ui_t s_ui;
 
 THRD_DECLARE(thread_ui)
 {
     THRD_BEGIN;
+    g_recovery_ui_stage=1u;
     /* OLED RES# follows shared MCU NRST. External VCC may require its own
      * power sequencing; wait cooperatively without starving USB-PD. */
     THRD_DELAY(250u);
+    g_recovery_ui_stage=2u; /* entering OLED u8g2 init */
     diapInit();
+    g_recovery_ui_stage=3u; /* OLED init returned */
     MiaoUi_Setup(&s_ui);
+    g_recovery_ui_stage=4u; /* UI tree ready */
     while(1)
     {
         THRD_DELAY(20u);

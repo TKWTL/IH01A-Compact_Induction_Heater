@@ -23,6 +23,7 @@
 #include "usbpd.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "ih01a_recovery_profile.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -141,7 +142,9 @@ void SysTick_Handler(void)
 
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
+#if !IH01A_RECOVERY_5V_ONLY
   USBPD_DPM_TimerCounter();
+#endif
   /* USER CODE BEGIN SysTick_IRQn 1 */
 
   /* USER CODE END SysTick_IRQn 1 */
@@ -162,7 +165,9 @@ void UCPD1_2_IRQHandler(void)
   /* USER CODE BEGIN UCPD1_2_IRQn 0 */
 
   /* USER CODE END UCPD1_2_IRQn 0 */
+#if !IH01A_RECOVERY_5V_ONLY
   USBPD_PORT0_IRQHandler();
+#endif
 
   /* USER CODE BEGIN UCPD1_2_IRQn 1 */
 
