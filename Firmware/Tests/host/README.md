@@ -13,3 +13,9 @@ host tests; it does not alter the STM32 HAL or the Keil project.
 
 `test_pd_select.c` verifies highest eligible Fixed SPR PDO, current
 clamp, RDO object position/units and rejection of EPR/PPS/invalid bytes in SPR, plus full combined EPR capabilities parsing (28V Fixed position 8; AVS and >=32V rejected).
+
+
+2026-11-01: `test_ntc_lut.c` checks NTC table anchor points, monotonic
+interpolation and disconnected-sensor bounds; `test_temp_service.c`
+uses mocked time/ADC/control to ensure 100ms cadence, filtered samples,
+ADC fault invalidation and independent sensor validity.

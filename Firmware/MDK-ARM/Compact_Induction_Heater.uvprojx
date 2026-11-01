@@ -3377,6 +3377,11 @@
               <FileType>1</FileType>
               <FilePath>../APP/PowerControl/dashboard.c</FilePath>
             </File>
+            <File>
+              <FileName>temp_service.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/PowerControl/temp_service.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -3401,6 +3406,11 @@
               <FileName>pd_diag.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/algorithm/pd_diag.c</FilePath>
+            </File>
+            <File>
+              <FileName>ntc_lut.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/algorithm/ntc_lut.c</FilePath>
             </File>
           </Files>
         </Group>

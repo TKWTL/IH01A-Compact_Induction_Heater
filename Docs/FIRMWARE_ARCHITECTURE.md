@@ -151,3 +151,21 @@ DMA1 Ch4 RX circular and Ch5 TX normal. UART and Ch4-7 DMA IRQ priorities
 are kept equal (1) to avoid RX IDLE / HT-TC producer reentrancy.
 The firmware remains SPR-only. See `BSP/Console/README.md` and
 `Docs/PD_UART_DIAG.md` for usage.
+
+## 2026-11-01 Temperature and UART bring-up
+
+`APP/algorithm/ntc_lut.c/h` provides 39-entry 5°C spaced ADC tables for
+10k B3950 SYS/POT sensors, 156B const data, signed 0.1°C results with
+integer interpolation; out-of-table readings are flagged invalid.
+`PowerControl/temp_service.c/h` snapshots filtered 20kHz ADC readings
+**at 10Hz**, computes both NTC temperatures and the existing calibrated
+MCU junction temperature without doing any arithmetic in the DMA ISR.
+`Statistics/System` now displays all three temperatures in °C rather
+than voltage for SYS/POT. ADC sampling channel count/order is unchanged.
+
+`BSP/Console/debug_uart.c` now sends the 6-byte `U1OK\r\n` startup
+probe via HAL polling *before* PD initialization and kicks the queued
+boot banner's DMA immediately. `g_uart_boot_stage` (1..5) and
+`g_uart_probe_result` permit Keil Watch diagnosis when TX stays idle
+high. The probe is the only startup-time bounded blocking TX and is
+**never called from a PD callback**. Details: `BSP/Console/README.md`.

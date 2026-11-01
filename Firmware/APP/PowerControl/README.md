@@ -102,3 +102,15 @@ HAL 回调入口转为弱符号；链接器选择 PowerControl 中的强定义�
 再核对 SRAM VTOR 中的 DMA1 CH2/3 槽位确实指向该入口。
 不得同时将 `conv_controller.c` 排除编译，否则只会留下旧的弱 HAL 中断，
 无法运行定点采样控制状态机。
+
+## 2026-11-01 温度慢任务
+
+沿用 Collar-Radio `Application/Algorithms/system_statistic.c` **低频应用层换算、与采样逻辑解耦**的思想，但 IH01A 保留自己的 20kHz TIM6→8 Rank ADC→DMA 和 Q4 IIR 结构；不在中断中执行查表/除法。
+
+`APP/algorithm/ntc_lut.c/h`：SYS=10k/B3950 + 6.8k top + 20k parallel；POT=10k/B3950 + 1.2k top + 3.6k parallel。两张 39 点、每 5°C 一档的只读 ADC 码表，总计 **156B**；使用二分查找和 32 位整数线性插值，`-40.0..150.0°C`，结果 0.1°C。标称条件：3.3V 激励、2.5V ADC VREF、12 bit。
+
+`PowerControl/temp_service.c/h`：在 `APP_Tasks_RunOnce()` 中每 **100ms / 10Hz** 读取一次已完成的 **filtered** ADC 快照，计算 NTC_SYS、NTC_POT、MCU 出厂双点校准温度并更新统一快照。无浮点、无堆分配。
+
+`Statistics/System` 中两路 `NTC_*` 从电压改成带符号的 `xx.xC`，片上 `MCU` 也改从慢服务中读取，而不在页面内重复解算。ADC 尚未就绪、扫描停止、样本不再更新或某路码值超过该 NTC 标称表区间时，该路标记无效并显示 `FAULT`，不把极端码值钳到 -40/150°C 充当真实安全温度。独立 LUT 函数仍返回钳位值，同时以返回值标记其不在表范围。
+
+**注意：**温度换算频率降到 10Hz，**不是将 NTC 或 MCU 从 20kHz 扫描序列中删除**，因此 DMA Rank、HT/TC 对齐和现有高频电流采样时序都未变化。要真正降低这三路 ADC 的采样频率，需重构扫描组或使用额外触发，不在此安全性敏感的改动中混做。保护滞回、开短路检测以及电阻容差校准尚需结合硬件实验验证；本阶段始终禁止加热 PWM。

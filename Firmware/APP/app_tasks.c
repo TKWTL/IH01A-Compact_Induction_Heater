@@ -15,6 +15,7 @@
 #include "debug_uart.h"
 #include "console_cli.h"
 #include "algorithm/pd_diag.h"
+#include "temp_service.h"
 
 static coro_scheduler_t s_scheduler;
 static ui_t s_ui;
@@ -97,9 +98,11 @@ void APP_Tasks_Init(void)
 void APP_Tasks_RunOnce(void)
 {
     /* Deferred PD diagnostic text; no UART transmission in PD callbacks. */
+    g_uart_boot_stage=5u;
     PD_Diag_Service();
     ConsoleCLI_Poll();
     DebugUART_Service();
+    TempService_Poll(); /* 10Hz; never in the 20kHz ADC ISR */
     CoroOS_RunOnce(&s_scheduler);
     SSD1315_Display_Service();
 }

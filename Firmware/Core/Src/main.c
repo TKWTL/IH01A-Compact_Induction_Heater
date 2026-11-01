@@ -142,8 +142,11 @@ int main(void)
   MX_I2C1_Init();
   MX_TIM6_Init();
   MX_UCPD2_Init();
+  g_uart_boot_stage=1u;
   MX_USART1_UART_Init();
+  g_uart_boot_stage=2u;
   DebugUART_Init(boot_reset_flags);
+  g_uart_boot_stage=3u;
   MX_CRC_Init();
   MX_TIM14_Init();
   /* USER CODE BEGIN 2 */
@@ -160,6 +163,7 @@ int main(void)
   APP_Tasks_Init();
   /* Safe read-only TIM6->ADC1->DMA control ISR; TIM1/PWM_EN remain OFF. */
   ConvController_Init();
+  g_uart_boot_stage=4u;
   while (1)
   {
     /* USER CODE END WHILE */

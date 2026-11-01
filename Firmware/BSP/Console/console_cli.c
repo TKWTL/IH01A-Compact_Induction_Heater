@@ -29,6 +29,12 @@ static void cli_dispatch(void)
         printf("[CLI] UART tx_drop=%lu rx_drop=%lu rx_err=%lu idle=%lu\r\n",
                (unsigned long)stats.tx_dropped,(unsigned long)stats.rx_dropped,
                (unsigned long)stats.rx_errors,(unsigned long)stats.rx_idle_events);
+        printf("[CLI] tx_start=%lu tx_done=%lu tx_fail=%lu boot=%lu probe=%lu\r\n",
+               (unsigned long)stats.tx_dma_starts,
+               (unsigned long)stats.tx_dma_completions,
+               (unsigned long)stats.tx_dma_failures,
+               (unsigned long)g_uart_boot_stage,
+               (unsigned long)g_uart_probe_result);
     }
     else if(s_len!=0u)
         printf("[CLI] unknown: %s\r\n",s_line);

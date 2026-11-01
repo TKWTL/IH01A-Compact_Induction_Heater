@@ -21,6 +21,9 @@ static volatile uint16_t s_rx_head, s_rx_tail;
 static uint16_t s_dma_rx_last;
 static volatile uint8_t s_tx_busy, s_rx_running, s_ready;
 static volatile uint32_t s_tx_dropped, s_rx_dropped, s_rx_errors, s_rx_idle;
+static volatile uint32_t s_dma_starts,s_dma_failures,s_dma_completions;
+volatile uint32_t g_uart_boot_stage;
+volatile uint32_t g_uart_probe_result=0xFFFFFFFFu;
 
 void DebugUART_WriteByte(uint8_t byte)
 {
@@ -59,19 +62,33 @@ void DebugUART_GetStats(DebugUART_Stats *out)
     out->rx_dropped=s_rx_dropped;
     out->rx_errors=s_rx_errors;
     out->rx_idle_events=s_rx_idle;
+    out->tx_dma_starts=s_dma_starts;
+    out->tx_dma_failures=s_dma_failures;
+    out->tx_dma_completions=s_dma_completions;
 }
 void DebugUART_Init(uint32_t reset_flags)
 {
     s_tx_head=0u;s_tx_tail=0u;s_tx_active=0u;s_tx_busy=0u;
     s_rx_head=0u;s_rx_tail=0u;s_dma_rx_last=0u;
     s_tx_dropped=0u;s_rx_dropped=0u;s_rx_errors=0u;s_rx_idle=0u;
+    s_dma_starts=0u;s_dma_failures=0u;s_dma_completions=0u;
     s_ready=1u;
     s_rx_running=(HAL_UARTEx_ReceiveToIdle_DMA(&huart1,s_rx_dma,
                                                  UART_DMA_RX_SIZE)==HAL_OK);
     if(!s_rx_running)++s_rx_errors;
+    /* One short direct TX probe BEFORE USBPD_DPM_Run: proves clock/pin/USART
+     * even if the cooperative PD loop never reaches DebugUART_Service().
+     * Six 8N1 bytes take ~0.52 ms at 115200 baud, only at boot.
+     * This is NEVER invoked inside an active PD negotiation callback. */
+    {
+        static const uint8_t marker[]="U1OK\r\n";
+        g_uart_probe_result=(uint32_t)HAL_UART_Transmit(&huart1,
+                       (uint8_t *)(void *)marker,(uint16_t)(sizeof(marker)-1u),10u);
+    }
     printf("\r\n[BOOT %lu] IH01A USART1 DMA+IDLE 115200 8N1 flags=0x%08lX\r\n",
            (unsigned long)HAL_GetTick(),(unsigned long)reset_flags);
     printf("[UART] TX ring=512 RX ring=512 DMA RX staging=128; type help\r\n");
+    DebugUART_Service(); /* kick DMA before the nonreturning PD main loop */
 }
 void DebugUART_Service(void)
 {
@@ -92,8 +109,10 @@ void DebugUART_Service(void)
     s_tx_active=len;
     if(HAL_UART_Transmit_DMA(&huart1,&s_tx[head],len)!=HAL_OK)
     {
+        ++s_dma_failures;
         s_tx_active=0u;s_tx_busy=0u;
     }
+    else ++s_dma_starts;
 }
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
@@ -101,6 +120,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
     s_tx_head=(uint16_t)((s_tx_head+s_tx_active)&RING_MASK);
     s_tx_active=0u;
     s_tx_busy=0u;
+    ++s_dma_completions;
 }
 /* In HAL circular ReceiveToIdle, Size is the position in the DMA buffer,
  * NOT the count since last callback. Keep 128 as a distinct end sentinel,

@@ -21,3 +21,12 @@ CC=${CC:-cc}
 "$CC" -std=c99 -Wall -Wextra -Werror -I APP \
  APP/algorithm/pd_select.c Tests/host/test_pd_select.c -o /tmp/ih01a_pd_select_test
 /tmp/ih01a_pd_select_test
+
+"$CC" -std=c99 -Wall -Wextra -Werror -I APP \\
+ APP/algorithm/ntc_lut.c Tests/host/test_ntc_lut.c -o /tmp/ih01a_ntc_lut_test
+/tmp/ih01a_ntc_lut_test
+
+"$CC" -std=c99 -Wall -Wextra -Werror -I Tests/host/temp_mock -I APP -I APP/PowerControl \
+ APP/PowerControl/temp_service.c APP/algorithm/ntc_lut.c \
+ Tests/host/test_temp_service.c -o /tmp/ih01a_temp_service_test
+/tmp/ih01a_temp_service_test

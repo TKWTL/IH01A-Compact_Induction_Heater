@@ -32,3 +32,10 @@ USART1 IRQ are configured consistently in CubeMX .ioc and Core code.
 
 This change is diagnostic only; it does not alter the 3A request
 policy or enable EPR protocol negotiation.
+
+## 新增诊断流程（2026-11-01）
+
+- 上电时即观察示波器 PB6：应先发送一次短 `U1OK` 标记，再由 DMA 发送 `[BOOT]` 与 `[UART]`。不要只用直流表测 UART：它绝大部分时间处于空闲高电平。
+- Keil Watch 检查 `g_uart_boot_stage` 和 `g_uart_probe_result`；前者若停在 1 或 2，先定位启动卡点。若到 5 而无后续日志，检查 TX DMA/中断处理。
+- 串口命令 `uart` 能输出 DMA 启动、完成、失败计数。
+- 仅允许 **boot probe** 使用一次短 HAL 轮询发送，所有正常运行期间及 PD 回调都保持无阻塞日志；必要时注释 probe 再检查 PD 首次应答时序。

@@ -69,3 +69,16 @@ sent **before** the board resets.
 
 **This change does not enable EPR.** The project remains linked to the
 PD3 `MINSNK` stack; it selects 20V SPR and clamps current to 3A.
+
+## 2026-11-01 无输出的启动诊断
+
+先前 `DebugUART_Init()` 只把启动字符串入队，TX DMA 要等到由 PD 主循环回调的 `DebugUART_Service()` 才启动；如果主循环未运行，PB6 会持续保持 UART 空闲高电平。
+
+现在 `DebugUART_Init()` 在 `MX_USART1_UART_Init()` 之后、`MX_USBPD_Init()` 之前，先用 HAL **短暂阻塞地直接发送** `U1OK\\r\\n`（6 字节，理想线路时间约 0.52ms；只在启动阶段），然后入队原启动日志，并**立刻 kick TX DMA**。此操作不发生在任何 PD 通信回调内。若没有任何启动脉冲，请先用示波器在 MCU PB6 实际引脚测量，确认固件确实烧录、USART 初始化运行到该位置，并检查 GPIO 复用及供电。串口空闲时 PB6 为高是正常的。
+
+Keil Watch 调试变量：
+- `g_uart_boot_stage`：1=即将初始化 USART1，2=初始化结束，3=DebugUART_Init 返回，4=即将进入 USBPD_DPM_Run，5=执行到应用主循环。
+- `g_uart_probe_result`：早期直接发送 HAL 状态（0=HAL_OK，其他值表示失败；初值 0xFFFFFFFF 表示尚未执行）。
+- `uart` 命令现在提供 `tx_start`、`tx_done`、`tx_fail`、`boot`、`probe`，可区分 DMA 未启动、完成回调未触发、环满和 RX 错误。
+
+如果仅有 `U1OK` 而没有后续 `[BOOT]`，检查 DMA1 Channel5、共享 Ch4-7 DMA IRQ、USART1 TC 中断与 DebugUART_Service 的运行。如果两者都有而 `ping` 无响应，则重点查 PB7 RX、USART1 IDLE、DMA1 Channel4、是否发送 CR/LF。
