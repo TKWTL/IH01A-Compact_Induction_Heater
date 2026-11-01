@@ -16,6 +16,7 @@ static uint8_t s_count, s_manual, s_epr_count;
 static uint8_t s_epr_mode, s_epr_enter_once, s_epr_exit_queued;
 static uint8_t s_epr_copy_valid, s_epr_user_requested;
 static uint8_t s_epr_any_event, s_epr_stall_logged, s_epr_probe;
+static uint8_t s_epr_local_pos;   /* 1 = EPR PDOs are numbered 1..6 */
 /* Set by the stall fallback, consumed from USBPD_DPM_Notification(). */
 volatile uint8_t g_epr_ctx_pending;
 static uint32_t s_selected_rdo, s_copy_pdo, s_attach_ms, s_contract_ms;
@@ -50,7 +51,7 @@ void PD_Input_Init(void)
     memset(s_epr_caps,0,sizeof(s_epr_caps));
     s_count=s_manual=s_epr_count=s_epr_mode=s_epr_enter_once=0u;
     s_epr_exit_queued=s_epr_copy_valid=s_epr_user_requested=0u;
-    s_epr_any_event=s_epr_stall_logged=0u;
+    s_epr_any_event=s_epr_stall_logged=0u;s_epr_local_pos=0u;
     s_selected_rdo=s_copy_pdo=s_attach_ms=s_contract_ms=0u;
     s_epr_mode_since_ms=s_epr_enter_ms=0u;
     s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
@@ -71,6 +72,7 @@ void PD_Input_Reset(void)
     s_epr_exit_queued=0u;
     s_epr_any_event=0u;
     s_epr_stall_logged=0u;
+    s_epr_local_pos=0u;
     s_selected_rdo=s_copy_pdo=0u;
     s_epr_mode_since_ms=s_epr_enter_ms=0u;
     s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
@@ -107,15 +109,21 @@ void PD_Input_EPRCaps(const uint8_t *data,uint32_t bytes)
     count=bytes/4u;
     if(count<=USBPD_MAX_NB_EPRPDO)
     {
-        /* EPR-only payload: slots 1..7 stay for SPR, first EPR PDO = position 8. */
+        /* EPR-only payload: slots 1..7 stay for SPR, first EPR PDO = slot 8.
+         * The Object Position we must request, however, is the 1-based index
+         * inside the EPR_Source_Capabilities message (1..6), which is what the
+         * reference sink sends and what Sources accept. Requesting 8 here
+         * makes the Source answer with a Hard Reset. */
         memcpy(&s_epr_caps[USBPD_MAX_NB_PDO],data,bytes);
         s_epr_count=(uint8_t)(USBPD_MAX_NB_PDO+count);
+        s_epr_local_pos=1u;
     }
     else
     {
         /* Combined SPR+EPR payload: object position already equals index+1. */
         memcpy(&s_epr_caps[0],data,bytes);
         s_epr_count=(uint8_t)count;
+        s_epr_local_pos=0u;
     }
     memcpy(&first,&s_epr_caps[USBPD_MAX_NB_PDO],sizeof(first));
     PD_Diag_Record(PD_DIAG_EPR_CAPS,bytes,first);
@@ -235,7 +243,12 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
            (uint32_t)s_epr_count*4u,&pos,&mv,&ma,&p) &&
            mv==28000u && ma==5000u)
         {
-            uint32_t nrdo=PD_EncodeFixedRDO(pos,ma,1u);
+            uint32_t nrdo;
+            /* EPR_Source_Capabilities numbers its own PDOs 1..6; asking for
+             * slot 8 makes the Source answer with a Hard Reset. */
+            if(s_epr_local_pos && pos>(uint8_t)USBPD_MAX_NB_PDO)
+                pos=(uint8_t)(pos-(uint8_t)USBPD_MAX_NB_PDO);
+            nrdo=PD_EncodeFixedRDO(pos,ma,1u);
             if(!nrdo)return 0u;
             if(!s_epr_copy_valid)
             {
