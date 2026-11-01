@@ -1,5 +1,6 @@
-/* Pure RDO builder for the currently linked PD3.0 minimum Sink stack.
- * Standard SPR Fixed supplies only. No implicit EPR/AVS/PPS mode.
+/* Pure PDO selector / RDO builder. The active MINSNK link remains SPR-only.
+ * EPR helpers do not enter EPR mode; the full stack must handle entry,
+ * chunking, keepalives and the copied PDO in EPR_REQUEST.
  */
 #include "framework/pd_select.h"
 #include <string.h>
@@ -34,4 +35,45 @@ uint32_t PD_Input_FixedRDO(uint8_t pos,uint32_t ma)
     if(ma>PD_INPUT_MAX_MA)ma=PD_INPUT_MAX_MA;
     n=ma/10u;
     return ((uint32_t)pos<<28u)|(1u<<24u)|(n<<10u)|n;
+}
+
+/* In EPR Source Capabilities the first seven positions are SPR slots,
+ * followed by at most six EPR PDOs (positions 8..13). Only EPR Fixed
+ * voltages under 32V are eligible; AVS is intentionally excluded. */
+uint8_t PD_Input_BestEPRFixed(const uint8_t *data,uint32_t len,
+                             uint8_t *pos,uint32_t *mv,uint32_t *ma,
+                             uint32_t *selected_pdo)
+{
+    uint32_t i,best_v=0u,best_c=0u,best_pdo=0u;
+    uint8_t best_pos=0u;
+    if(!data||!pos||!mv||!ma||!selected_pdo||
+       !len||(len&3u)||len>24u)return 0u;
+    for(i=0u;i<len/4u;++i)
+    {
+        uint32_t p,v,c;
+        memcpy(&p,data+4u*i,4u);
+        if((p>>30u)!=0u)continue;
+        v=((p>>10u)&1023u)*50u;
+        c=(p&1023u)*10u;
+        if(v<=PD_INPUT_SPR_MAX_MV||v>=PD_INPUT_MAX_MV||c==0u)
+            continue;
+        if(v>best_v||(v==best_v&&c>best_c))
+        {
+            best_v=v;best_c=c;best_pdo=p;
+            best_pos=(uint8_t)(8u+i);
+        }
+    }
+    if(!best_pos)return 0u;
+    if(best_c>PD_INPUT_MAX_MA)best_c=PD_INPUT_MAX_MA;
+    *pos=best_pos;*mv=best_v;*ma=best_c;*selected_pdo=best_pdo;
+    return 1u;
+}
+uint32_t PD_Input_EPRFixedRDO(uint8_t pos,uint32_t ma)
+{
+    uint32_t n;
+    if(pos<8u||pos>13u||ma<10u)return 0u;
+    if(ma>PD_INPUT_MAX_MA)ma=PD_INPUT_MAX_MA;
+    n=ma/10u;
+    /* Bit 22: EPR capable, bit 24: NoUSBsuspend. */
+    return ((uint32_t)pos<<28u)|(1u<<24u)|(1u<<22u)|(n<<10u)|n;
 }
