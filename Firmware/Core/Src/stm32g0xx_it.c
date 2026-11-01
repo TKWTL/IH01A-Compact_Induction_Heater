@@ -20,9 +20,9 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32g0xx_it.h"
-#include "usbpd.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "usbpd.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -141,8 +141,8 @@ void SysTick_Handler(void)
 
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
-  USBPD_DPM_TimerCounter();
   /* USER CODE BEGIN SysTick_IRQn 1 */
+  USBPD_DPM_TimerCounter();  /* PD 1ms 基准: CubeMX 取消 USBPD 后不再自动插入, 放 USER CODE 保命 */
 
   /* USER CODE END SysTick_IRQn 1 */
 }
@@ -162,8 +162,6 @@ void UCPD1_2_IRQHandler(void)
   /* USER CODE BEGIN UCPD1_2_IRQn 0 */
 
   /* USER CODE END UCPD1_2_IRQn 0 */
-  USBPD_PORT0_IRQHandler();
-
   /* USER CODE BEGIN UCPD1_2_IRQn 1 */
 
   /* USER CODE END UCPD1_2_IRQn 1 */

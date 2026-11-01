@@ -29,11 +29,11 @@
 #include "tim.h"
 #include "ucpd.h"
 #include "usart.h"
-#include "usbpd.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "usbpd.h"
 #include "app_tasks.h"
 #include "framework/time_service.h"
 #include "conv_controller.h"
@@ -174,7 +174,6 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    USBPD_DPM_Run();
 
     /* USER CODE BEGIN 3 */
     /* coroOS now runs through USBPD_DPM_UserExecute() USER CODE. */

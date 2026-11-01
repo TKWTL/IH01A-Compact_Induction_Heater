@@ -50,19 +50,27 @@ if ($dirty -ne '') {
     $actions.Add('uvprojx already matches git, nothing to restore')
 }
 
-# --- 1b. USBPD 源码(手工维护)若被 CubeMX 覆盖过, 一并恢复 ------------------
+# --- 1b. 手工维护的 PD 目录若被 CubeMX 覆盖/删除, 一并恢复 -------------------
 if (-not $SkipUsbpdRestore) {
-    $usbpdRel = 'Firmware/USBPD'
-    $usbpdDirty = (& git -C $RepoRoot status --porcelain -- $usbpdRel | Out-String).Trim()
-    if ($usbpdDirty -ne '') {
-        & git -C $RepoRoot checkout -- $usbpdRel
-        if ($LASTEXITCODE -ne 0) { throw 'git checkout Firmware/USBPD failed' }
-        $actions.Add('Firmware/USBPD restored from git (CubeMX had overwritten it)')
+    foreach ($rel in @('Firmware/USBPD',
+                       'Firmware/Middlewares/ST/STM32_USBPD_Library_v541',
+                       'Firmware/Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_ll_tim.c')) {
+        $dirtyDir = (& git -C $RepoRoot status --porcelain -- $rel | Out-String).Trim()
+        $exists = Test-Path (Join-Path $RepoRoot $rel)
+        if ($dirtyDir -ne '' -or -not $exists) {
+            & git -C $RepoRoot checkout HEAD -- $rel
+            if ($LASTEXITCODE -ne 0) { throw "git checkout $rel failed" }
+            if (-not $exists) { $actions.Add("$rel restored from git (CubeMX had deleted it)") }
+            else { $actions.Add("$rel restored from git (CubeMX had overwritten it)") }
+        }
     }
 }
 $text = Get-Content -LiteralPath $projectPath -Raw
 $originalText = $text
-$nl = if ($text -match "`r`n") { "`r`n" } else { "`n" }
+$nl = if ($text -match "``
+") { "``
+" } else { "`
+" }
 
 # --- 2. 同步 Core 源文件 ----------------------------------------------------
 $coreGroup = 'Application/User/Core'
