@@ -44,6 +44,8 @@ Code=59,192  RO-data=3,060  RW-data=464  ZI-data=13,840     0 Error(s), 0 Warnin
 5. **`uvoptx` 已重新纳入版本控制**（承载 CMSIS-DAP 调试器选择与 `STM32G0xx_128.FLM` Flash 算法）。Keil 打开/关闭后若它变脏，直接提交即可；`uvprojx`/`uvoptx` 都已有 Keil 原生序列化基线，不会再有整文件格式 diff。
 6. **host 测试在 Windows 上**：`CC=<mingw gcc> sh Firmware/Tests/host/run.sh`，脚本已带 `-D__USE_MINGW_ANSI_STDIO=1`（否则 `test_time` 的 `size=1 应输出空串` 断言会假失败——那是 MSVCRT 的 `_snprintf` 语义，不是固件 bug）。
 7. `Docs/USBPD_EPR_MIGRATION.md` 是 2026-11-01 的旧记录，其中"电流钳到 3 A"已被本分支的 5 A EPR 上限取代，以本文件和 `Docs/USBPD_FULL_EPR_MIGRATION_IMPACT.md` 为准。
+8. **`memcpy` 声明被条件编译挡掉**：`usbpd_dpm_user.c` 里 ST 把 `#include "string.h"` 放在 `#if defined(_TRACE)` 内，本工程不定义 `_TRACE`，于是新加的 EPR 代码用 `memcpy` 会报 `-Wimplicit-function-declaration`。已在 `USER CODE BEGIN Includes` 里显式加 `<string.h>`。
+9. **microLIB 堆必须放大到 8 KiB**：FULL 栈用 `malloc` 建 PE/PRL/CAD 句柄，实测需求 `PRL 0x396 + CAD 0x24 + PE (0x6F<<5) = 4506 B`（双口口径；`USBPD_PE_GetMemoryConsumption()` 返回值）。startup 原来 `Heap_Size = 0x400` 只有 1 KiB，`USBPD_PE_Init()` 直接返回 `USBPD_MALLOCERROR`（枚举值 21 / 0x15），表现为 `MX_USBPD_Init()` 里 `while(1)` 死等。现为 `0x2000`（RAM 静态占用约 22.5/36 KiB）。
 
 ## 4. 下一棒：按这个顺序做，每步都有验收标准
 

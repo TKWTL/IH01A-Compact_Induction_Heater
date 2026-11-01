@@ -30,6 +30,9 @@ volatile uint32_t g_usbpd_full_stage;
 /* 来自 usbpd_dpm_core.c: InitCore 内部失败子步骤与状态码 */
 extern volatile uint32_t g_pd_init_substep;
 extern volatile uint32_t g_pd_init_status;
+/* microLIB 堆边界(由 startup_stm32g071xx.s 导出), 用于打印当前堆大小 */
+extern uint32_t __heap_base;
+extern uint32_t __heap_limit;
 /* USER CODE END 0 */
 
 /* USER CODE BEGIN 1 */
@@ -50,8 +53,10 @@ void MX_USBPD_Init(void)
   g_usbpd_full_stage=1u;
 
   /* Initialize the Device Policy Manager */
-  printf("[PD_INIT] LIB_ID=0x%08X check=%lu\r\n",
-         (unsigned)_LIB_ID, (unsigned long)USBPD_PE_CheckLIB(_LIB_ID));
+  printf("[PD_INIT] LIB_ID=0x%08X check=%lu reqmem=%lu heap=%lu\r\n",
+         (unsigned)_LIB_ID, (unsigned long)USBPD_PE_CheckLIB(_LIB_ID),
+         (unsigned long)USBPD_PE_GetMemoryConsumption(),
+         (unsigned long)((uint32_t)&__heap_limit - (uint32_t)&__heap_base));
   DebugUART_Service();
   if (USBPD_OK != USBPD_DPM_InitCore())
   {

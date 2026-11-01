@@ -38,8 +38,13 @@ __initial_sp
 ; <h> Heap Configuration
 ;   <o>  Heap Size (in Bytes) <0x0-0xFFFFFFFF:8>
 ; </h>
-
-Heap_Size      EQU     0x400
+;
+; IH01A: ST USB-PD FULL stack allocates its PE/PRL/CAD handles with malloc.
+; Measured requirement (USBPD_PE_GetMemoryConsumption, v5.4.1):
+;   PRL 0x396 + CAD 0x24 + PE (0x6F<<5) = 4506 B for 2 ports
+; microLIB malloc draws from this block (__heap_base..__heap_limit), so the
+; original 1 KiB was not enough -> USBPD_PE_Init returned USBPD_MALLOCERROR.
+Heap_Size      EQU     0x2000
 
                 AREA    HEAP, NOINIT, READWRITE, ALIGN=3
 __heap_base
