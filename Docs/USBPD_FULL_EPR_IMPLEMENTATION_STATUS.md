@@ -35,3 +35,66 @@
 - 源文件 `usbpd.c` 初始化阶段可从串口与 Keil Watch 观察，便于排查库 ID、配置和 DPM 启动。
 - `*.uvprojx` 和 `*.uvoptx` 均沿用项目最新 Keil 原生格式且继续跟踪；本次只修改 `uvprojx` 的语义配置，不改 `uvoptx`。
 - 尚未确认当前 Core/Device/应用层组合的 ArmClang 链接及完整 EPR 报文行为；请不要直接合并主线。
+
+## 2026-11-02 FULL 20V 板端回归结果与 EPR 实测方案
+
+### FULL 20V 已验证（用户板端 UART，独立断电重启）
+
+```text
+[PD_INIT] LIB_ID=0x30410000 check=1 reqmem=4506 heap=8192
+[PD_INIT] FULL v5.4.1 initialized
+[PD 594] SPR_CAPS a=6 b=0x0A81912C
+[PD 597] REQUEST a=20000 b=0x5104B12C
+[PD 602] NOTIFY a=1 b=0x00000000
+[PD 859] CONTRACT a=1 b=0x00000010
+[CLI] bus=20048 mV select=20000 mV current=3000 mA PDO=5
+```
+
+- FULL 栈 20V/3A SPR 回归通过；供电测量与协商一致。4506B 是 PD 库报告的动态内存需求，8192B 是编译堆大小；不是已测量的堆峰值。
+- 某次上电发生了多轮 HARD_RESET、再次断电后恢复正常。因为供电期间有人工断电，不能拼接不同启动的协商事件，继续留意冷启动电源时序。
+- 用户已在 `Firmware/Compact_Induction_Heater.ioc` 关闭 CubeMX 的 USBPD 中间件勾选，USBPD 源码/库改为 Git 独立管理。`main` 中的 `.ioc` 仍需在后续合并前同步，但禁止 CubeMX 重新覆盖 vendored v541 文件。
+
+### 28V 试验固件（当前 feature 分支）
+
+- 用户确认输入硬件路径可以承受 28V。将 `IH01A_EPR_28V5A_HARDWARE_APPROVED=1`，但 `IH01A_EPR_28V5A_AUTO_ENTER=0`。**普通插电只会自动请求 SPR ≤20V；不会主动跳 28V。**
+- 使用证实支持 28V/5A EPR 的 Source 和 240W（50V/5A）电子标记 USB-C 线缆，确认独立过压/过流保护；28V 首测空载、PWM 禁用、示波器监测 VBUS。
+- EPR Source PDO 以独立数组交付：`USBPD_CORE_DATATYPE_RCV_SRC_PDO_EPR` 预期 4..24 字节（1..6 对象），映射到逻辑 PDO 8..13；不能把 4 字节当成完整 32 字节的合并数组。诊断 `EPR_CAPS a=原始字节数 b=首个原始 PDO`。
+- EPR_REQUEST 按 FULL DPM 回调传入 **8 字节**，内容是 ST 类型化 RDO + 匹配的 CopyPDO；日志分别打印 `EPR_REQUEST` 和 `EPR_COPY`。若回调只收到 4 字节，考虑 ST EPR 分块重组缺陷，先分析协议仪而非手工拼造缺失 PDO。
+- 没有可用的 28V/5A 固定 PDO、请求被拒绝或等待能力超时 2.5 秒，退出 EPR 返回 SPR，不自动重新进入。允许 CLI 或 UI 明确人工发起下一次尝试。
+
+**必须 Keil Rebuild All Target Files**。先等正常 SPR 20V 进入稳定 Contract，再在串口发送命令：
+
+```text
+pd
+pd epr
+pd
+uart
+```
+
+预期观察以下里程碑：
+
+```text
+[CLI] EPR enter queued ...
+[PD ...] EPR_ENTER a=1
+[PD ...] EPR_MODE a=1 b=0x00000072    (114: EPRMODE_SUCCEEDED)
+[PD ...] EPR_CAPS a=4..24 b=...
+[PD ...] EPR_REQUEST a=28000 b=...
+[PD ...] EPR_COPY a=8..13 b=...
+[PD ...] CONTRACT ...
+[CLI] bus≈28000 mV select=28000 mV current=5000 mA
+```
+
+**注意**：EPR 状态日志等于协议回调，不直接证明 VBUS 实际电压；`current=5000` 是协商额度，不是电流实测。若 Source 仅提供 AVS、不提供 Fixed 28V/5A，此版本会保留 SPR，暂不实现 AVS。
+
+异常定位：
+- `pd epr` 被拒绝：检查前置 SPR contract、Source 5V Fixed PDO 的 EPR capable 标记和线缆。
+- `EPR_ENTER a=0`：FULL API 在当前 Policy Engine 状态拒绝进入，检查触发时间和 EPR Sink 配置。
+- `EPR_MODE` 失败：优先查看 PD 分析仪里的 cable capability/VCONN/EPR Mode Failed 原因。
+- `EPR_CAPS a=4`：库可能只向应用层提供 1 个 EPR PDO；判断收到的原始 PDO 是否就是 Fixed 28V/5A，不能推测其余对象存在。
+- `EPR_CAPS a=0` 或 `EPR_MODE b=0xBAD1`：收不到完整有效能力，2.5s 超时退出。
+- `EPR_REQUEST` 后无成功 Contract：抓取 EPR_REQUEST 两个 Data Object 和 Source Accept/Reject/Wait，核对 CopyPDO 是否与 EPR Source PDO 完全一致。
+- 仍有波形异常、输入过压或加热器侧保护异常时立即停止测试，不应提高负载。
+
+### 本次离线验证
+
+在当前执行环境，使用主机 C 编译器和 AddressSanitizer/UndefinedBehaviorSanitizer 对独立复现的 `pd_select.c` 选择逻辑运行了 SPR 固定 20V、单个 4B EPR Fixed 28V/5A、AVS 忽略、30V/36V 排除测试，全部通过。**这不是 Keil 真正 Rebuild，也不能替代板端 EPR 协议验收。**
