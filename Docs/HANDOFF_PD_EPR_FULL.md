@@ -46,6 +46,29 @@ Code=59,192  RO-data=3,060  RW-data=464  ZI-data=13,840     0 Error(s), 0 Warnin
 7. `Docs/USBPD_EPR_MIGRATION.md` 是 2026-11-01 的旧记录，其中"电流钳到 3 A"已被本分支的 5 A EPR 上限取代，以本文件和 `Docs/USBPD_FULL_EPR_MIGRATION_IMPACT.md` 为准。
 8. **`memcpy` 声明被条件编译挡掉**：`usbpd_dpm_user.c` 里 ST 把 `#include "string.h"` 放在 `#if defined(_TRACE)` 内，本工程不定义 `_TRACE`，于是新加的 EPR 代码用 `memcpy` 会报 `-Wimplicit-function-declaration`。已在 `USER CODE BEGIN Includes` 里显式加 `<string.h>`。
 9. **microLIB 堆必须放大到 8 KiB**：FULL 栈用 `malloc` 建 PE/PRL/CAD 句柄，实测需求 `PRL 0x396 + CAD 0x24 + PE (0x6F<<5) = 4506 B`（双口口径；`USBPD_PE_GetMemoryConsumption()` 返回值）。startup 原来 `Heap_Size = 0x400` 只有 1 KiB，`USBPD_PE_Init()` 直接返回 `USBPD_MALLOCERROR`（枚举值 21 / 0x15），表现为 `MX_USBPD_Init()` 里 `while(1)` 死等。现为 `0x2000`（RAM 静态占用约 22.5/36 KiB）。
+10. **CubeMX 可以继续用来改配置，但必须走"生成 → 跑脚本 → Rebuild"三步**（见 §4.2）。直接 Generate 会：覆盖 `Firmware/USBPD/**`、把 `uvprojx` 的 define/库/include 改回 MINSNK、删掉 IH01A 自己的文件组，并**删掉 `main.c` 里 `DebugUART_Init()` 的调用**（串口会彻底没输出）。
+
+## 4.2 CubeMX 工作流（已加护栏，2026-11-02）
+
+设计目标：以后仍然可以用 CubeMX 改引脚/时钟/heap，但不能再把 PD 栈与串口搞坏。
+
+| 位置 | 做法 |
+|---|---|
+| `main.c` | 与 CubeMX 无关的调用全部搬进 `USER CODE`：`DebugUART_Init()`、`MX_USBPD_Init()` 现在都在 `USER CODE BEGIN 2` 里，重新生成不会丢 |
+| `main.c` `USER CODE BEGIN 0` | 加了**生成护栏**：若 `USBPDCORE_LIB_PD3_FULL` 未定义（= 刚被 CubeMX 重写过），直接 `#error` 并提示去跑脚本 —— 不会静默编出 MINSNK 版本 |
+| `Firmware/Tools/cubemx_post_generate.ps1` | 一键修复：恢复 `uvprojx` 为仓库版本 → 把新生成/已删除的 `Core/Src/*.c` 同步进工程 → 校验 define/库/include/旧目录残留/heap 一致性。幂等，干净状态下运行不改一个字节 |
+| `.ioc` | `ProjectManager.HeapSize=0x2000` 已写入，CubeMX 生成时会保持 |
+
+标准流程：
+
+```powershell
+# 1) CubeMX 里改配置 → Generate Code
+# 2) 修复工程并校验
+powershell -ExecutionPolicy Bypass -File Firmware/Tools/cubemx_post_generate.ps1
+# 3) Keil: Rebuild（若跳过第 2 步，main.c 的 #error 会挡住编译并提示跑脚本）
+```
+
+仍建议在 CubeMX 里**取消勾选 USBPD 中间件**（`Middlewares` 面板）：这样它连 `Firmware/USBPD/**` 都不会再尝试生成；不取消也能工作，只是每次生成后 `git diff` 里会出现那 5 个文件的旧模板内容，脚本不会替它们做内容回滚（那是 git 的活）。
 
 ## 4. 下一棒：按这个顺序做，每步都有验收标准
 

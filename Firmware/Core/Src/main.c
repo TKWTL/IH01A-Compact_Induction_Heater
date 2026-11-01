@@ -71,6 +71,12 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* IH01A 生成护栏: uvprojx 里没有 FULL 的定义,说明有人在 CubeMX 里重新生成过工程
+ * (CubeMX 会按固件包 v1.6.3 的旧记录把 PD 配置打回 MINSNK)。
+ * 处理办法: 运行 Firmware/Tools/cubemx_post_generate.ps1, 再 Rebuild。 */
+#if !defined(USBPDCORE_LIB_PD3_FULL)
+#error "CubeMX regenerated the project without the FULL USB-PD stack. Run Firmware/Tools/cubemx_post_generate.ps1, then Rebuild."
+#endif
 /* SRAM VTOR relocation lives in main.c, not in the PowerControl module.
  * Flash RESET stays at 0x08000000; .ih_vectors is reserved in scatter.
  * 64 vector entries = 256 bytes, and the destination is 256-aligned. */
@@ -142,21 +148,22 @@ int main(void)
   MX_I2C1_Init();
   MX_TIM6_Init();
   MX_UCPD2_Init();
-  g_uart_boot_stage=1u;
   MX_USART1_UART_Init();
-  g_uart_boot_stage=2u;
-  DebugUART_Init(boot_reset_flags);
-  g_uart_boot_stage=3u;
   MX_CRC_Init();
   MX_TIM14_Init();
   /* USER CODE BEGIN 2 */
   /* RTC was reset to a relative calendar origin by MX_RTC_Init().
    * Record the boot epoch after all CubeMX peripheral initialization. */
   Time_Init();
-  /* USER CODE END 2 */
-
-  /* USBPD initialisation ---------------------------------*/
+  /* Debug UART ring/DMA layer: ours, not CubeMX's - keep it inside USER CODE so a
+   * regeneration cannot delete the call (that is what killed the console once). */
+  g_uart_boot_stage=2u;
+  DebugUART_Init(boot_reset_flags);
+  g_uart_boot_stage=3u;
+  /* USB-PD FULL stack: the whole Firmware/USBPD tree is hand-maintained (USBPD is
+   * unchecked in CubeMX), so this call has to live here as well. */
   MX_USBPD_Init();
+  /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
