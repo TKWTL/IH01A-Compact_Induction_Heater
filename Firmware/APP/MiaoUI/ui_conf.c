@@ -73,4 +73,31 @@ void Create_MenuTree(ui_t *ui)
 
     AddItem("-About", UI_ITEM_WORD, img_user_account, &s_about, &s_root, 0, 0);
 }
+
 void MiaoUi_Setup(ui_t *ui) { Create_UI(ui, &s_main); }
+
+/* ---- 菜单配置推荐规范(由本文件归纳,新增页面照此写) ----
+ *
+ * 命名
+ *   页面      s_<页面名>        如 s_root / s_settings / s_display
+ *   菜单项    s_<所在页>_item   如 s_display_item(打开子页的那一项)
+ *   返回项    s_back_<所在页>   如 s_back_display(位于 [Display] 页内)
+ *   标题允许重名,标识符不允许;同名页面加限定,如统计页的 s_stat_sys
+ *
+ * 添加顺序(深度优先,子页紧跟它的入口项)
+ *   1. AddPage(父页)
+ *   2. 父页的 AddItem(打开子页的那一项写在 AddPage(子页) 之前)
+ *   3. AddPage(子页) 及其全部 AddItem
+ *   4. 同一页面内返回项排在最前,其余项按显示顺序追加
+ *
+ * 标签
+ *   页面名 "[Name]"   子页入口 "-Name"   返回项 "[Return]"(上一级) / "[Menu]"(根)
+ *   只有 ICON 页用图标;TEXT 页图标位传 0
+ *
+ * 缩进(缩进即层级)
+ *   根页项目 4 格 → 一级子页项目 8 格 → 二级子页项目 12 格
+ *
+ * 内容填充
+ *   成组的控件项由模块函数一次性挂入: Add_Disp_Items(&page)、
+ *   PM_UI_AddSleepSettingsItems(&page);占位页只放返回项。
+ */
