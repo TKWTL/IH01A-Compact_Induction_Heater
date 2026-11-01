@@ -70,6 +70,28 @@ Code=59,192  RO-data=3,060  RW-data=464  ZI-data=13,840     0 Error(s), 0 Warnin
 - **失败一律回落 SPR ≤20V，不自动重试**（只允许 UI 手动 Retry）。
 - **验收**：串口里程碑 `EPR ENTER -> EPRMODE_SUCCEEDED -> EPR CAPS -> EPR REQUEST -> PS_RDY`，且 EPR 会话期间 PD/UI/UART 都活着。
 
+## 4.1 CubeMX 与本项目 USBPD 的关系（2026-11-02 实测）
+
+CubeMX 的 **Software Packs / Additional Software** 列表里没有单列的 USBPD 包——它是随 **STM32Cube FW G0** 固件包以 **Middleware `STM32_USBPD_Library`** 形式提供的。
+本机 CubeMX 6.17.0 的仓库 `D:\Program Files\STMicroelectronics\STM32Cube\Repository\STM32Cube_FW_G0_V1.6.3\Middlewares\ST\STM32_USBPD_Library` 实测：
+
+| 项 | CubeMX 自带 (FW G0 v1.6.3) | 本仓库 vendored (core v5.4.1) |
+|---|---|---|
+| `USBPDCORE_PD3_FULL_CM0PLUS_Keil.lib` | **有**，123,306 B | **有**，140,892 B |
+| `usbpd_core.h` | 47,095 B，**`EPR` 出现 0 次** | 49,794 B，含 `USBPD_PE_Request_EPRModeEnter/Exit` |
+| `usbpd_def.h` | 166,883 B | 188,382 B |
+| `.ioc` 里的变体 | `VP_USBPD_VS_PD3MINSNK.Mode=PD3_Min_Snk` | — |
+
+**结论：CubeMX 6.17 能配出 PD3.0 的 FULL，但配不出 EPR**——EPR 需要 core ≥ v5.x，而 G0 v1.6.3 固件包里的中间件是旧的。所以 EPR 版只能走仓库内 vendored 的 `STM32_USBPD_Library_v541`，CubeMX 不会管理它（也不会有"软件包列表里选 EPR"这条路）。
+
+**由此带来的工程约束**（务必注意）：
+
+- `ProjectManager.LibraryCopy=1`，CubeMX 会把旧版中间件复制到 `Firmware/Middlewares/ST/STM32_USBPD_Library`。**一旦在 CubeMX 里点 Generate Code，该目录会回到 v1.6.3 旧版内容**，并可能改写 `.uvprojx` 里的库/include 条目。
+- vendored 目录用的是**版本化路径** `..._v541`，CubeMX 不认识，所以不会被它的生成覆盖——这是当初选这个目录名的原因。
+- 建议在步骤 3 完成、20 V 回归通过后，把 USBPD 从 CubeMX 管理里摘出来（`.ioc` 去掉 `Mcu.IP18=USBPD` / `VP_USBPD_*`，或把 `ProjectManager.LibraryCopy` 置 0），之后 USBPD 目录完全由 git 维护；生成出来的 `usbpd.c`/`usbpd_pwr_if.c`/`usbpd_dpm_core.c` 已在仓库里，不影响。
+- 若将来 CubeMX 或 X-CUBE-TCPP 提供 core ≥ v5 的中间件，应切回官方管理，减少手工同步成本。
+
+
 ## 5. 硬件闸门（软件做完也不能直接上 28 V）
 
 - 首次 28 V 必须**空载 + PWM 关闭 + 限流源**，用万用表/示波器确认 VBUS；
