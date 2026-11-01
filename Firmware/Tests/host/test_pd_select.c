@@ -51,11 +51,16 @@ int main(void)
         epr[9]=fixed(36000u,5000u); /* above strict 32V ceiling */
         assert(PD_Input_BestEPRFixed((const uint8_t *)epr,sizeof(epr),
                                      &pos,&mv,&ma,&chosen));
-        assert(pos==8u && mv==28000u && ma==3000u);
+        assert(pos==8u && mv==28000u && ma==5000u);
         assert(chosen==epr[7]);
         rdo=PD_Input_EPRFixedRDO(pos,ma);
         assert((rdo>>28u)==8u && (rdo&(1u<<22u))!=0u);
-        assert((rdo&1023u)==300u);
+        assert((rdo&1023u)==500u);
+        assert(((rdo>>10u)&1023u)==500u);
+        /* EPR Capable bit on initial SPR RDO is separately gated by PE. */
+        assert((PD_Input_FixedRDOForEPR(3u,3000u)&(1u<<22u))!=0u);
+        assert((PD_Input_FixedRDO(3u,3000u)&(1u<<22u))==0u);
+        assert(PD_Input_FixedRDOForEPR(0u,3000u)==0u);
         epr[7]=0u;
         assert(!PD_Input_BestEPRFixed((const uint8_t *)epr,sizeof(epr),
                                       &pos,&mv,&ma,&chosen));
