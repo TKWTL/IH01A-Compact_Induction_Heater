@@ -64,3 +64,17 @@ rather than doing formatted output inside time-critical PD callbacks.
 The Statistics/PD in `UI_PAGE_TEXT` uses seven statically allocated
 `UI_ITEM_WORD` rows and widens only that page's text clipping area.
 No heap allocation or UI page rebuilding is involved.
+
+## PowerControl 采样与中断（2026-11-01，尚未板端验收）
+
+`PowerControl_RelocateVectors()` 在 SysInit 阶段写 SRAM VTOR。原始
+Flash 向量表不变，`DMA1_Channel2_3_IRQHandler` 迁至
+`APP/PowerControl/power_control.c` 并标记 `.ih_ramfunc`。
+TIM6 TRGO→ADC1 8 Rank→DMA1 Channel2 双帧（16 halfwords）→
+HT/TC→控制状态机；中断执行期间拉高 ISR_TIME(PF1)，结束拉低。
+主循环与 USBPD / GUI 的调度独立于此 20 kHz 采样域。
+
+状态机 STOP/MONITOR/FAULT；PWM_EN=0、TIM1 MOE=0，
+移相/调频/间歇现阶段仅计算 Q15 请求，不写 TIM1 比较或使能寄存器。
+软件算法不含浮点运算。ADC 顺序、基准、电气限制、SRAM 分区见
+`APP/PowerControl/README.md`。

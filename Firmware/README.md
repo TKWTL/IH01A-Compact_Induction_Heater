@@ -82,3 +82,14 @@ Absent/unreported Source Capabilities: `No PD Source` on the first
 row and blank remaining rows. It reports advertised capabilities, NOT
 the negotiated RDO or measured output voltage. `%f` and heap use are
 not required. Unknown APDO subtypes are labeled but not fabricated.
+
+## PowerControl v1（2026-11-01，待实机验证）
+
+已将 `APP/PowerControl/power_control.c/h` 作为仅监测的数字电源移植基线加入 Keil。
+TIM6 TRGO 驱动 ADC1 八通道扫描，DMA1 Channel2 circular 双帧，HT/TC
+中断运行在 SRAM 并在 ISR_TIME(PF1) 输出高电平测量 ISR 时间；
+滤波与三种模式命令均使用定点数，功率输出始终关闭。
+中断向量复制到 SRAM `0x20008F00`；热代码置于 SRAM
+`0x20008000`。ADC 标称参考 2.5V，ISR_LOAD 的可测负载约 0~75.8%，
+更高占空率会饱和。完整 ADC Rank 顺序见
+`APP/PowerControl/README.md`。旧 G474 源文件仍作为参考，未加入编译。

@@ -61,3 +61,16 @@ L/R 的 DAS 由 400ms 改 800ms、连发周期 100ms 改 200ms；
 - **OLED**：运行时与初始化统一用 SPI1 TX DMA，初始化允许同步等待
   DMA IRQ，运行时严格后台服务。后续测 ROM（.map）、DMA IRQ
   启动时序、PD 调度延迟，不凭函数替换本身宣称节省多少 Flash。
+
+## PowerControl 移植依赖（2026-11-01）
+
+本次完成 **v1 仅监测骨架**：新 `power_control.c/h` 已进入 Keil，旧 G474
+HRTIM/浮点控制源保留为未编译参考。TIM6 采样时钟与 TIM1 PWM 时钟
+解耦，ADC-DMA 事件驱动定点状态机。链接文件已经设置 RAM ISR 与
+SRAM 向量表，**这只是代码接入，不代表已经通过板端编译/测试**。
+
+下一轮按顺序：
+1. 在 Keil 中确认 scatter-loading 完成、.ih_ramfunc 位于 0x20008000 区、VTOR=0x20008F00，并核对堆栈位置；断点确认 ISR_TIME 高/低电平和 ADC 8 路顺序。
+2. 使用示波器验证 TIM6 TRGO=20kHz 的实际 ADC 完成率、ISR_TIME 高脉宽和 ISR_LOAD 饱和约 75.8% 的预期；抓 ADC OVR/HT/TC 积压状态，不允许漏帧后自动恢复输出。
+3. 取得桥臂原理图、TIM1 CH1/CH3/CH2 真实用途、负载谐振频率/安全频率区间、PWM_EN 有效极性和 COMP/Break 硬件闭锁结果；在这些信息明确后实现移相、调频、间歇的硬件输出映射及安全同步。
+4. 进行限流无功率→受限功率的分阶段保护测试，建立输入/母线/电流/NTC 的分压比和标定后，再考虑真正的闭环调功。

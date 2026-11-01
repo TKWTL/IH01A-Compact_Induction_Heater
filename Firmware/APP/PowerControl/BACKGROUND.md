@@ -96,3 +96,7 @@ Flash 等待少，收益很小，暂不建议实施**（详见 `README_RAM_EXEC.
 另外 `REF_main_h_main_c.md` 摘录了源的 `Core/Inc/main.h` 与 `Core/Src/main.c` 中相关定义
 （`RAMFUNC`/`RAMVAR`/`RAMRO` 宏、SRAM2 常量池、`VECT_TAB_START` + `RelocateVectorTable()`、`ADC_VREF`、
 HRTIM 周期/死区常量），并给出到本工程的移植映射表；同样属参考文件，移植后一并删除。
+
+## 2026-11-01 移植进度更新
+
+已新增并注册目标专用 `power_control.c/h`，以及 SRAM 执行控制 ISR、VTOR 重定位与双帧 ADC-DMA 观察链路。上述第 4 节“目录完全不参与编译”仅适用于最初复制过来时的状态；**现在只有新文件参与编译**。旧版 `conv_*.c/h` 等仍为参考文件，尚未移植/编译。详见本目录新的 `README.md`。不启用加热 PWM。

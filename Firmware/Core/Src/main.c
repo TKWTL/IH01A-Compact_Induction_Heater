@@ -35,6 +35,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "app_tasks.h"
+#include "power_control.h"
 
 /* USER CODE END Includes */
 
@@ -94,7 +95,9 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  /* Copy Flash vector table to the reserved 256B SRAM slot, then switch VTOR.
+   * Must happen before peripherals with enabled DMA interrupts start. */
+  PowerControl_RelocateVectors();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -124,6 +127,8 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   APP_Tasks_Init();
+  /* Safe read-only TIM6->ADC1->DMA control ISR; TIM1/PWM_EN remain OFF. */
+  PowerControl_Init();
   while (1)
   {
     /* USER CODE END WHILE */

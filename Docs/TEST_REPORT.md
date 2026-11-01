@@ -70,3 +70,11 @@ Implementation pending Keil/hardware verification:
   locally. Initial/no PD message is `No PD Source`, other rows blank.
 - Host regression source `test_pd_source_stats.c` added. No ARMClang
   build, host test run or target PD analyzer results claimed yet.
+
+## 2026-11-01 PowerControl v1（代码接入，目标验证待完成）
+
+- 已按 CubeMX 的 Rank 1..8 映射 CT_RMS、IBUS、NTC_POT、VBUS、NTC_SYS、VBIAS、ISR_LOAD、MCU 温度；ADC 使用 TIM6 TRGO 触发与 DMA1 CH2 循环双帧。
+- DMA1 CH2/3 中断入口转移到 PowerControl 源文件并标记 `.ih_ramfunc`；原生成文件的重复实现删除。Keil scatter 将热代码分配到 SRAM，把 256B 的 VTOR 副本放在 0x20008F00。尚未运行 ARMClang 编译/链接，必须检查 SRAM 块溢出与 map。
+- 用 ISR_TIME PF1 输出 ISR 执行高脉冲，ADC 的 ISR_LOAD 信号仅能测量约 75.8% 以内的负载（VREF 2.5V、GPIO 高 3.3V）。需验证真实 VREF+ 电压和 RC 滤波时间常数。
+- 状态机中只读观察 ADC，定点 Q4 滤波/Q15 移相、调频、间歇请求，PWM_EN 和 TIM1 MOE 始终为 OFF，无可用加热闭环。
+- **待板端测试**：Keil compile/link；DMA HT/TC 每组正确 8 个数据；ADC OVR/TE/积压故障；PD 协商与 OLED DMA 在 20 kHz ADC ISR 负载下仍可靠；示波器验证 ISR_TIME 波形、TIM6 20 kHz 与 TIM1 未使能；内存 map/堆栈余量；上电 VREF+ 实测。
