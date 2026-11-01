@@ -1,5 +1,7 @@
 /* Statistics -> System: static PAGE_TEXT ADC readings, no heap.
- * Only reports ADC pin voltage; sensor scaling is not guessed.
+ * Voltage channels report ADC pin voltage (VBUS scaled x16).
+ * ISR_LOAD reports filtered duty percentage from 0..3.3V PWM average;
+ * its 2.5V ADC reference inherently limits measurable duty to ~75.8%.
  * The STM32G071 internal temperature uses two-point factory calibration.
  */
 #include "dashboard.h"
@@ -66,6 +68,16 @@ void PowerDashboard_Poll(void)
                        (unsigned)(magnitude/10u),
                        (unsigned)(magnitude%10u));
             }
+        }
+        else if(i==CONV_ADC_ISR_LOAD)
+        {
+            /* Duty 0..100% maps to 0..3300mV, ADC full scale is 2500mV.
+             * Compute tenths of a percent directly from the 12-bit code. */
+            uint32_t duty_deci=(uint32_t)(((uint32_t)snapshot.raw[i]*25000u+
+                                          (4095u*33u)/2u)/(4095u*33u));
+            (void)snprintf(s_labels[i],sizeof(s_labels[i]),
+                 "ISR_LOAD: %u.%u%%",
+                 (unsigned)(duty_deci/10u),(unsigned)(duty_deci%10u));
         }
         else
         {
