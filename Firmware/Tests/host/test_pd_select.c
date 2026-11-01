@@ -45,6 +45,10 @@ int main(void)
                                      &pos,&mv,&ma,&chosen));
         assert(pos==8u && mv==28000u && ma==5000u);
         assert(chosen==epr[7]);
+        epr[9]=fixed(30000u,5000u); /* nonstandard above desired 28V */
+        assert(PD_Input_BestEPRFixed((const uint8_t *)epr,sizeof(epr),
+                                     &pos,&mv,&ma,&chosen));
+        assert(pos==8u && mv==28000u && ma==5000u);
         epr[7]=0u;
         assert(!PD_Input_BestEPRFixed((const uint8_t *)epr,sizeof(epr),
                                       &pos,&mv,&ma,&chosen));

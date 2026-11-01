@@ -30,7 +30,8 @@ uint8_t PD_Input_BestFixed(const uint8_t *data,uint32_t len,
 }
 /* EPR Source Capabilities is a combined list: SPR positions 1..7,
  * followed by EPR positions 8..13. Never treat the beginning of the
- * extended message as EPR position 8. AVS is excluded intentionally. */
+ * extended message as EPR position 8. AVS is excluded intentionally.
+ * Only 28V or lower may be selected in this first 28V/5A product iteration. */
 uint8_t PD_Input_BestEPRFixed(const uint8_t *data,uint32_t len,
                              uint8_t *pos,uint32_t *mv,uint32_t *ma,
                              uint32_t *selected_pdo)
@@ -46,7 +47,7 @@ uint8_t PD_Input_BestEPRFixed(const uint8_t *data,uint32_t len,
         if((p>>30u)!=0u)continue;
         v=((p>>10u)&1023u)*50u;
         c=(p&1023u)*10u;
-        if(v<=PD_INPUT_SPR_MAX_MV||v>=PD_INPUT_MAX_MV||c==0u)
+        if(v<=PD_INPUT_SPR_MAX_MV||v>28000u||v>=PD_INPUT_MAX_MV||c==0u)
             continue;
         if(v>best_v||(v==best_v&&c>best_c))
         {

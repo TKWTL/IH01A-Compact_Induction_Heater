@@ -2,6 +2,7 @@
 #include "console_cli.h"
 #include "usart.h"
 #include "algorithm/pd_input.h"
+#include "algorithm/pd_epr_policy.h"
 #include <stdio.h>
 #include <string.h>
 static char s_line[48];
@@ -22,6 +23,9 @@ static void cli_dispatch(void)
         printf("[CLI] bus=%lu mV select=%lu mV current=%lu mA PDO=%u\r\n",
                (unsigned long)pd.bus_mv,(unsigned long)pd.selected_mv,
                (unsigned long)pd.requested_ma,pd.position);
+        printf("[CLI] EPR enabled=%u mode=%u (28V/5A gated)\r\n",
+               (unsigned)IH01A_EPR_28V5A_HARDWARE_APPROVED,
+               (unsigned)PD_Input_EPR_Active());
     }
     else if(!strcmp(s_line,"uart"))
     {
