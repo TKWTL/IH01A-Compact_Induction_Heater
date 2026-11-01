@@ -22,6 +22,35 @@ void PD_Diag_Record(uint8_t code,uint32_t a,uint32_t b)
     s_events[s_head].event=code;
     s_head=next;
 }
+/* One-shot TX tracing, fed by the ST PHY TX hook. It answers the one
+ * question the app-level logs cannot: did the stack really put the EPR_Mode
+ * message (header MessageType 0x0A) on the wire, or did the PHY refuse it?
+ * No printf here: PD callbacks and the PHY run in interrupt/sender-response
+ * context, so only a queue record is made. */
+void PD_TxTrace(uint32_t type,uint32_t size)
+{
+    static uint32_t seen;
+    if(type<32u&&(seen&(1UL<<type))!=0u)return;
+    if(type<32u)seen|=1UL<<type;
+    PD_Diag_Record(PD_DIAG_PD_TX,type,size);
+}
+void PD_TxReject(uint32_t type,uint32_t status)
+{
+    static uint32_t seen;
+    if(type<32u&&(seen&(1UL<<type))!=0u)return;
+    if(type<32u)seen|=1UL<<type;
+    PD_Diag_Record(PD_DIAG_PD_TXREJ,type,status);
+}
+/* UCPD transmit outcome: 0 = sent, 1 = discarded (TXMSGDISC), 2 = aborted
+ * (TXMSGABT). A message that never reaches the wire explains a source that
+ * never answers, so each outcome is reported once. */
+void PD_TxDone(uint32_t code)
+{
+    static uint32_t seen;
+    if(code<32u&&(seen&(1UL<<code))!=0u)return;
+    if(code<32u)seen|=1UL<<code;
+    PD_Diag_Record(PD_DIAG_PD_TXDONE,code,0u);
+}
 void PD_Diag_Service(void)
 {
     DiagEvent e;
@@ -49,6 +78,9 @@ void PD_Diag_Service(void)
     case PD_DIAG_EPR_ACTION:label="EPR_ACT";break;
     case PD_DIAG_GETINFO:label="GETINFO";break;
     case PD_DIAG_SETINFO:label="SETINFO";break;
+    case PD_DIAG_PD_TX:label="PD_TX";break;
+    case PD_DIAG_PD_TXREJ:label="PD_TXREJ";break;
+    case PD_DIAG_PD_TXDONE:label="PD_TXDONE";break;
     default:label="UNKNOWN";break;
     }
     printf("[PD %lu] %s a=%lu b=0x%08lX\r\n",

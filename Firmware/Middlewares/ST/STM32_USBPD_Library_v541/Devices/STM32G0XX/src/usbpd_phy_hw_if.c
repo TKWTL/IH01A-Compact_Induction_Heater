@@ -67,6 +67,15 @@ USBPD_StatusTypeDef USBPD_HW_IF_SendBuffer(uint8_t PortNum, USBPD_SOPType_TypeDe
 {
   USBPD_StatusTypeDef _status = USBPD_OK;
 
+  /* IH01A: record what actually reaches the wire (one record per message
+   * type). App-level logs cannot tell "PE built nothing" from "PE built it
+   * and the PHY dropped it"; this can. Queue only, no printing here. */
+  if ((USBPD_SOPTYPE_HARD_RESET != Type) && (0U != Size))
+  {
+    extern void PD_TxTrace(uint32_t type, uint32_t size);
+    PD_TxTrace((uint32_t)(pBuffer[0] & 0x1FU), Size);
+  }
+
   if (USBPD_SOPTYPE_HARD_RESET == Type)
   {
     LL_UCPD_SendHardReset(Ports[PortNum].husbpd);
@@ -80,6 +89,13 @@ USBPD_StatusTypeDef USBPD_HW_IF_SendBuffer(uint8_t PortNum, USBPD_SOPType_TypeDe
     {
       PHY_LEAVE_CRITICAL_SECTION()
       _status = USBPD_ERROR;
+      /* IH01A: the PHY refused this message. A PE that does not retry would
+       * look exactly like "request accepted, nothing ever happens". */
+      if (0U != Size)
+      {
+        extern void PD_TxReject(uint32_t type, uint32_t status);
+        PD_TxReject((uint32_t)(pBuffer[0] & 0x1FU), (uint32_t)_status);
+      }
     }
     else
     {

@@ -262,3 +262,28 @@ PDP 用 140 W 而**不是** 84 W：Sink PDO 与请求电流都是 5 A，PDP 写 
 验收顺序：先确认 `REQUEST a=20000 b=0x5147D1F4`（20 V/5 A，SPR 未受影响），再 `pd epr` 看是否出现 `GETINFO a=30/25` 与 `EPR_EVT a=116/113/114`。
 
 Rebuild：0 Error / 0 Warning，`Code=78,884 RO=4,068 RW=468 ZI=21,180`。
+
+**板端结果：`PE cfg pd3=0x0809 unchunk=1 scrCapaExt=1 eprSnk=1` 全部生效，但 EPR 仍然静默。** 说明三个特性位不是根因（或不是唯一根因）。
+
+### 2026-11-02 把观测点下沉到 PHY：到底有没有把 EPR_Mode 发出去
+
+应用层日志能区分"PE 没构造报文"和"报文构造了但没上总线"吗？**不能**。所以在 ST 设备层加了三个只入队、不打印的探针（`Firmware/Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/src/usbpd_phy_hw_if.c` 与 `usbpd_hw_if_it.c`）：
+
+| 新日志 | 位置 | 含义 |
+|---|---|---|
+| `PD_TX a=<类型> b=<字节数>` | `USBPD_HW_IF_SendBuffer()` 入口 | 栈真的调用 PHY 发送了某类报文（每种类型只记一次）。**`a=10` 就是 EPR_Mode** |
+| `PD_TXREJ a=<类型> b=<status>` | 同一函数的"RX 正在收 / DMA 忙 → 丢弃"分支 | PHY 拒绝发送（`USBPD_ERROR`）。PE 若不重试，看起来就跟"什么都没发生"一样 |
+| `PD_TXDONE a=0/1/2` | UCPD 中断里的 TX 完成 | `0`=TXMSGSENT、`1`=TXMSGDISC（被丢弃）、`2`=TXMSGABT（被中止），各记一次 |
+
+PD 报文类型编号（Header bits 4..0）：`1`=Source_Capabilities、`2`=Request、`4`=Sink_Capabilities、`10`=**EPR_Mode**、`15`=Vendor_Defined、`0`=Control（GoodCRC/Accept/PS_RDY 等）。
+
+判读：
+
+| 现象 | 结论 | 下一步 |
+|---|---|---|
+| 有 `PD_TX a=10`，随后源端无反应 | EPR_Mode 真的发出去了，源端没答（或答了但被 PE 丢弃） | 需要 CC 分析仪看源端有没有回 EPR_Mode（data=4 即拒绝） |
+| 有 `PD_TX a=10` + `PD_TXDONE a=1/2` | UCPD 把我们的 EPR_Mode 丢了/中止了 | 我方 PHY/CC 时序问题，可改 |
+| **没有** `PD_TX a=10` | PE 连发送都没尝试 | 只可能是 ST 库内部状态机问题，证据已足够提交 ST 支持 |
+| `PD_TXREJ a=10` | PHY 因 RX 未让出总线而拒发 | 属我方集成问题 |
+
+Rebuild：0 Error / 0 Warning，`Code=79,092 RO=4,096 RW=468 ZI=21,196`。

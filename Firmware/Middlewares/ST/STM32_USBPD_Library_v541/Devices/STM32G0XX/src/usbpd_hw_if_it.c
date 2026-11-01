@@ -60,7 +60,11 @@ void PORTx_IRQHandler(uint8_t PortNum)
       /* Message has been discarded */
       LL_UCPD_ClearFlag_TxMSGDISC(hucpd);
       CLEAR_BIT(Ports[PortNum].hdmatx->CCR, DMA_CCR_EN);
-      while ((Ports[PortNum].hdmatx->CCR & DMA_CCR_EN) == DMA_CCR_EN);
+      while ((Ports[PortNum].hdmatx->CCR & DMA_CCR_EN) == DMA_CCR_EN)
+      {
+        /* wait until the DMA channel is really off */
+      }
+      { extern void PD_TxDone(uint32_t code); PD_TxDone(1); }
       Ports[PortNum].cbs.USBPD_HW_IF_TxCompleted(PortNum, 1);
       return;
     }
@@ -70,7 +74,11 @@ void PORTx_IRQHandler(uint8_t PortNum)
       /* Message has been fully transferred */
       LL_UCPD_ClearFlag_TxMSGSENT(hucpd);
       CLEAR_BIT(Ports[PortNum].hdmatx->CCR, DMA_CCR_EN);
-      while ((Ports[PortNum].hdmatx->CCR & DMA_CCR_EN) == DMA_CCR_EN);
+      while ((Ports[PortNum].hdmatx->CCR & DMA_CCR_EN) == DMA_CCR_EN)
+      {
+        /* wait until the DMA channel is really off */
+      }
+      { extern void PD_TxDone(uint32_t code); PD_TxDone(0); }
       Ports[PortNum].cbs.USBPD_HW_IF_TxCompleted(PortNum, 0);
 
 #if defined(_LOW_POWER)
@@ -83,7 +91,11 @@ void PORTx_IRQHandler(uint8_t PortNum)
     {
       LL_UCPD_ClearFlag_TxMSGABT(hucpd);
       CLEAR_BIT(Ports[PortNum].hdmatx->CCR, DMA_CCR_EN);
-      while ((Ports[PortNum].hdmatx->CCR &  DMA_CCR_EN) == DMA_CCR_EN);
+      while ((Ports[PortNum].hdmatx->CCR &  DMA_CCR_EN) == DMA_CCR_EN)
+      {
+        /* wait until the DMA channel is really off */
+      }
+      { extern void PD_TxDone(uint32_t code); PD_TxDone(2); }
       Ports[PortNum].cbs.USBPD_HW_IF_TxCompleted(PortNum, 2);
       return;
     }

@@ -9,8 +9,15 @@ enum {
     PD_DIAG_EPR_EVENT,      /* a=raw USBPD_NOTIFY_EPR* id, b=state bitmask */
     PD_DIAG_EPR_ACTION,     /* a=USBPD_ACTION_*, b=raw reply to the PE    */
     PD_DIAG_GETINFO,        /* a=USBPD_CORE_DATATYPE_*, b=bytes returned  */
-    PD_DIAG_SETINFO         /* a=USBPD_CORE_DATATYPE_*, b=bytes received  */
+    PD_DIAG_SETINFO,        /* a=USBPD_CORE_DATATYPE_*, b=bytes received  */
+    PD_DIAG_PD_TX,          /* a=PD header MessageType, b=bytes sent     */
+    PD_DIAG_PD_TXREJ,       /* a=PD header MessageType, b=USBPD status   */
+    PD_DIAG_PD_TXDONE       /* a=0 sent, 1 discarded, 2 aborted          */
 };
 void PD_Diag_Record(uint8_t code,uint32_t a,uint32_t b);
 void PD_Diag_Service(void);
+/* Called from the ST PHY TX hook: one record per distinct message type. */
+void PD_TxTrace(uint32_t type,uint32_t size);
+void PD_TxReject(uint32_t type,uint32_t status);
+void PD_TxDone(uint32_t code);
 #endif
