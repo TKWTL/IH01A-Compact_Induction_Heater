@@ -23,6 +23,9 @@
 #include "usbpd_hw.h"
 #include "usbpd_core.h"
 #include "usbpd_hw_if.h"
+/* IH01A: EPR / hardware policy switches (IH01A_PD_FORCE_SINK_TXOK, ...).
+ * Must be included before the IS_... helpers below use them. */
+#include "algorithm/pd_epr_policy.h"
 #if !defined(USBPDCORE_LIB_NO_PD)
 #include "usbpd_timersserver.h"
 #endif /* !USBPDCORE_LIB_NO_PD */
@@ -483,6 +486,21 @@ void USBPD_HW_IF_SetResistor_SinkTxOK(uint8_t PortNum)
   */
 uint8_t USBPD_HW_IF_IsResistor_SinkTxOk(uint8_t PortNum)
 {
+#if IH01A_PD_FORCE_SINK_TXOK
+  /* IH01A: this board presents an external Rd and the UCPD CC detector does
+   * not report the Rp-3.0 A vstate the stock test looks for, so the predicate
+   * stays FALSE. ST's policy engine gates every DPM-initiated transmission
+   * (Get_Source_Capability, EPR_Mode, re-Request) on this check and therefore
+   * accepts the request and never transmits it, which is exactly what the
+   * bench shows. Reactive messages (GoodCRC, Request inside the response
+   * window) are unaffected, so SPR keeps working.
+   * Returning TRUE keeps the original behaviour available through the macro. */
+  extern void PD_SinkTxOkProbe(uint32_t ccx, uint32_t vstate);
+  PD_SinkTxOkProbe((uint32_t)Ports[PortNum].CCx,
+                   (uint32_t)(Ports[PortNum].husbpd->SR & UCPD_SR_TYPEC_VSTATE_CC1));
+  (void)PortNum;
+  return USBPD_TRUE;
+#else
 #if defined(_LOW_POWER)
   /* When in low power mode, the type C state machine is turned off.
      To retrieve any potential updates of the SR register, the state machine needs to be re-enabled briefly. */
@@ -519,6 +537,7 @@ uint8_t USBPD_HW_IF_IsResistor_SinkTxOk(uint8_t PortNum)
   }
 
   return USBPD_FALSE;
+#endif /* IH01A_PD_FORCE_SINK_TXOK */
 }
 
 /**

@@ -54,4 +54,12 @@
  * leaves the library's EPR machine pending for ever (bench-proved: BUSY on
  * every later request, no PD_TX at all). */
 #define IH01A_EPR_REENTER_ON_CONTRACT 1
+
+/* ST's PE gates every DPM-initiated transmission on USBPD_PE_...SinkTxOK,
+ * which is derived from the UCPD CC vstate (Rp 3.0 A). This board presents an
+ * external Rd, so that predicate reads FALSE and every app-driven message
+ * (Get_Source_Capability, EPR_Mode, re-Request) is accepted and then silently
+ * dropped, while reactive messages still work (SPR is fine). Force the
+ * predicate TRUE so the PE actually transmits. */
+#define IH01A_PD_FORCE_SINK_TXOK   1
 #endif

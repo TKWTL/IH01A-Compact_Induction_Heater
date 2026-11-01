@@ -57,6 +57,14 @@ void PD_TxDone(uint32_t code)
     if(code<32u)seen|=1UL<<code;
     PD_Diag_Record(PD_DIAG_PD_TXDONE,code,0u);
 }
+/* One-shot evidence of the CC state the SinkTxOK predicate actually sees. */
+void PD_SinkTxOkProbe(uint32_t ccx,uint32_t vstate)
+{
+    static uint8_t done;
+    if(done)return;
+    done=1u;
+    PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A5u,(ccx<<16)|(vstate&0xFFFFu));
+}
 void PD_Diag_Service(void)
 {
     DiagEvent e;
