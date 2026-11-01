@@ -1,4 +1,4 @@
-/* Host-only USBPD PDO/RDO regression; no HAL/USBPD binary needed. */
+/* Host-only SPR/EPR PDO selection regression; no HAL/USBPD binary needed. */
 #include "algorithm/pd_select.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -16,7 +16,7 @@ int main(void)
     pdo[1]=fixed(9000,3000);
     pdo[2]=fixed(20000,5000);
     pdo[3]=fixed(12000,3000);
-    pdo[4]=fixed(28000,3000); /* EPR: this stack cannot enter EPR */
+    pdo[4]=fixed(28000,3000); /* outside SPR selection scope */
     pdo[5]=(3u<<30u)|(110u<<17u)|(33u<<8u)|60u; /* PPS */
     pdo[6]=fixed(32000,3000); /* invalid/nonstandard */
     assert(PD_Input_BestFixed((const uint8_t *)pdo,sizeof(pdo),

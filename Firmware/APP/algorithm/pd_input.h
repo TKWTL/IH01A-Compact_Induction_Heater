@@ -14,6 +14,7 @@ void PD_Input_Caps(const uint8_t *data, uint32_t bytes);
 void PD_Input_Contract(uint8_t ready);
 void PD_Input_EPRCaps(const uint8_t *data, uint32_t bytes);
 void PD_Input_EPR_Notify(uint32_t event);
+void PD_Input_EPR_RequestRejected(void);
 void PD_Input_EPR_Poll(void);
 uint8_t PD_Input_EPR_CopyPDO(uint32_t *out);
 uint8_t PD_Input_EPR_Active(void);

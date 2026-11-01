@@ -16,6 +16,8 @@ static uint8_t s_count, s_manual, s_epr_count;
 static uint8_t s_epr_mode, s_epr_enter_once, s_epr_exit_queued;
 static uint8_t s_epr_copy_valid;
 static uint32_t s_selected_rdo, s_copy_pdo, s_attach_ms, s_contract_ms;
+static uint32_t s_spr_rdo,s_spr_mv,s_spr_ma;
+static uint8_t s_spr_pos;
 static PD_InputSnapshot s_state;
 
 uint32_t PD_Input_VbusMillivolts(void)
@@ -45,6 +47,7 @@ void PD_Input_Init(void)
     s_count=s_manual=s_epr_count=s_epr_mode=s_epr_enter_once=0u;
     s_epr_exit_queued=s_epr_copy_valid=0u;
     s_selected_rdo=s_copy_pdo=s_attach_ms=s_contract_ms=0u;
+    s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
 }
 void PD_Input_Attach(uint8_t attached)
 {
@@ -60,6 +63,7 @@ void PD_Input_Reset(void)
     s_epr_enter_once=1u;
     s_epr_exit_queued=0u;
     s_selected_rdo=s_copy_pdo=0u;
+    s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
     memset(s_caps,0,sizeof(s_caps));
     memset(s_epr_caps,0,sizeof(s_epr_caps));
 }
@@ -95,6 +99,26 @@ uint8_t PD_Input_EPR_CopyPDO(uint32_t *out)
     return 1u;
 }
 uint8_t PD_Input_EPR_Active(void){return s_epr_mode;}
+static void PD_EPR_RestoreSPR(void)
+{
+    if(s_spr_pos==0u)return;
+    s_selected_rdo=s_spr_rdo;
+    s_state.position=s_spr_pos;
+    s_state.selected_mv=s_spr_mv;
+    s_state.requested_ma=s_spr_ma;
+    s_epr_copy_valid=0u;
+}
+void PD_Input_EPR_RequestRejected(void)
+{
+#if IH01A_EPR_28V5A_HARDWARE_APPROVED
+    if(s_epr_mode && s_epr_copy_valid)
+    {
+        PD_EPR_RestoreSPR();
+        s_epr_exit_queued=1u;
+        PD_Diag_Record(PD_DIAG_EPR_MODE,0u,0xFFFFu);
+    }
+#endif
+}
 void PD_Input_EPR_Notify(uint32_t event)
 {
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
@@ -113,6 +137,7 @@ void PD_Input_EPR_Notify(uint32_t event)
         s_epr_count=0u;
         s_epr_copy_valid=0u;
         s_epr_exit_queued=0u;
+        PD_EPR_RestoreSPR();
         PD_Diag_Record(PD_DIAG_EPR_MODE,0u,event);
         break;
     default:break;
@@ -150,6 +175,13 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
         {
             uint32_t nrdo=PD_EncodeFixedRDO(pos,ma,1u);
             if(!nrdo)return 0u;
+            if(!s_epr_copy_valid)
+            {
+                s_spr_rdo=s_selected_rdo;
+                s_spr_mv=s_state.selected_mv;
+                s_spr_ma=s_state.requested_ma;
+                s_spr_pos=s_state.position;
+            }
             s_copy_pdo=p;
             s_epr_copy_valid=1u;
             s_selected_rdo=nrdo;
