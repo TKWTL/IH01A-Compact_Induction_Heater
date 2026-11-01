@@ -35,7 +35,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "app_tasks.h"
-#include "power_control.h"
+#include "conv_controller.h"
 
 /* USER CODE END Includes */
 
@@ -68,7 +68,29 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* SRAM VTOR relocation lives in main.c, not in the PowerControl module.
+ * Flash RESET stays at 0x08000000; .ih_vectors is reserved in scatter.
+ * 64 vector entries = 256 bytes, and the destination is 256-aligned. */
+static uint32_t s_sram_vectors[64]
+    __attribute__((section(".ih_vectors"), aligned(256), used));
+extern const uint32_t __Vectors[];
+extern const uint32_t __Vectors_End[];
 
+static void RelocateVectorTable(void)
+{
+    uint32_t i;
+    uint32_t primask=__get_PRIMASK();
+    __disable_irq();
+    uint32_t count=(uint32_t)(((uintptr_t)__Vectors_End-
+                              (uintptr_t)__Vectors)/sizeof(uint32_t));
+    for(i=0u;i<64u;++i)
+        s_sram_vectors[i]=(i<count) ? __Vectors[i] : 0u;
+    __DSB();
+    SCB->VTOR=(uint32_t)s_sram_vectors;
+    __DSB();
+    __ISB();
+    if((primask & 1u)==0u) __enable_irq();
+}
 /* USER CODE END 0 */
 
 /**
@@ -97,7 +119,7 @@ int main(void)
   /* USER CODE BEGIN SysInit */
   /* Copy Flash vector table to the reserved 256B SRAM slot, then switch VTOR.
    * Must happen before peripherals with enabled DMA interrupts start. */
-  PowerControl_RelocateVectors();
+  RelocateVectorTable();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -128,7 +150,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   APP_Tasks_Init();
   /* Safe read-only TIM6->ADC1->DMA control ISR; TIM1/PWM_EN remain OFF. */
-  PowerControl_Init();
+  ConvController_Init();
   while (1)
   {
     /* USER CODE END WHILE */

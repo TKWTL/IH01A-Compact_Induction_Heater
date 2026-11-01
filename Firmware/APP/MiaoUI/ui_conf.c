@@ -1,8 +1,8 @@
 /* IH01A MiaoUI root: Main, Settings, Statistics, About.
  * Main is a deliberately read-only placeholder: no heater actions.
  * Settings is split into Display (contrast / background / burn-in / flip) and
- * System (sleep options).  Statistics still only holds the empty "PD in" and
- * "System" sub-pages.
+ * System (sleep options). Statistics/PD in shows live Source PDOs;
+ * Statistics/System displays ADC pin voltages and MCU temperature.
  * The current ASCII font is used until the Chinese glyph port.
  */
 #include "ui_conf.h"
@@ -11,6 +11,7 @@
 #include "images/image.h"
 #include "framework/pm_ui_register.h"
 #include "pd_source_stats.h"
+#include "dashboard.h"
 #include <stdint.h>
 
 static ui_page_t s_root, s_settings, s_display, s_system;
@@ -30,6 +31,7 @@ static uint32_t s_pd_revision = 0xFFFFFFFFu;
 void IH_Statistics_Poll(void)
 {
     uint32_t revision = PD_SourceStats_Revision();
+    PowerDashboard_Poll();
     uint8_t i;
 
     if(revision == s_pd_revision)
@@ -110,7 +112,9 @@ void Create_MenuTree(ui_t *ui)
                         &s_pd_rows[i], &s_pd_in, 0, IH_PD_RowNoop);
         AddItem("-System", UI_ITEM_PARENTS, 0, &s_stat_sys_item, &s_statistics, &s_stat_sys, 0);
         AddPage("[System]", &s_stat_sys, UI_PAGE_TEXT, &s_statistics);
+            s_stat_sys.wideText = 1u;
             AddItem("[Return]", UI_ITEM_RETURN, 0, &s_back_stat_sys, &s_stat_sys, &s_statistics, 0);
+            PowerDashboard_AddItems(&s_stat_sys);
 
     AddItem("-About", UI_ITEM_WORD, img_user_account, &s_about, &s_root, 0, 0);
 }

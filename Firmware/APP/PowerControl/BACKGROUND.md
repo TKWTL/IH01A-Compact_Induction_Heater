@@ -100,3 +100,8 @@ HRTIM 周期/死区常量），并给出到本工程的移植映射表；同样�
 ## 2026-11-01 移植进度更新
 
 已新增并注册目标专用 `power_control.c/h`，以及 SRAM 执行控制 ISR、VTOR 重定位与双帧 ADC-DMA 观察链路。上述第 4 节“目录完全不参与编译”仅适用于最初复制过来时的状态；**现在只有新文件参与编译**。旧版 `conv_*.c/h` 等仍为参考文件，尚未移植/编译。详见本目录新的 `README.md`。不启用加热 PWM。
+
+## 2026-11-01：按 G474 源目录职责重构
+
+已将 G474 旧源码放入 `Legacy/` 并统一追加 `.legacy.c/.legacy.h` 等后缀，不在 Keil 编译；主目录的 `conv_adc`、`conv_controller` 和 `dashboard` 已替换为 G071 专用定点实现。旧版 `power_control.c/h` 已删除。原参考 `README_RAM_EXEC.md`、`REF_main_h_main_c.md` 同样归档。
+系统向量表重定向移至 `Core/Src/main.c` 的 `RelocateVectorTable()`，PowerControl 只实现硬件事件处理。当前首要目标是 ADC 引脚电压和 MCU 温度在 Statistics/System 页面验证，PWM 输出继续关闭。此前本文件关于旧目录仍未接入、G4 原文件位于主目录的描述已过期，以当前 README 和仓库实际目录为准。

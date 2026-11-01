@@ -3801,11 +3801,6 @@
               <FilePath>../APP/app_tasks.c</FilePath>
             </File>
             <File>
-              <FileName>power_control.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../APP/PowerControl/power_control.c</FilePath>
-            </File>
-            <File>
               <FileName>pd_source_stats.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/pd_source_stats.c</FilePath>
@@ -3849,6 +3844,26 @@
               <FileName>text.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/MiaoUI/widget/text.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>PowerControl</GroupName>
+          <Files>
+            <File>
+              <FileName>conv_adc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/PowerControl/conv_adc.c</FilePath>
+            </File>
+            <File>
+              <FileName>conv_controller.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/PowerControl/conv_controller.c</FilePath>
+            </File>
+            <File>
+              <FileName>dashboard.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/PowerControl/dashboard.c</FilePath>
             </File>
           </Files>
         </Group>

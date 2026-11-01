@@ -78,3 +78,9 @@ HT/TC→控制状态机；中断执行期间拉高 ISR_TIME(PF1)，结束拉低�
 移相/调频/间歇现阶段仅计算 Q15 请求，不写 TIM1 比较或使能寄存器。
 软件算法不含浮点运算。ADC 顺序、基准、电气限制、SRAM 分区见
 `APP/PowerControl/README.md`。
+
+## 2026-11-01 PowerControl 结构重整
+
+已按 `APP/PowerControl/{conv_adc,conv_controller,dashboard}.c/h` 拆分旧单体实现，并在 Keil 中建立独立 `PowerControl` Group。G474 HRTIM/float 旧源码归档至 `APP/PowerControl/Legacy/*.legacy.*`，没有加入编译。向量表 SRAM 拷贝和 `SCB->VTOR` 切换由 `Core/Src/main.c` 实现，不再作为 PowerControl API；DMA1 Channel2/3 ISR 仍在 `conv_controller.c` 并放进 SRAM。
+
+`Statistics → System` 显示七路 ADC 引脚电压（2.5V 标称参考）和经出厂 30/130°C、3.0V 校准值折算的 MCU 温度，100ms 更新原始 ADC 采样值；具体转换公式、通道及安全边界见 `APP/PowerControl/README.md`。当前无 PWM 控制输出。

@@ -93,3 +93,7 @@ TIM6 TRGO 驱动 ADC1 八通道扫描，DMA1 Channel2 circular 双帧，HT/TC
 `0x20008000`。ADC 标称参考 2.5V，ISR_LOAD 的可测负载约 0~75.8%，
 更高占空率会饱和。完整 ADC Rank 顺序见
 `APP/PowerControl/README.md`。旧 G474 源文件仍作为参考，未加入编译。
+
+## PowerControl 模块拆分与采样页面（2026-11-01）
+
+Keil 工程已增加独立 PowerControl 分组：`conv_adc.c`（8 Rank ADC 双帧 DMA 与固定点 mV/温度换算）、`conv_controller.c`（ADC DMA ISR/ISR_TIME/故障状态机）、`dashboard.c`（Statistics → System 八路只读文本）。原 G474 文件已加 `.legacy.*` 后缀归档到 Legacy，不参与编译。向量表重定向在 `Core/Src/main.c`。详细使用和计算公式见 `APP/PowerControl/README.md`。本次未在 Keil 构建，需板端验证。

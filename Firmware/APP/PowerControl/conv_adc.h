@@ -1,57 +1,25 @@
-#ifndef __CONV_ADC_H__
-#define __CONV_ADC_H__
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-    
-#include "services.h"
-    
+#ifndef IH01A_CONV_ADC_H
+#define IH01A_CONV_ADC_H
+#include <stdint.h>
+typedef enum {
+    CONV_ADC_CT_RMS=0, CONV_ADC_IBUS, CONV_ADC_NTC_POT,
+    CONV_ADC_VBUS, CONV_ADC_NTC_SYS, CONV_ADC_VBIAS,
+    CONV_ADC_ISR_LOAD, CONV_ADC_MCU_TEMP, CONV_ADC_COUNT
+} ConvADC_Channel;
+#define CONV_ADC_VREF_MV 2500u
+#define CONV_ADC_DMA_LENGTH (2u*CONV_ADC_COUNT)
 typedef struct {
-    volatile uint16_t *pBuffer;              // 指向数据缓冲区的指针，存放原始采样数据或控制信号序列
-    uint16_t channel;               // 对应的通道编号，可以是 ADC 
-    float slope;                    // 线性补偿斜率（增益），用于数据校正
-    float zero;                     // 线性补偿零点（偏置），用于数据校正
-    float result;
-}PowerControlVar_t;
-
-extern volatile uint16_t ADC1_Buffer[];
-extern volatile uint16_t ADC2_Buffer[];
-extern volatile uint16_t ADC3_Buffer[];
-extern volatile uint16_t ADC4_Buffer[];
-
-extern PowerControlVar_t  
-    VBUS_t, //母线电压，单位V
-    IA_t,   //逆变A相电流，单位A
-    IB_t,   //逆变B相电流，单位A
-    IC_t,   //逆变C相电流，单位A
-    VAB_t,  //逆变A-B线电压，单位V
-    VBC_t,  //逆变B-C线电压，单位V
-    VZS_t,  //三相零序对地电压，单位V
-    IN_t,   //整流器输入电流，单位A（极性：输入→半桥为负）
-    VN_t,   //整流器输入电压，单位V
-    VCM_t;  //整流器共模电压，单位V
-
-//环路ISR一开始就必须执行的参数加载函数（将放入CCM RAM中加速运行）
-void LoadControlVar();
-//从结构体中配置好的参数中取得数值并以float格式输出
-float ReadControlVar(PowerControlVar_t *p_var);
-
-//启动ADC的DMA转换
-void ADC_Init(void);
-
-
-//自动校准函数
-void AutoCalibration(ui_t *ui);
-
-//以下函数须在ui_conf.c中调用
-//创建参数补偿模块所需的参数
-void Create_ADC_Parameters(ui_t *ui);
-//将参数补偿模块的对象添加到菜单中
-void Add_ADC_Items(ui_page_t *ParentPage);
-
-#ifdef __cplusplus
-}
-#endif
-
+    uint16_t raw[CONV_ADC_COUNT];
+    uint16_t filtered[CONV_ADC_COUNT];
+    uint32_t frames;
+} ConvADC_Snapshot;
+void ConvADC_Reset(void);
+uint8_t ConvADC_Start(void);
+const volatile uint16_t *ConvADC_DmaFrame(uint8_t second_half);
+void ConvADC_ProcessFrameISR(const volatile uint16_t *frame);
+void ConvADC_CopySnapshot(ConvADC_Snapshot *out);
+uint16_t ConvADC_PinMillivolts(uint16_t raw);
+uint8_t ConvADC_TempFromCalibration(uint16_t raw, uint16_t cal1,
+                                    uint16_t cal2, int32_t *out_deci_c);
+uint8_t ConvADC_McuTempDeciC(uint16_t raw, int32_t *out_deci_c);
 #endif
