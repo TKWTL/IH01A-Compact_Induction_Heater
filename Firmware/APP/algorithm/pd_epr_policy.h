@@ -75,4 +75,10 @@
  * cannot grant 5 A (cable e-marker rating) may answer with a Hard Reset. Drop to
  * 3 A to find out whether current is the discriminator. */
 #define IH01A_EPR_REQUEST_MA       5000u
+
+/* Object position convention proven on the bench with this source: the EPR
+ * request must use the ABSOLUTE position (8..13, continuing the SPR list).
+ * The 1-based index inside EPR_Source_Capabilities (1..6) is rejected with a
+ * Hard Reset. 'pd epr1' still selects the local convention for experiments. */
+#define IH01A_EPR_OPOS_ABSOLUTE_DEFAULT 1
 #endif

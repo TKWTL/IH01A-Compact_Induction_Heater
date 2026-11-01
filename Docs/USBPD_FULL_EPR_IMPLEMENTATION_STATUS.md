@@ -339,3 +339,26 @@ API 的第一个判断就是"最近一条报文必须是 Request"，说明它的
 判读：出现 `PD_TX a=10` 即代表 EPR_Mode 真的上了总线；出现 `EPR_EVT a=113/116/119` 代表源端已应答。
 
 Rebuild：0 Error / 0 Warning，`Code=79,616 RO=4,096 RW=468 ZI=21,196`。
+
+### 2026-11-02 28 V EPR 成功（首个成功会话）
+
+```
+EPR_REQUEST a=28000 b=0x81C7D1F4     ← OPOS=8（绝对位置）
+PD_TXDO     do1=0x81C7D1F4 do2=0x0008C1F4
+PD_RX  a=3 …                          ← 源端 Accept
+CONTRACT a=1 …                        ← PS_RDY → 28 V/5 A 成立
+之后每 ~485 ms：PD_TX a=16 do1=0x00038002（EPR KeepAlive，ExtType=3）+ 源端 ACK
+```
+
+**必须同时满足的 4 个条件（全部实证）**：
+
+| # | 条件 | 违反时的现象 |
+|---|---|---|
+| 1 | `USBPD_HW_IF_IsResistor_SinkTxOk()` 必须为 TRUE（本板外部 Rd，UCPD 的 CC vstate 永不报 Rp-3.0 A）→ `IH01A_PD_FORCE_SINK_TXOK=1` | 所有应用主动发起的报文被静默丢弃：`EPR_ENTER a=0` 后无任何 `PD_TX`，随后全部 API 返回 BUSY |
+| 2 | `USBPD_CORE_DATATYPE_REQ_COPYPDO` 只回 **4 字节**（被复制的源端 PDO） | EPR_Request 的 DO2 变成 RDO 副本（抓包可见 `2C B1 C4 11` 重复），源端 Hard Reset |
+| 3 | RDO 置 `UnchunkedExtendedMessage`(bit23) + `EPR_Capable`(bit22) + `NoUSBSuspend`(bit24) | 缺 bit23 时源端把 EPR_Request 当协议违规，直接 Hard Reset（无 Reject/Not_Supported） |
+| 4 | Object Position 用**绝对位置 8..13** | 用 1 基下标 1..6 同样被 Hard Reset（`pd epr1` 可复现） |
+
+**其余必要设置**：`Is_EPR_Supported_SNK=1`、`PE_UnchunkSupport=1`、`Is_SrcCapaExt_Supported=1`；`SNK_PDP_EPR=140 W`；EPR 入口必须从 PE 回调上下文登记——先用 `USBPD_PE_Request_CtrlMessage(GET_SRC_CAP)` 制造一次 `Source_Capabilities → Request → PS_RDY` 周期，再在 `POWER_EXPLICIT_CONTRACT` 通知里调用 `USBPD_PE_Request_EPRModeEnter()`（从空闲主循环调用会让库把机器永久挂起）。
+
+**诊断层**（这次能定位的关键）：`PD_TX`(类型+头)、`PD_TXDO`(前两个数据对象)、`PD_RX`(类型+头)、`TXDONE`(发送结果)、`EPR_EVT/EPR_ACT/GETINFO/SETINFO`。**周期性重复的帧（KeepAlive）只记录一次**，否则单个 EPR 会话会产生 ~242 B/s 的串口刷屏。

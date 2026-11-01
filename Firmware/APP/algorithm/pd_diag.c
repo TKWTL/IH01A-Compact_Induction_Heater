@@ -27,32 +27,43 @@ void PD_Diag_Record(uint8_t code,uint32_t a,uint32_t b)
  * message (header MessageType 0x0A) on the wire, or did the PHY refuse it?
  * No printf here: PD callbacks and the PHY run in interrupt/sender-response
  * context, so only a queue record is made. */
-void PD_TxTrace(uint32_t type,uint32_t hdr,uint32_t size)
+void PD_TxTrace(uint32_t type,uint32_t hdr,uint32_t size,uint32_t do1,uint32_t do2)
 {
-    /* GoodCRC floods the queue so it is reported once; every other message
-     * type is reported every time - "was the Request really re-sent?" is
-     * exactly the question the EPR diagnosis needs to answer.
-     * b = (raw 16-bit header << 16) | size, so the log shows revision,
-     * message id and NDO as well as the type. */
+    /* GoodCRC is reported once. Everything else is reported until the same
+     * (type, first data object) repeats: an EPR session emits a KeepAlive
+     * every ~485 ms with identical content and logging those floods the UART
+     * for no information. b = (raw 16-bit header << 16) | size, so revision,
+     * message id and NDO stay visible. */
     static uint32_t seen;
+    static uint32_t last_sig=0xFFFFFFFFu;
     if(type==1u)
     {
         if((seen&2UL)!=0u)return;
         seen|=2UL;
     }
+    else
+    {
+        uint32_t sig=(type<<24)|(do1&0x00FFFFFFu);
+        if(sig==last_sig)return;
+        last_sig=sig;
+    }
     PD_Diag_Record(PD_DIAG_PD_TX,type,((hdr&0xFFFFUL)<<16)|(size&0xFFFFUL));
-}
-void PD_TxData(uint32_t do1,uint32_t do2)
-{
     PD_Diag_Record(PD_DIAG_PD_TXDO,do1,do2);
 }
-void PD_RxTrace(uint32_t type,uint32_t hdr)
+void PD_RxTrace(uint32_t type,uint32_t hdr,uint32_t do1)
 {
     static uint32_t seen;
+    static uint32_t last_sig=0xFFFFFFFFu;
     if(type==1u)
     {
         if((seen&2UL)!=0u)return;
         seen|=2UL;
+    }
+    else
+    {
+        uint32_t sig=(type<<24)|(do1&0x00FFFFFFu);
+        if(sig==last_sig)return;
+        last_sig=sig;
     }
     PD_Diag_Record(PD_DIAG_PD_RX,type,hdr&0xFFFFUL);
 }

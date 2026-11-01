@@ -342,11 +342,15 @@ void PHY_Rx_Completed(uint8_t PortNum, uint32_t MsgType)
         /* IH01A: trace what the partner sends (type + raw header). Queue
          * only, this runs in the RX interrupt context. */
         {
-          extern void PD_RxTrace(uint32_t type, uint32_t hdr);
+          extern void PD_RxTrace(uint32_t type, uint32_t hdr, uint32_t do1);
           const uint8_t *rb = Ports[PortNum].ptr_RxBuff;
           if (rb != (const uint8_t *)0)
+          {
+            uint32_t _d1 = (uint32_t)rb[2] | ((uint32_t)rb[3] << 8) |
+                           ((uint32_t)rb[4] << 16) | ((uint32_t)rb[5] << 24);
             PD_RxTrace((uint32_t)(rb[0] & 0x1FU),
-                       (uint32_t)rb[0] | ((uint32_t)rb[1] << 8));
+                       (uint32_t)rb[0] | ((uint32_t)rb[1] << 8), _d1);
+          }
         }
         PHY_Ports[PortNum].USBPD_PHY_MessageReceived(PortNum, _msgtype);
       }

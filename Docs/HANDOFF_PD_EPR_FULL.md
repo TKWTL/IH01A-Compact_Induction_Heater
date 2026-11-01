@@ -95,7 +95,7 @@ USBPD 中间件已在 `.ioc` 里**取消勾选**（`753c4d1`）：CubeMX 不再�
 - **实测**：`[PD_INIT] LIB_ID=0x30410000 check=1 reqmem=4506 heap=8192` → `FULL v5.4.1 initialized` → `SPR_CAPS a=6` → `REQUEST a=20000` → `CONTRACT a=1`；`[CLI] bus=20048 mV select=20000 mV current=3000 mA PDO=5`。UART/ADC/OLED 正常。
 - 一次「已带电时 MCU 单独复位」出现多轮 HARD_RESET（Source 仍持旧契约、未重发 Capabilities），断电重上电即恢复；不阻塞 EPR 首测，但要留意冷启动时序。
 
-### 步骤 5　EPR 试入　🟡 已可用，待空载首测
+### 步骤 5　EPR 试入　✅ 2026-11-02 空载达成 28 V/5 A（KeepAlive ~485 ms 正常）
 - 许可：`IH01A_EPR_28V5A_HARDWARE_APPROVED=1`（硬件负责人确认输入通路可承受 28 V）；自动进入仍关闭（`..._AUTO_ENTER=0`），入口是串口 `pd epr`。
 - 已接：EPR Mode Enter/Exit、独立 EPR PDO 数组解析（1..6 对象 → 位置 8..13，兼容合并布局）、28 V/5 A 选档、8 字节 RDO+CopyPDO、2.5 s 能力超时、拒绝/失败回退 SPR。
 - 诊断码（2026-11-02 新增，用于定位"EPR 进不去"）：`EPR_ENTER` 记原始 `USBPD_StatusTypeDef`；`EPR_EVT` 记全部 112..119 通知并打印事件名（`a=0 b=0xD00D` = 请求投递后 1 s 内 PE 完全静默）；`EPR_ACT` 记 PE 的 `USBPD_ACTION_*` 提问与我们的回答（4=CHECK_PDO、481=SNK_PDP_EPR、482=SNK_PDO_EPR）；`GETINFO`/`SETINFO` 记 PE 每次取/送数据的 `DataId` 与字节数（每个 id 只记第一次）。判读表在 `Docs/USBPD_FULL_EPR_IMPLEMENTATION_STATUS.md`。

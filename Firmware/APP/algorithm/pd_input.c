@@ -20,7 +20,7 @@ static uint8_t s_epr_local_pos;   /* 1 = EPR PDOs are numbered 1..6 */
 /* 0 = request the 1-based index inside EPR_Source_Capabilities (default),
  * 1 = request the absolute position (index + 7). Selectable at runtime from
  * the CLI so both conventions can be tried without reflashing. */
-static uint8_t s_epr_opos_absolute;
+static uint8_t s_epr_opos_absolute = IH01A_EPR_OPOS_ABSOLUTE_DEFAULT;
 void PD_Input_SetEPRObjectPosition(uint8_t absolute){s_epr_opos_absolute=absolute?1u:0u;}
 #if IH01A_EPR_DELAY_GETCAP
 static uint32_t s_epr_getcap_due_ms;

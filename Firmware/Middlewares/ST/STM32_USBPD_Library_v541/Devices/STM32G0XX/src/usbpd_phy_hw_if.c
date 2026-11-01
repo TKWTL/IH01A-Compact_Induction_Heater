@@ -75,21 +75,21 @@ USBPD_StatusTypeDef USBPD_HW_IF_SendBuffer(uint8_t PortNum, USBPD_SOPType_TypeDe
    * and the PHY dropped it"; this can. Queue only, no printing here. */
   if ((USBPD_SOPTYPE_HARD_RESET != Type) && (0U != Size))
   {
-    extern void PD_TxTrace(uint32_t type, uint32_t hdr, uint32_t size);
-    extern void PD_TxData(uint32_t do1, uint32_t do2);
-    PD_TxTrace((uint32_t)(pBuffer[0] & 0x1FU),
-               (uint32_t)pBuffer[0] | ((uint32_t)pBuffer[1] << 8), Size);
-    /* Data messages: log the first two data objects so the frame content can
-     * be verified from the UART log alone. */
-    if (Size >= 6U)
+    extern void PD_TxTrace(uint32_t type, uint32_t hdr, uint32_t size,
+                           uint32_t do1, uint32_t do2);
     {
-      uint32_t _d1 = (uint32_t)pBuffer[2] | ((uint32_t)pBuffer[3] << 8) |
-                     ((uint32_t)pBuffer[4] << 16) | ((uint32_t)pBuffer[5] << 24);
-      uint32_t _d2 = 0U;
-      if (Size >= 10U)
-        _d2 = (uint32_t)pBuffer[6] | ((uint32_t)pBuffer[7] << 8) |
-              ((uint32_t)pBuffer[8] << 16) | ((uint32_t)pBuffer[9] << 24);
-      PD_TxData(_d1, _d2);
+      uint32_t _d1 = 0U, _d2 = 0U;
+      if (Size >= 6U)
+      {
+        _d1 = (uint32_t)pBuffer[2] | ((uint32_t)pBuffer[3] << 8) |
+              ((uint32_t)pBuffer[4] << 16) | ((uint32_t)pBuffer[5] << 24);
+        if (Size >= 10U)
+          _d2 = (uint32_t)pBuffer[6] | ((uint32_t)pBuffer[7] << 8) |
+                ((uint32_t)pBuffer[8] << 16) | ((uint32_t)pBuffer[9] << 24);
+      }
+      PD_TxTrace((uint32_t)(pBuffer[0] & 0x1FU),
+                 (uint32_t)pBuffer[0] | ((uint32_t)pBuffer[1] << 8), Size,
+                 _d1, _d2);
     }
   }
 
