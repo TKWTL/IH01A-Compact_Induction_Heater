@@ -45,11 +45,17 @@ contract, disconnect the cable and let VBUS discharge before reconnecting.
    0=UI coroutine not started; 1=waiting 250ms; 2=inside
    `diapInit()/SSD1315_Display_Init`; 3=display init returned;
    4=MiaoUI setup returned.
-5. If PB6 stays high, inspect `g_uart_boot_stage`:
+5. UART initializes **immediately after GPIO/DMA**, before RTC/SPI,
+   so a hang during later peripheral setup will not suppress `U1OK`.
+   If PB6 stays high, inspect `g_uart_boot_stage`:
    0=before USART setup; 1=enter USART init;
    2=USART init returned; 3=DebugUART_Init returned;
    4=enter main loop; 5=APP_Tasks_RunOnce runs.
    Inspect `g_uart_probe_result` (0 HAL_OK, 0xffffffff not reached).
+   Also inspect `g_recovery_init_stage`: 0=before recovery init;
+   1=UART complete; 2=RTC initialized; 3=SPI initialized;
+   4=CRC/TIM14 initialized; 5=Time_Init returned;
+   6=APP_Tasks_Init returned.
 6. If both OLED and UART work in this profile but fail in main,
    investigate the USB-PD negotiation and the **blocking SSD1315
    u8g2 initialization during USBPD_DPM_UserExecute**. This code

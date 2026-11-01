@@ -72,6 +72,8 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* Recovery-only low-overhead debug milestone. Remains 0 in normal builds. */
+volatile uint32_t g_recovery_init_stage;
 /* SRAM VTOR relocation lives in main.c, not in the PowerControl module.
  * Flash RESET stays at 0x08000000; .ih_vectors is reserved in scatter.
  * 64 vector entries = 256 bytes, and the destination is 256-aligned. */
@@ -132,21 +134,34 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
-#if !IH01A_RECOVERY_5V_ONLY
+#if IH01A_RECOVERY_5V_ONLY
+  /* In recovery, probe TX before RTC/SPI or other app initialization.
+   * Any later hang can now be distinguished from USART setup failure. */
+  g_uart_boot_stage=1u;
+  MX_USART1_UART_Init();
+  g_uart_boot_stage=2u;
+  DebugUART_Init(boot_reset_flags);
+  g_uart_boot_stage=3u;
+  g_recovery_init_stage=1u; /* UART probe and first DMA kicked */
+  MX_RTC_Init();
+  g_recovery_init_stage=2u;
+  MX_SPI1_Init();
+  g_recovery_init_stage=3u;
+  MX_CRC_Init();
+  MX_TIM14_Init();
+  g_recovery_init_stage=4u; /* basic peripherals ready */
+#else
   MX_COMP1_Init();
   MX_COMP2_Init();
   MX_DAC1_Init();
-#endif
   MX_RTC_Init();
   MX_SPI1_Init();
-#if !IH01A_RECOVERY_5V_ONLY
   MX_TIM1_Init();
   MX_TIM15_Init();
   MX_ADC1_Init();
   MX_I2C1_Init();
   MX_TIM6_Init();
   MX_UCPD2_Init();
-#endif
   g_uart_boot_stage=1u;
   MX_USART1_UART_Init();
   g_uart_boot_stage=2u;
@@ -154,10 +169,14 @@ int main(void)
   g_uart_boot_stage=3u;
   MX_CRC_Init();
   MX_TIM14_Init();
+#endif
   /* USER CODE BEGIN 2 */
   /* RTC was reset to a relative calendar origin by MX_RTC_Init().
    * Record the boot epoch after all CubeMX peripheral initialization. */
   Time_Init();
+#if IH01A_RECOVERY_5V_ONLY
+  g_recovery_init_stage=5u; /* RTC time service ready */
+#endif
   /* USER CODE END 2 */
 
   /* USBPD initialisation ---------------------------------*/
@@ -173,6 +192,9 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   APP_Tasks_Init();
+#if IH01A_RECOVERY_5V_ONLY
+  g_recovery_init_stage=6u; /* APP scheduler initialized */
+#endif
   /* Safe read-only TIM6->ADC1->DMA control ISR; TIM1/PWM_EN remain OFF. */
 #if !IH01A_RECOVERY_5V_ONLY
   ConvController_Init();
