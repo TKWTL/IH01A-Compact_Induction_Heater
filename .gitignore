@@ -25,10 +25,10 @@
 *.uvguix.*
 *.mxproject
 *.code-workspace
-# 调试器/窗口/断点会话等本机状态:不含编译信息,Keil 打开时会自动重建,
-# 且每次打开关闭都会重写,是 uvprojx 之外最大的冲突来源,故不入库。
-# 谁决定编译哪些源码,以 uvprojx 为准。
-*.uvoptx
+# 调试器选择(CMSIS-DAP)、Flash 下载算法(STM32G0xx_128.FLM)、断点会话只存在
+# uvoptx 里,排除跟踪会导致换机器/重新 clone 后必然丢失,故 2026-11-02 重新纳入。
+# 已按 Keil 原生序列化提交为基线;若下次 diff 只是窗口布局/断点变化,直接提交即可。
+# (窗口布局 uvguix 与 CubeMX 元数据 mxproject 仍然不入库)
 
 # ---- 构建产物 ----
 /obj/
