@@ -13,3 +13,7 @@ CC=${CC:-cc}
 "$CC" -std=c99 -Wall -Wextra -Werror -I APP \
  APP/pd_source_stats.c Tests/host/test_pd_source_stats.c -o /tmp/ih01a_pd_source_stats_test
 /tmp/ih01a_pd_source_stats_test
+
+"$CC" -std=c99 -Wall -Wextra -Werror -I Tests/host/rtc_mock -I APP \
+ APP/framework/time_service.c Tests/host/test_time.c -o /tmp/ih01a_time_test
+/tmp/ih01a_time_test

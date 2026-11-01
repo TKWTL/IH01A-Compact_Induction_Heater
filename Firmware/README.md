@@ -97,3 +97,26 @@ TIM6 TRGO 驱动 ADC1 八通道扫描，DMA1 Channel2 circular 双帧，HT/TC
 ## PowerControl 模块拆分与采样页面（2026-11-01）
 
 Keil 工程已增加独立 PowerControl 分组：`conv_adc.c`（8 Rank ADC 双帧 DMA 与固定点 mV/温度换算）、`conv_controller.c`（ADC DMA ISR/ISR_TIME/故障状态机）、`dashboard.c`（Statistics → System 八路只读文本）。原 G474 文件已加 `.legacy.*` 后缀归档到 Legacy，不参与编译。向量表重定向在 `Core/Src/main.c`。详细使用和计算公式见 `APP/PowerControl/README.md`。本次未在 Keil 构建，需板端验证。
+
+## Framework system/time_service（2026-11-01）
+
+Collar-Radio 的 `system_operation`、`system_statistic`、`time` 已按本机需求裁剪为
+`APP/framework/system.c/.h` 和 `time_service.c/.h`，后者刻意不命名
+`time.h`，以免遮蔽 C 标准库头文件。原有 PM 负责休眠、PowerControl
+负责 ADC，系统模块不再引入 FM、电池、FreeRTOS 或浮点依赖。
+
+- `Settings → System` 最后一项 **System Reset**，使用 MiaoUI
+  `UI_ITEM_ONCE_FUNCTION` 调用 `NVIC_SystemReset()`。操作立即生效。
+- `Statistics → System` 在 ADC 前新增 **Uptime: Nd HH:MM:SS**；
+  从 RTC/LSE 日历读取并计算，不使用 SysTick 的 32 位毫秒计数。
+  每 100ms 检查一次，实际显示按秒变化，纯静态字符串。
+- `Core/Src/main.c` 在外设初始化后执行 `Time_Init()`，记录本次开机
+  RTC 起点。CubeMX 的 `MX_RTC_Init()` 每次启动都设为
+  `2000-01-01 00:00:00`；RTC 的年月日是**相对计时坐标**，
+  不是联网校准的真实时间。
+- 设计上没有 RTC 备用电池；掉电后会重置。
+  **用户所需的几小时后预约**应在后续使用 RTC 相对计时和明确的启动
+  安全条件，而非当前直接使能加热输出。
+- 源代码按 Collar-Radio 的“读 HAL RTC 时间后立即读日期”规范，
+  复制出 32 位对齐的日历字段，规避 Cortex-M0+ 直接使用打包成员的风险；
+  闰年、跨日、跨月及无效 RTC 日期均有处理。

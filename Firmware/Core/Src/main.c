@@ -35,6 +35,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "app_tasks.h"
+#include "framework/time_service.h"
 #include "conv_controller.h"
 
 /* USER CODE END Includes */
@@ -140,7 +141,9 @@ int main(void)
   MX_CRC_Init();
   MX_TIM14_Init();
   /* USER CODE BEGIN 2 */
-
+  /* RTC was reset to a relative calendar origin by MX_RTC_Init().
+   * Record the boot epoch after all CubeMX peripheral initialization. */
+  Time_Init();
   /* USER CODE END 2 */
 
   /* USBPD initialisation ---------------------------------*/

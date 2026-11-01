@@ -12,6 +12,7 @@
 #include "framework/pm_ui_register.h"
 #include "pd_source_stats.h"
 #include "dashboard.h"
+#include "framework/system.h"
 #include <stdint.h>
 
 static ui_page_t s_root, s_settings, s_display, s_system;
@@ -32,6 +33,7 @@ void IH_Statistics_Poll(void)
 {
     uint32_t revision = PD_SourceStats_Revision();
     PowerDashboard_Poll();
+    System_Poll();
     uint8_t i;
 
     if(revision == s_pd_revision)
@@ -98,6 +100,8 @@ void Create_MenuTree(ui_t *ui)
         AddPage("[System]", &s_system, UI_PAGE_TEXT, &s_settings);
             AddItem("[Return]", UI_ITEM_RETURN, 0, &s_back_system, &s_system, &s_settings, 0);
             PM_UI_AddSleepSettingsItems(&s_system);
+            /* Last option under Settings/System, after sleep settings. */
+            System_AddSettingsItems(&s_system);
 
     AddItem("-Statistics", UI_ITEM_PARENTS, img_statistics, &s_statistics_item, &s_root, &s_statistics, 0);
     AddPage("[Statistics]", &s_statistics, UI_PAGE_TEXT, &s_root);
@@ -114,6 +118,8 @@ void Create_MenuTree(ui_t *ui)
         AddPage("[System]", &s_stat_sys, UI_PAGE_TEXT, &s_statistics);
             s_stat_sys.wideText = 1u;
             AddItem("[Return]", UI_ITEM_RETURN, 0, &s_back_stat_sys, &s_stat_sys, &s_statistics, 0);
+            /* Show elapsed runtime before the ADC data rows. */
+            System_AddStatisticsItems(&s_stat_sys);
             PowerDashboard_AddItems(&s_stat_sys);
 
     AddItem("-About", UI_ITEM_WORD, img_user_account, &s_about, &s_root, 0, 0);

@@ -84,3 +84,28 @@ HT/TC→控制状态机；中断执行期间拉高 ISR_TIME(PF1)，结束拉低�
 已按 `APP/PowerControl/{conv_adc,conv_controller,dashboard}.c/h` 拆分旧单体实现，并在 Keil 中建立独立 `PowerControl` Group。G474 HRTIM/float 旧源码归档至 `APP/PowerControl/Legacy/*.legacy.*`，没有加入编译。向量表 SRAM 拷贝和 `SCB->VTOR` 切换由 `Core/Src/main.c` 实现，不再作为 PowerControl API；DMA1 Channel2/3 ISR 仍在 `conv_controller.c` 并放进 SRAM。
 
 `Statistics → System` 显示七路 ADC 引脚电压（2.5V 标称参考）和经出厂 30/130°C、3.0V 校准值折算的 MCU 温度，100ms 更新原始 ADC 采样值；具体转换公式、通道及安全边界见 `APP/PowerControl/README.md`。当前无 PWM 控制输出。
+
+## system / time_service framework（2026-11-01）
+
+参考 `TKWTL/Collar-Radio` 的 `Application/Algorithms/` 中
+`system_operation.c/h`、`system_statistic.c/h`、`time.c/h`，
+**提取设计职责而非照搬 FM、电池、FreeRTOS 模块**。
+本工程新增：
+
+- `APP/framework/system.c/h`：系统软复位接口、MiaoUI 复位入口、
+  开机时长只读显示注册/刷新。
+- `APP/framework/time_service.c/h`：RTC 日历读取、相对秒数、
+  秒→天时分秒拆分与格式化。使用完整的 GetTime→GetDate 顺序；
+  HAL packed 字段逐一拷至 32 位对齐的 `Time_Calendar`。
+- `Peripheral/Time/time_api.c/h` 原先的 `TIME_Millis()` 不变：
+  供 coroOS/PM 的毫秒计时；新 RTC 时间服务负责日历/跨日累计，
+  不依赖 SysTick 毫秒溢出。
+- 开机后 RTC 以 2000-01-01 为零点，`Time_Init()` 在 main 中
+  记录本次开机基准。支持 2000–2099 年，涵盖闰年、
+  月末跨日与自然日累计，不使用真实 Unix 时间/时区。
+- RTC/LSE 已在 CubeMX 配置，未更改 `.ioc` 或 `rtc.c`，
+  不依赖 VBAT；**没有备用供电是故意的产品约束**。
+
+`Settings/System` 的最后一项是 System Reset，
+`Statistics/System` 顶部为 Uptime，之后保持原 ADC 数据列表。
+本轮不实现预约后实际启动感应加热，必须先验证硬件保护与用户确认流程。

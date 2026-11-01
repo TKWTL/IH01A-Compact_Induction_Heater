@@ -86,3 +86,21 @@ Implementation pending Keil/hardware verification:
 - Statistics → System 新增 8 行只读采样数据：7 路 ADC 原始采样码转换后的引脚电压，MCU 温度按 G071 双点工厂校准值（30/130°C、校准 VREF 3.0V）和实际标称 2.5V 折算；100ms 文本更新。
 - 原 G474 代码以 .legacy.* 后缀保留在 Legacy 子目录，未编译；原单体 power_control.c/h 删除。TIM1 和 PWM_EN 保持安全禁用。
 - **未验证**：Keil/ARMClang 编译链接、RAM 向量表实际起始地址、PF1 新脉宽、ADC Rank 数据和温度正确性。下一步必须先验证这些项目再谈调功。
+
+## 2026-11-01：system/time_service 与 RTC Uptime（待实机测试）
+
+- 读取 Collar-Radio 旧系统管理、系统统计和 RTC 时间封装，
+  裁剪为新的 `framework/system.c/h`、
+  `framework/time_service.c/h`（后者避免覆盖 C 标准 `time.h`）。
+- 核实 IH01A `MX_RTC_Init()` 每次启动设置 2000-01-01 00:00:00、
+  LSE 32768 Hz、分频 127/255、24 小时日历。
+  无备用电池导致失电后时间丢失符合设计预期；软件重启也从零开始。
+- Settings/System 在 Sleep Options 后追加立即生效的
+  System Reset（`UI_ITEM_ONCE_FUNCTION`）。
+  Statistics/System 首行追加 Uptime（`Nd HH:MM:SS`），其后原 ADC
+  八路不变，RTC 读失败显示 `Uptime: RTC error`。
+- 新增主机单元测试源码：按 2000 闰年、2001 非闰年、
+  跨日跨月、相对秒数、格式化及 RTC 读取失败模拟进行检查。
+- **尚未执行 Keil/实机验证**：RTC 每秒是否递增、
+  长时间运行/跨日、UI_OFF 恢复、Soft Reset 后零点重新开始；
+  还需检查完整 Keil 编译和 MPU/中断向量布局。
