@@ -12,7 +12,8 @@
 #include "core/ui.h"
 #include "display/dispDriver.h"
 #include "ui_conf.h"
-#include "debug_uart.h"
+#include "usart.h"
+#include <stdio.h>
 #include "console_cli.h"
 #include "algorithm/pd_diag.h"
 #include "temp_service.h"
@@ -26,7 +27,19 @@ THRD_DECLARE(thread_ui)
     /* OLED RES# follows shared MCU NRST. External VCC may require its own
      * power sequencing; wait cooperatively without starving USB-PD. */
     THRD_DELAY(250u);
-    diapInit();
+    if(!diapInit())
+    {
+        printf("[OLED] begin rejected\r\n");
+        while(1) { THRD_DELAY(1000u); }
+    }
+    /* Cooperative polling, not HAL_Delay() or DMA busy-wait.
+     * Display_Service runs after each scheduler pass. */
+    THRD_UNTIL(SSD1315_Display_InitState()!=SSD1315_INIT_PENDING);
+    if(SSD1315_Display_InitState()!=SSD1315_INIT_READY)
+    {
+        printf("[OLED] async init failed\r\n");
+        while(1) { THRD_DELAY(1000u); }
+    }
     MiaoUi_Setup(&s_ui);
     while(1)
     {

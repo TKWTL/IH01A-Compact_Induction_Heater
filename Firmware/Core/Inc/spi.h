@@ -41,7 +41,20 @@ extern SPI_HandleTypeDef hspi1;
 void MX_SPI1_Init(void);
 
 /* USER CODE BEGIN Prototypes */
-
+/* Completion is observed in foreground; callbacks never call app code.
+ * All DMA buffers must remain valid until SPI1_DMA_DONE.
+ */
+typedef enum {
+    SPI1_DMA_IDLE=0,
+    SPI1_DMA_BUSY,
+    SPI1_DMA_DONE,
+    SPI1_DMA_ERROR,
+    SPI1_DMA_ABORTING
+} SPI1_DmaState;
+uint8_t SPI1_DmaTxStart(const uint8_t *bytes,uint16_t count);
+SPI1_DmaState SPI1_DmaTxState(void);
+uint8_t SPI1_DmaTxRelease(void);
+uint8_t SPI1_DmaTxAbortAsync(void);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

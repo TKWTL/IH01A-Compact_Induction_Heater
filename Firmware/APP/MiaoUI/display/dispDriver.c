@@ -95,12 +95,13 @@ void Add_Disp_Items(ui_page_t *parent_page)
     AddItem(" Screen Flip", UI_ITEM_DATA, 0, &s_rotation_item, parent_page, 0, 0);
 }
 
-void diapInit(void)
+uint8_t diapInit(void)
 {
-    SSD1315_Display_Init(&u8g2);
+    if(!SSD1315_Display_Begin(&u8g2))return 0u;
     u8g2_SetFont(&u8g2, UI_FONT);
     SSD1315_Display_RequestContrast(disp_contrast_raw(Contrast));
     u8g2_ClearBuffer(&u8g2);
+    return 1u;
 }
 
 static uint32_t s_flush_count = 0u;

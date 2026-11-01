@@ -169,3 +169,21 @@ boot banner's DMA immediately. `g_uart_boot_stage` (1..5) and
 `g_uart_probe_result` permit Keil Watch diagnosis when TX stays idle
 high. The probe is the only startup-time bounded blocking TX and is
 **never called from a PD callback**. Details: `BSP/Console/README.md`.
+
+## 2026-11-01 Core peripheral ownership
+
+The 512B/512B USART1 DMA rings and all UART HAL IRQ callbacks moved
+from `BSP/Console/debug_uart.c/h` into the CubeMX USER CODE sections
+of `Core/Src/usart.c` and `Core/Inc/usart.h`. Low-level SPI1 DMA
+start/complete/abort logic likewise lives inside `Core/Src/spi.c`
+USER CODE; the `BSP/Display/ssd1315_display.c` driver no longer
+contains HAL_SPI transfer calls or HAL_Delay. It implements a
+nonblocking SSD1315 external-VCC init command sequence preserving
+`8D 10` charge pump OFF, then a page-by-page DMA state machine.
+
+The coroOS UI thread begins display startup using
+`diapInit()` (returns accepted/rejected), yields on
+`SSD1315_Display_InitState()`, and only creates MiaoUI after
+initialization reports READY. It never busy-waits on DMA. Future
+I2C transfer wrappers should live inside `Core/Src/i2c.c` USER CODE,
+not new standalone BSP drivers.

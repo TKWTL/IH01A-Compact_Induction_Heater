@@ -11,7 +11,7 @@ extern "C" {
 extern u8g2_t u8g2;
 extern int Contrast;
 
-void diapInit(void);
+uint8_t diapInit(void); /* accepts asynchronous panel initialization */
 void Disp_SendBuffer(void);
 /* Frames handed to the transport so far; see dispDriver.c for the page cache
  * use case (a page must re-send when another page flushed in between). */

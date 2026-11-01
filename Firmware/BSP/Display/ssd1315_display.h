@@ -4,12 +4,25 @@
 #include "u8g2.h"
 #define SSD1315_WIDTH 128u
 #define SSD1315_HEIGHT 64u
-#define SSD1315_FB_SIZE (SSD1315_WIDTH * SSD1315_HEIGHT / 8u)
-void SSD1315_Display_Init(u8g2_t *screen);
+#define SSD1315_FB_SIZE (SSD1315_WIDTH*SSD1315_HEIGHT/8u)
+typedef enum {SSD1315_INIT_PENDING=0,SSD1315_INIT_READY,
+              SSD1315_INIT_FAILED} SSD1315_InitState;
+/* Begin always returns immediately; display becomes ready asynchronously
+ * after SSD1315_Display_Service() completes the SPI DMA init sequence. */
+uint8_t SSD1315_Display_Begin(u8g2_t *screen);
+SSD1315_InitState SSD1315_Display_InitState(void);
 void SSD1315_Display_RequestFlush(const uint8_t *framebuffer);
 void SSD1315_Display_RequestContrast(uint8_t contrast);
 void SSD1315_Display_RequestPowerSave(uint8_t enable);
 void SSD1315_Display_Service(void);
+typedef struct {
+    uint32_t init_timeouts;
+    uint32_t dma_start_failed;
+    uint32_t dma_busy;
+    uint32_t dma_irq_errors;
+    uint32_t dma_runtime_timeouts;
+} SSD1315_DisplayStats;
+void SSD1315_Display_GetStats(SSD1315_DisplayStats *out);
 uint8_t SSD1315_Display_IsReady(void);
 uint32_t SSD1315_Display_GetFrameCount(void);
 #endif

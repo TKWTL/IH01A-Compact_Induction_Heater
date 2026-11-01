@@ -3498,11 +3498,6 @@
               <FilePath>../BSP/Console/mini_stdio.c</FilePath>
             </File>
             <File>
-              <FileName>debug_uart.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../BSP/Console/debug_uart.c</FilePath>
-            </File>
-            <File>
               <FileName>console_cli.c</FileName>
               <FileType>1</FileType>
               <FilePath>../BSP/Console/console_cli.c</FilePath>

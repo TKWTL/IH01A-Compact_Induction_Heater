@@ -82,3 +82,39 @@ Keil Watch 调试变量：
 - `uart` 命令现在提供 `tx_start`、`tx_done`、`tx_fail`、`boot`、`probe`，可区分 DMA 未启动、完成回调未触发、环满和 RX 错误。
 
 如果仅有 `U1OK` 而没有后续 `[BOOT]`，检查 DMA1 Channel5、共享 Ch4-7 DMA IRQ、USART1 TC 中断与 DebugUART_Service 的运行。如果两者都有而 `ping` 无响应，则重点查 PB7 RX、USART1 IDLE、DMA1 Channel4、是否发送 CR/LF。
+
+## CubeMX ownership and coroutine discipline (2026-11-01)
+
+**USART1**: All HAL UART RX/TX, DMA callbacks, 512-byte TX/RX
+ring buffers, startup probe, and error counters live exclusively in
+`Core/Src/usart.c` USER CODE regions. Declarations are in
+`Core/Inc/usart.h` USER CODE regions. There is no separate
+`BSP/Console/debug_uart.c/h` source or project entry.
+`BSP/Console/console_cli.c` remains application-side command parsing,
+and `mini_stdio.c` remains formatting. Their common transport API is
+`DebugUART_*` (names preserved for compatibility).
+
+**SPI1**: DMA HAL calls and HAL_SPI completion/error/abort callbacks
+live exclusively in `Core/Src/spi.c` USER CODE regions, using
+`SPI1_DmaTxStart`, `SPI1_DmaTxState`,
+`SPI1_DmaTxRelease` and `SPI1_DmaTxAbortAsync`.
+The SSD1315 application driver only performs D/C transitions,
+command/page sequencing, status polling and framebuffer management.
+
+**I2C1**: When asynchronous sensor/EEPROM operations are added,
+HAL_I2C_..._IT/DMA starts and HAL callbacks must be implemented in
+`Core/Src/i2c.c` USER CODE; expose state/results in
+`Core/Inc/i2c.h` USER CODE. Do not add another transport source.
+No I2C data transactions are introduced by this refactor.
+
+**CoroOS**: SSD1315 startup is now asynchronous and requires
+`SSD1315_Display_Begin(screen)` followed by
+`SSD1315_Display_InitState()` polling. No application coroutine
+calls HAL_Delay or waits in a DMA spin-loop. Only the one-shot
+UART `U1OK` boot probe is intentionally polling, before the scheduler
+and PD protocol loops start. The ST USBPD library's separate
+`USBPD_DPM_WaitForTime` callback is unrelated to the application
+coroutine design and has not been altered.
+
+Keep source changes inside the marked CubeMX USER CODE regions;
+CubeMX may regenerate all other parts.
