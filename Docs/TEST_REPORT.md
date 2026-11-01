@@ -104,3 +104,16 @@ Implementation pending Keil/hardware verification:
 - **尚未执行 Keil/实机验证**：RTC 每秒是否递增、
   长时间运行/跨日、UI_OFF 恢复、Soft Reset 后零点重新开始；
   还需检查完整 Keil 编译和 MPU/中断向量布局。
+
+## 2026-11-01 DMA ISR duplicate symbol hotfix
+
+用户 Keil ARMClang 6.24 链接时报 L6200E：
+`DMA1_Channel2_3_IRQHandler` 同时定义在 `conv_controller.o` 和
+`stm32g0xx_it.o`。仓库检查确认 CubeMX 生成入口已再次出现。
+修复方法：在 `stm32g0xx_it.c` 的 `USER CODE BEGIN PFP` 中
+以 `__WEAK` 声明该函数，使生成的实现为弱符号，而
+`APP/PowerControl/conv_controller.c` 的 SRAM ISR 保持强定义。
+已用本地 Clang 验证这种“先强声明、再 weak 声明、最后定义”的组合
+生成弱符号，可与另一目标文件中的强定义成功链接。
+**尚未在目标 Keil ARMClang 6.24 工程中重编译验证**；下次 Rebuild 后
+检查没有 L6200E，并用 .map 确认入口在 `.ih_ramfunc` 和 SRAM VTOR 中。

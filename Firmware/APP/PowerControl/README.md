@@ -86,3 +86,19 @@ ISR 入口 PF1 高、出口低；已实测的高电平约 4.5µs、重复频率 
 3. 确认 System 页面逐项与外部基准电压一致；特别检查 ISR_LOAD 与示波器 PF1 对应关系。
 4. MCU 温度与环境/升温趋势大致一致；测试原始工厂校准字的合法性，不把无效读数显示为真实温度。
 5. 反复切换菜单、休眠/唤醒及 USB-PD 插拔；查看 ADC FAULT、DMA HT/TC、负载时间，不允许 TIM1/PWM_EN 启动加热。
+
+## CubeMX 重新生成后的 DMA 中断入口（Keil L6200E）
+
+`Core/Src/stm32g0xx_it.c` 中 CubeMX 会生成 `DMA1_Channel2_3_IRQHandler()`，
+而 `APP/PowerControl/conv_controller.c` 已提供用于 SRAM 执行的**强符号**实现。
+两者都为强符号时链接报 `L6200E multiply defined`。现在在
+`stm32g0xx_it.c` 的 `USER CODE BEGIN PFP` 放入
+`__WEAK void DMA1_Channel2_3_IRQHandler(void);`，把 CubeMX 生成的
+HAL 回调入口转为弱符号；链接器选择 PowerControl 中的强定义。
+该声明在 CubeMX USER CODE 范围内，可在重新生成时保留。
+
+上板需用 .map 文件确认 `DMA1_Channel2_3_IRQHandler` **最终仅解析到**
+`conv_controller.o` 的 `.ih_ramfunc` SRAM 运行地址（约 `0x20008000`），
+再核对 SRAM VTOR 中的 DMA1 CH2/3 槽位确实指向该入口。
+不得同时将 `conv_controller.c` 排除编译，否则只会留下旧的弱 HAL 中断，
+无法运行定点采样控制状态机。

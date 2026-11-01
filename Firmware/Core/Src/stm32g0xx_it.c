@@ -47,7 +47,13 @@
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
-
+/* CubeMX owns the fallback HAL DMA handler below and may regenerate it.
+ * Keep its symbol weak: the strong SRAM-resident implementation in
+ * APP/PowerControl/conv_controller.c takes precedence in the vector table.
+ * Do NOT remove this declaration on CubeMX regeneration, or Keil will
+ * report L6200E: DMA1_Channel2_3_IRQHandler multiply defined.
+ */
+__WEAK void DMA1_Channel2_3_IRQHandler(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
