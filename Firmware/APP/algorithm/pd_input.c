@@ -161,6 +161,11 @@ void PD_Input_EPR_RequestRejected(void)
 void PD_Input_EPR_Notify(uint32_t event)
 {
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
+    /* Log EVERY EPR notification first: this is the only proof that the
+     * PE really exchanged EPR_Mode / EPR capability messages. */
+    PD_Diag_Record(PD_DIAG_EPR_EVENT,event,
+                   (uint32_t)s_epr_mode|((uint32_t)s_epr_copy_valid<<1)|
+                   ((uint32_t)s_epr_enter_once<<2));
     switch(event)
     {
     case USBPD_NOTIFY_EPRMODE_SUCCEEDED:
@@ -170,6 +175,13 @@ void PD_Input_EPR_Notify(uint32_t event)
         s_epr_copy_valid=0u;
         PD_Diag_Record(PD_DIAG_EPR_MODE,1u,event);
         break;
+#if defined(USBPD_NOTIFY_EPR_SRCCAP_RECEIVED)
+    case USBPD_NOTIFY_EPR_SRCCAP_RECEIVED:
+    case USBPD_NOTIFY_EPR_SNKCAP_RECEIVED:
+        /* Capability content is logged by PD_Input_EPRCaps(); keep the
+         * state machine untouched. */
+        break;
+#endif
     case USBPD_NOTIFY_EPRMODE_FAILED:
     case USBPD_NOTIFY_EPRMODE_INVALID:
     case USBPD_NOTIFY_EPRMODE_EXIT:
@@ -308,10 +320,12 @@ void PD_Input_EPR_Poll(void)
        !PD_SourceIsEPRCapable() ||
        (uint32_t)(HAL_GetTick()-s_contract_ms)<250u)return;
     s_epr_enter_once=1u; /* only one request for this attachment */
-    if(USBPD_PE_Request_EPRModeEnter(USBPD_PORT_0)==USBPD_OK)
-        PD_Diag_Record(PD_DIAG_EPR_ENTER,1u,0u);
-    else
-        PD_Diag_Record(PD_DIAG_EPR_ENTER,0u,0u);
+    {
+        /* Raw USBPD_StatusTypeDef: 0=OK 1=NOTSUPPORTED 2=ERROR 3=BUSY.
+         * A boolean hid the difference between "submitted" and "refused". */
+        USBPD_StatusTypeDef rc=(USBPD_StatusTypeDef)USBPD_PE_Request_EPRModeEnter(USBPD_PORT_0);
+        PD_Diag_Record(PD_DIAG_EPR_ENTER,(uint32_t)rc,s_state.position);
+    }
 #endif
 }
 /* Authorized manual EPR attempt: can be invoked by CLI or PD settings.

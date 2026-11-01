@@ -45,9 +45,29 @@ void PD_Diag_Service(void)
     case PD_DIAG_EPR_RDO:label="EPR_REQUEST";break;
     case PD_DIAG_EPR_PDO2:label="EPR_PDO2";break;
     case PD_DIAG_EPR_COPYPDO:label="EPR_COPY";break;
+    case PD_DIAG_EPR_EVENT:label="EPR_EVT";break;
+    case PD_DIAG_EPR_ACTION:label="EPR_ACT";break;
     default:label="UNKNOWN";break;
     }
     printf("[PD %lu] %s a=%lu b=0x%08lX\r\n",
            (unsigned long)e.ms,label,(unsigned long)e.a,(unsigned long)e.b);
+    /* Decode the 112..119 EPR notification ids for readability. */
+    if(e.event==PD_DIAG_EPR_EVENT)
+    {
+        const char *name;
+        switch(e.a)
+        {
+        case 112u:name="EPRMODE_INVALID";break;
+        case 113u:name="EPRMODE_ACK";break;
+        case 114u:name="EPRMODE_SUCCEEDED";break;
+        case 115u:name="EPRMODE_FAILED";break;
+        case 116u:name="EPRMODE_INIT";break;
+        case 117u:name="EPRMODE_EXIT";break;
+        case 118u:name="EPR_SNKCAP_RECEIVED";break;
+        case 119u:name="EPR_SRCCAP_RECEIVED";break;
+        default:name="";break;
+        }
+        if(name[0])printf("[PD %lu]   %s\r\n",(unsigned long)e.ms,name);
+    }
     (void)s_dropped;
 }

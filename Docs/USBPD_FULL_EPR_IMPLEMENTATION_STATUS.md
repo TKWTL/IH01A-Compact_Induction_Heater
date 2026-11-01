@@ -108,3 +108,62 @@ uart
 - `PD_Input_EPRCaps()` 增加**布局自适应**：`a ≤ 24` 按 EPR-only 存放到 `s_epr_caps[7..12]`（首对象=位置 8），`a ≥ 28` 按合并布局存放到 `s_epr_caps[0..]`；上限校验放宽到 `(USBPD_MAX_NB_PDO+USBPD_MAX_NB_EPRPDO)*4 = 52` 字节。这样 ST 到底交付哪种布局都不会把对象位置整体错位，也不会因为 4 字节载荷静默失败。
 - `EPR_CAPS` 的 `b` 改为**首个 EPR PDO**（位置 8），两种布局下都是同一个对象，便于直接核对是不是 `0x...` 的 28V Fixed。
 - 保留了「必须 28V **且** 5A」的严格条件：28V/3A 的适配器会被判为不合格并退回 SPR（`EPR_MODE b=0xBAD0`），这是本产品 140W 目标的刻意取舍。
+
+### 2026-11-02 EPR 进入失败的定位手段（本轮新增）
+
+板端第一份 EPR 日志只有 `EPR_ENTER a=1`，随后没有 `EPR_MODE` / `EPR_CAPS` / `EPR_REQUEST`。旧代码把返回值压成了布尔，**无法区分「API 已提交」与「协议层被拒/未发出」**，所以本轮先把所有观测点补齐，再谈 28 V。
+
+**A（EPR Sink PDP）原本就已经有了**，不是缺失项：
+
+| 回调 | 现状 |
+|---|---|
+| `USBPD_CORE_DATATYPE_SNK_PDP_EPR` | 返回 1 字节，值 `IH01A_EPR_SINK_PDP_W`（140 W），非 0 |
+| `USBPD_CORE_DATATYPE_SNK_PDO_EPR` | 返回 32 字节：Sink PDO 1..5（SPR）+ 位置 8 = 28 V/5 A Fixed |
+| `USBPD_CORE_DATATYPE_SRC_PDO_EPR` | 新增：`*Size=0`（本口只做 Sink，避免 PE 读到未初始化长度） |
+
+PDP 用 140 W 而**不是** 84 W：Sink PDO 与请求电流都是 5 A，PDP 写 84 W 会与 5 A 能力自相矛盾，Source 有权据此拒绝 EPR。要切 3 A 策略必须同时改三处（`pd_epr_policy.h` 的 `IH01A_EPR_SINK_PDP_W` / `IH01A_EPR_SINK_CURRENT_MA`，以及 `pd_input.c` 里 `mv==28000u && ma==5000u` 的判定）。
+
+**B：`EPR_ENTER` 改为记录原始返回码**
+
+| 值 | 含义 |
+|---|---|
+| 0 | `USBPD_OK` — 请求已提交给 PE（**不等于报文已发出**） |
+| 1 | `USBPD_NOTSUPPORTED` |
+| 2 | `USBPD_ERROR` — 当前状态不允许 |
+| 3 | `USBPD_BUSY` — 有操作在进行 |
+
+**C：所有 EPR 通知都进日志**（新增 `EPR_EVT`，`a` = 原始事件号，`b` = 状态位 bit0 `epr_mode` / bit1 `copy_valid` / bit2 `enter_once`），且紧跟一行事件名：
+
+| a | 事件 | 意义 |
+|---|---|---|
+| 112 | `EPRMODE_INVALID` | 请求无效（线缆/VCONN/能力不足） |
+| 113 | `EPRMODE_ACK` | Source 已回 GoodCRC + EPR_Mode ACK |
+| 114 | `EPRMODE_SUCCEEDED` | EPR 模式进入成功 |
+| 115 | `EPRMODE_FAILED` | Source 拒绝 |
+| 116 | `EPRMODE_INIT` | 模式初始化 |
+| 117 | `EPRMODE_EXIT` | 退出 EPR |
+| 118 / 119 | `EPR_SNKCAP/SRCCAP_RECEIVED` | 能力消息到达 |
+
+**D：`EPR_CAPS` 已经记录原始字节数**（`a`），配合本轮新增的布局自适应即可判断 ST 交付的是 EPR-only（≤24 B）还是合并（≥28 B）。
+
+**E：新增 `EPR_ACT`，记录 PE 向 DPM 的每次提问和我们的回答**
+
+| a | 动作 | b |
+|---|---|---|
+| 4 | `USBPD_ACTION_CHECK_PDO` | 0（`USBPD_OK`，头文件规定这是唯一合法回答，否则 PE 会发 Hard Reset） |
+| 1 / 2 / 3 | `ENTER_USB` / `DATA_RESET` / `ENTER_MODE` | 1（`USBPD_NOTSUPPORTED`） |
+| 481 | 查 `SNK_PDP_EPR` | 返回字节数（1） |
+| 482 | 查 `SNK_PDO_EPR` | 返回字节数（32） |
+
+**下一次日志怎么读**
+
+| 现象 | 结论 |
+|---|---|
+| `EPR_ENTER a=0` + `EPR_EVT a=113` | EPR_Mode 报文确实发出并被 Source ACK，接下来只该等 114/119 |
+| `EPR_ENTER a=0` + 无任何 `EPR_EVT` | 报文没出去或 PE 未发：用 CC 分析仪确认；同时看 `EPR_ACT` 是否有 CHECK_PDO |
+| `EPR_ENTER a=1/2/3` | 应用层调用时机或 PE 状态问题（0/1/2/3 见上表） |
+| `EPR_EVT a=112` 或 `115` | Source 明确拒绝：先查 e-marker 线缆、VCONN、Sink EPR 能力声明 |
+| `EPR_EVT a=119` 之后才有 `EPR_CAPS` | 能力消息到了但对象没被识别：看 `EPR_CAPS a` 字节数与 `b` 首个 PDO |
+| `EPR_ACT a=4 b=0` 反复出现 | PE 在反复做 PDO 校验，说明流程卡在 PDO 有效性而非 EPR 模式本身 |
+
+本轮 Rebuild：**0 Error(s), 0 Warning(s)**，`Code=78,632 RO-data=3,988 RW-data=464 ZI-data=21,120`；host 单测 7/7 通过。

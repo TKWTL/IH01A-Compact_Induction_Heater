@@ -249,10 +249,14 @@ void USBPD_DPM_Notification(uint8_t PortNum, USBPD_NotifyEventValue_TypeDef Even
       PD_Diag_Record(PD_DIAG_CONTRACT,1u,(uint32_t)EventVal);
       break;
 #if defined(USBPDCORE_EPR)
+    case USBPD_NOTIFY_EPRMODE_INVALID:
+    case USBPD_NOTIFY_EPRMODE_ACK:
     case USBPD_NOTIFY_EPRMODE_SUCCEEDED:
     case USBPD_NOTIFY_EPRMODE_FAILED:
-    case USBPD_NOTIFY_EPRMODE_INVALID:
+    case USBPD_NOTIFY_EPRMODE_INIT:
     case USBPD_NOTIFY_EPRMODE_EXIT:
+    case USBPD_NOTIFY_EPR_SNKCAP_RECEIVED:
+    case USBPD_NOTIFY_EPR_SRCCAP_RECEIVED:
       PD_Input_EPR_Notify((uint32_t)EventVal);
       break;
 #endif
@@ -377,8 +381,11 @@ void USBPD_DPM_GetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
   case USBPD_CORE_DATATYPE_SNK_PDP_EPR:
     if(Size)
     {
-      if(Ptr)Ptr[0]=(uint8_t)(IH01A_EPR_28V5A_HARDWARE_APPROVED ? 140u : 0u);
+      /* EPR_Mode Enter carries the Sink Operational PDP; a zero here makes
+       * the Source answer the EPR request with an invalid/zero field. */
+      if(Ptr)Ptr[0]=(uint8_t)(IH01A_EPR_28V5A_HARDWARE_APPROVED ? IH01A_EPR_SINK_PDP_W : 0u);
       *Size=Ptr?1u:0u;
+      PD_Diag_Record(PD_DIAG_EPR_ACTION,0x1E1u,*Size);
     }
     break;
   case USBPD_CORE_DATATYPE_SNK_PDO_EPR:
@@ -389,12 +396,19 @@ void USBPD_DPM_GetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
       memcpy(pdos,PORT0_PDO_ListSNK,PORT0_NB_SINKPDO*sizeof(uint32_t));
       epr.SNKFixedPDO.FixedSupply=USBPD_CORE_PDO_TYPE_FIXED;
       epr.SNKFixedPDO.VoltageIn50mVunits=28000u/50u;
-      epr.SNKFixedPDO.OperationalCurrentIn10mAunits=5000u/10u;
+      epr.SNKFixedPDO.OperationalCurrentIn10mAunits=(uint16_t)(IH01A_EPR_SINK_CURRENT_MA/10u);
+      /* Sink PDO 1..5 are SPR, 6..7 unused, 28V/5A lands on position 8. */
       pdos[7]=epr.d32;
       memcpy(Ptr,pdos,sizeof(pdos));
       *Size=sizeof(pdos);
+      PD_Diag_Record(PD_DIAG_EPR_ACTION,0x1E2u,*Size);
     }
     else if(Size)*Size=0u;
+    break;
+  case USBPD_CORE_DATATYPE_SRC_PDO_EPR:
+    /* Sink-only port: there is no source EPR PDO to publish. Never leave
+     * *Size untouched, the PE may read stale stack bytes. */
+    if(Size)*Size=0u;
     break;
   case USBPD_CORE_DATATYPE_REQ_COPYPDO:
     if(Size)
@@ -1009,17 +1023,25 @@ USBPD_StatusTypeDef USBPD_DPM_RequestSecurityRequest(uint8_t PortNum)
 #if defined(USBPDCORE_EPR)
 uint32_t USBPD_DPM_RequestWhatToDo(uint8_t PortNum, uint32_t IDAction)
 {
+    uint32_t reply;
     if(PortNum != USBPD_PORT_0) return USBPD_REJECT;
     switch(IDAction)
     {
     case USBPD_ACTION_CHECK_PDO:
-        /* Real PDO validation is wired in the EPR policy stage. */
-        return USBPD_OK;
+        /* Header contract for this action: USBPD_OK means valid PDO.
+         * Anything else makes the PE raise a Hard Reset. */
+        reply = USBPD_OK;
+        break;
     case USBPD_ACTION_REPLY_ENTER_USB:
     case USBPD_ACTION_REPLY_DATA_RESET:
     case USBPD_ACTION_REPLY_ENTER_MODE:
     default:
-        return USBPD_NOTSUPPORTED;
+        reply = USBPD_NOTSUPPORTED;
+        break;
     }
+    /* Every PE question and our exact answer; a wrong reply here silently
+     * aborts the EPR flow, so it must appear in the log. */
+    PD_Diag_Record(PD_DIAG_EPR_ACTION,IDAction,reply);
+    return reply;
 }
 #endif
