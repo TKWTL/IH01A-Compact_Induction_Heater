@@ -143,3 +143,61 @@ For an OLED failure, `status` prints SPI `init_err`, `start_err`,
 This remains 5V-only diagnostics; it is **not** production firmware
 and does not request USB PD 20V or 28V. Source power, OLED external
 VCC, MCU 3.3V and NRST must be checked on the actual board.
+
+## Reset-only failure: diagnostic HSI16 firmware
+
+Observed 2026-11-01: when manually stepping after debugger reset,
+UART `U1OK` and 3-second OLED heartbeat operate correctly for
+at least 24s. Direct hardware/software reset may show no UART or OLED.
+This points to a pre-UART boot failure or debugger/power-up interaction;
+SPI DMA/UI cannot be blamed on the successful run alone.
+
+This diagnostic revision introduces
+`IH01A_RECOVERY_CLOCK_HSI_ONLY=1` in
+`Core/Inc/ih01a_recovery_profile.h`.
+**Only in the 5V recovery build**, use reset-default 16MHz HSI
+instead of setting Flash 2-wait-state and the 64MHz PLL.
+LSE/RTC, USBPD and high-rate ADC remain OFF. USART peripheral
+prescalers adapt to 16MHz via HAL; SPI throughput may fall during
+this experiment. Do NOT use this diagnostic setting for performance
+comparison or production use.
+
+If a cold-reset works reliably on HSI16, while the prior PLL version
+does not, inspect oscillator/Flash latency switching and power
+startup before concluding about any USB-PD or OLED fault. To
+recheck the hypothesis, flip only this macro to 0 and rebuild.
+
+The globally observable `g_recovery_early_stage` Watch variable
+is set at:
+1 main entered; 2 HAL_Init returned; 20 HSI setup entry;
+21 HSI ready timeout; 22 SYSCLK-switch timeout; 23 SysTick failure;
+3 SystemClock_Config returned; 4 SRAM vector relocation complete;
+5 GPIO done; 6 DMA/NVIC ready; 7 UART probe returned.
+The variable can remain 0 if startup stalls in assembly/C runtime
+before `main`; it can be inspected ONLY if SRAM contents are
+preserved when the debugger attaches (do not trigger an extra reset).
+
+On exception, `g_recovery_fault_code`: E1=HardFault,
+E2=Error_Handler, E3=NMI. `g_recovery_fault_from_stage`
+captures the early phase as of the exception. Breakpointing a
+fault handler changes timing and should be performed after the
+initial reset-only trial.
+
+**Test order:**
+1. Record current C140 5V VBUS, MCU 3.3V, and NRST while toggling
+   power. Check external OLED VCC separately; power-source
+   detach/reattach is not equivalent to a Keil software reset.
+2. Rebuild/download HSI-only recovery firmware; exit Keil debug
+   session and physically unplug/replug to get a true cold start.
+   Also try reset-button/NRST without power loss.
+3. For a failed reset, **Connect without Reset**, halt immediately,
+   read PC/SP, `g_recovery_early_stage`,
+   `g_recovery_fault_code`, `g_recovery_fault_from_stage`,
+   `RCC->CR`, `RCC->CFGR`, `SCB->VTOR`. Do not step or
+   rerun before taking the snapshot.
+4. If HSI-only also fails, prioritize BOOT0/option bytes,
+   POR/BOR, NRST rise time, supply loading/backfeeding, flash
+   execution and flash-vector/stack integrity rather than PLL.
+5. This branch is based on the remote recovery head;
+   a user-owned local .uvoptx commit may need rebase after fetch,
+   but must never be dropped or overwritten.

@@ -74,6 +74,11 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN 0 */
 /* Recovery-only low-overhead debug milestone. Remains 0 in normal builds. */
 volatile uint32_t g_recovery_init_stage;
+/* Early cold-reset stage; inspect from Keil Watch after attaching without
+ * any additional reset. Values only become valid once C runtime enters main. */
+volatile uint32_t g_recovery_early_stage;
+volatile uint32_t g_recovery_fault_code;
+volatile uint32_t g_recovery_fault_from_stage;
 /* SRAM VTOR relocation lives in main.c, not in the PowerControl module.
  * Flash RESET stays at 0x08000000; .ih_vectors is reserved in scatter.
  * 64 vector entries = 256 bytes, and the destination is 256-aligned. */
@@ -110,6 +115,9 @@ int main(void)
   /* Capture reset flags before HAL or RCC initialization touches them. */
   uint32_t boot_reset_flags=RCC->CSR;
   __HAL_RCC_CLEAR_RESET_FLAGS();
+#if IH01A_RECOVERY_5V_ONLY
+  g_recovery_early_stage=1u; /* main() entered before HAL_Init */
+#endif
 
   /* USER CODE END 1 */
 
@@ -117,6 +125,9 @@ int main(void)
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
+#if IH01A_RECOVERY_5V_ONLY
+  g_recovery_early_stage=2u; /* HAL_Init returned */
+#endif
 
   /* USER CODE BEGIN Init */
 
@@ -124,17 +135,27 @@ int main(void)
 
   /* Configure the system clock */
   SystemClock_Config();
+#if IH01A_RECOVERY_5V_ONLY
+  g_recovery_early_stage=3u; /* system clock configured */
+#endif
 
   /* USER CODE BEGIN SysInit */
   /* Copy Flash vector table to the reserved 256B SRAM slot, then switch VTOR.
    * Must happen before peripherals with enabled DMA interrupts start. */
   RelocateVectorTable();
+#if IH01A_RECOVERY_5V_ONLY
+  g_recovery_early_stage=4u; /* SRAM VTOR active */
+#endif
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+#if IH01A_RECOVERY_5V_ONLY
+  g_recovery_early_stage=5u; /* GPIO initialized */
+#endif
   MX_DMA_Init();
 #if IH01A_RECOVERY_5V_ONLY
+  g_recovery_early_stage=6u; /* DMA/NVIC initialized */
   /* In recovery, probe TX before RTC/SPI or other app initialization.
    * Any later hang can now be distinguished from USART setup failure. */
   g_uart_boot_stage=1u;
@@ -143,6 +164,7 @@ int main(void)
   DebugUART_Init(boot_reset_flags);
   g_uart_boot_stage=3u;
   g_recovery_init_stage=1u; /* UART probe and first DMA kicked */
+  g_recovery_early_stage=7u; /* UART boot probe completed */
   /* RTC/LSE are entirely omitted in the recovery build: RTC setup can
    * also wait indefinitely for LSE and is irrelevant to OLED/UART. */
   MX_SPI1_Init();
@@ -190,6 +212,10 @@ int main(void)
    * External CC Rd alone keeps compliant USB-C sources at default 5V.
    * This isolates firmware, UART and SSD1315 from PD contract resets. */
   printf("[RECOVERY] USBPD OFF; passive Rd, 5V default only\r\n");
+  printf("[RECOVERY] boot-stage=%lu HSI16=%u SYSCLK=%luHz\r\n",
+         (unsigned long)g_recovery_early_stage,
+         (unsigned)IH01A_RECOVERY_CLOCK_HSI_ONLY,
+         (unsigned long)SystemCoreClock);
 #endif
 
   /* Infinite loop */
@@ -237,6 +263,42 @@ int main(void)
   */
 void SystemClock_Config(void)
 {
+#if IH01A_RECOVERY_5V_ONLY && IH01A_RECOVERY_CLOCK_HSI_ONLY
+  /* Compare startup at reset-default 16MHz HSI against the old PLL path.
+   * No Flash wait-state/PLL/LSE writes: the aim is to isolate clock startup
+   * from VDD ramp, NRST release, and debugging timing.
+   * RTC, ADC, UCPD and heater PWM remain disabled in this build. */
+  uint32_t attempts=1000000u;
+  g_recovery_early_stage=20u; /* entered diagnostic clock setup */
+  LL_RCC_HSI_Enable();
+  while(LL_RCC_HSI_IsReady()!=1u)
+  {
+    if(--attempts==0u)
+    {
+      g_recovery_early_stage=21u; /* HSI never ready */
+      Error_Handler();
+    }
+  }
+  LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
+  LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
+  LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_HSI);
+  attempts=1000000u;
+  while(LL_RCC_GetSysClkSource()!=LL_RCC_SYS_CLKSOURCE_STATUS_HSI)
+  {
+    if(--attempts==0u)
+    {
+      g_recovery_early_stage=22u; /* SYSCLK switch failed */
+      Error_Handler();
+    }
+  }
+  LL_SetSystemCoreClock(16000000u);
+  if(HAL_InitTick(TICK_INT_PRIORITY)!=HAL_OK)
+  {
+    g_recovery_early_stage=23u; /* SysTick reconfig failed */
+    Error_Handler();
+  }
+  return;
+#endif
   LL_FLASH_SetLatency(LL_FLASH_LATENCY_2);
   while(LL_FLASH_GetLatency() != LL_FLASH_LATENCY_2)
   {
@@ -304,6 +366,10 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
+#if IH01A_RECOVERY_5V_ONLY
+  g_recovery_fault_from_stage=g_recovery_early_stage;
+  g_recovery_fault_code=0xE2u; /* Error_Handler */
+#endif
   __disable_irq();
   while (1)
   {

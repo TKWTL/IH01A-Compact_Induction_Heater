@@ -8,4 +8,9 @@
  * unplug the PD source and let VBUS discharge before reconnecting.
  */
 #define IH01A_RECOVERY_5V_ONLY 1
+/* Diagnostic A/B experiment: 1 = 16MHz HSI, no PLL, no LSE/RTC.
+ * 0 = original 64MHz PLL setup (LSE still disabled by 5V recovery).
+ * Keep disabled in the actual production build.
+ */
+#define IH01A_RECOVERY_CLOCK_HSI_ONLY 1
 #endif

@@ -24,6 +24,11 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ih01a_recovery_profile.h"
+#if IH01A_RECOVERY_5V_ONLY
+extern volatile uint32_t g_recovery_early_stage;
+extern volatile uint32_t g_recovery_fault_code;
+extern volatile uint32_t g_recovery_fault_from_stage;
+#endif
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -83,7 +88,10 @@ extern UART_HandleTypeDef huart1;
 void NMI_Handler(void)
 {
   /* USER CODE BEGIN NonMaskableInt_IRQn 0 */
-
+#if IH01A_RECOVERY_5V_ONLY
+  g_recovery_fault_from_stage=g_recovery_early_stage;
+  g_recovery_fault_code=0xE3u; /* NMI */
+#endif
   /* USER CODE END NonMaskableInt_IRQn 0 */
   /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
    while (1)
@@ -98,7 +106,10 @@ void NMI_Handler(void)
 void HardFault_Handler(void)
 {
   /* USER CODE BEGIN HardFault_IRQn 0 */
-
+#if IH01A_RECOVERY_5V_ONLY
+  g_recovery_fault_from_stage=g_recovery_early_stage;
+  g_recovery_fault_code=0xE1u; /* HardFault */
+#endif
   /* USER CODE END HardFault_IRQn 0 */
   while (1)
   {
