@@ -69,7 +69,8 @@ void PowerDashboard_Poll(void)
         }
         else
         {
-            uint16_t mv=ConvADC_PinMillivolts(snapshot.raw[i]);
+            uint32_t mv=(uint32_t)ConvADC_PinMillivolts(snapshot.raw[i]);
+            if(i==CONV_ADC_VBUS) mv*=16u; /* actual BUS, not ADC pin */
             (void)snprintf(s_labels[i],sizeof(s_labels[i]),
                  "%s: %u.%03uV",s_names[i],
                  (unsigned)(mv/1000u),(unsigned)(mv%1000u));

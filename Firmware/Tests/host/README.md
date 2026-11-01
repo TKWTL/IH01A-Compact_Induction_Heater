@@ -10,3 +10,6 @@ RTC time-service regression: tests leap-day/month rollovers, 2000-based
 calendar-to-seconds conversion, uptime, formatting and mocked RTC read
 failures. The mock is under `Tests/host/rtc_mock` and is used only by
 host tests; it does not alter the STM32 HAL or the Keil project.
+
+`test_pd_select.c` verifies highest eligible Fixed SPR PDO, current
+clamp, RDO object position/units and rejection of EPR/PPS/invalid bytes.

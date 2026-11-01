@@ -3418,6 +3418,16 @@
               <FilePath>../APP/framework/pm_ui_register.c</FilePath>
             </File>
             <File>
+              <FileName>pd_input.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/framework/pd_input.c</FilePath>
+            </File>
+            <File>
+              <FileName>pd_select.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/framework/pd_select.c</FilePath>
+            </File>
+            <File>
               <FileName>system.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/framework/system.c</FilePath>

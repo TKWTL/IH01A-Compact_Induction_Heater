@@ -109,3 +109,23 @@ HT/TC→控制状态机；中断执行期间拉高 ISR_TIME(PF1)，结束拉低�
 `Settings/System` 的最后一项是 System Reset，
 `Statistics/System` 顶部为 Uptime，之后保持原 ADC 数据列表。
 本轮不实现预约后实际启动感应加热，必须先验证硬件保护与用户确认流程。
+
+## USBPD sink-only input & DCin (2026-11-01)
+
+`framework/pd_input.c/h` handles CAD attach/detach session, Source
+Capabilities events, fixed RDO selection, explicit-contract state and
+manual refresh via Settings/PD. `pd_select.c/h` is a pure selector for
+host tests; no heap, no float, no PWM/heater enable. It requests the
+highest source-advertised **Fixed SPR** voltage below product 32V limit
+(current linked PD3 MINSNK library only supports up to 20V SPR; EPR is
+not implemented), with requested current capped by source and 3A.
+Subsequent SourceCapabilities callbacks reuse the prior profile while
+attached unless the user triggers manual Retry PD.
+
+USBPD PWR interfaces now use `ConvADC_PinMillivolts(VBUS)*16`, whose
+12-bit 2.5V ADC range represents 0..40V. 4.5..(<32)V without a PD
+explicit contract is tagged `DCin` after attach timeout; this may be
+XT30 or USB-C default/non-PD and does not prove connector identity.
+CAD/PHY analog internal Rd may coexist with board-level permanent
+external Rd; confirm CC voltage on target before assuming compliant
+Type-C attach current detection. No EPR entry or power-stage use.

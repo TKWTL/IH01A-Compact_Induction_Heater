@@ -36,6 +36,7 @@
 /* USER CODE BEGIN Includes */
 #include "app_tasks.h"
 #include "pd_source_stats.h"
+#include "framework/pd_input.h"
 /* USER CODE END Includes */
 
 /** @addtogroup STM32_USBPD_APPLICATION
@@ -143,6 +144,7 @@
 USBPD_StatusTypeDef USBPD_DPM_UserInit(void)
 {
 /* USER CODE BEGIN USBPD_DPM_UserInit */
+  PD_Input_Init();
   return USBPD_OK;
 /* USER CODE END USBPD_DPM_UserInit */
 }
@@ -182,9 +184,19 @@ void USBPD_DPM_UserExecute(void const *argument)
 void USBPD_DPM_UserCableDetection(uint8_t PortNum, USBPD_CAD_EVENT State)
 {
 /* USER CODE BEGIN USBPD_DPM_UserCableDetection */
-  if(PortNum == USBPD_PORT_0 &&
-     (State == USBPD_CAD_EVENT_DETACHED || State == USBPD_CAD_EVENT_EMC))
+  if(PortNum == USBPD_PORT_0)
+  {
+    if(State == USBPD_CAD_EVENT_ATTACHED)
+    {
+      PD_Input_Attach(1u);
+    }
+    else if(State == USBPD_CAD_EVENT_DETACHED ||
+            State == USBPD_CAD_EVENT_EMC)
+    {
       PD_SourceStats_Clear();
+      PD_Input_Attach(0u);
+    }
+  }
 /* USER CODE END USBPD_DPM_UserCableDetection */
 }
 
@@ -222,6 +234,27 @@ void USBPD_DPM_Notification(uint8_t PortNum, USBPD_NotifyEventValue_TypeDef Even
      (EventVal == USBPD_NOTIFY_USBSTACK_STOP ||
       EventVal == USBPD_NOTIFY_USBSTACK_START))
       PD_SourceStats_Clear();
+  if(PortNum == USBPD_PORT_0)
+  {
+    switch(EventVal)
+    {
+    case USBPD_NOTIFY_POWER_EXPLICIT_CONTRACT:
+    case USBPD_NOTIFY_POWER_SNK_READY:
+      PD_Input_Contract(1u);
+      break;
+    case USBPD_NOTIFY_POWER_SNK_STOP:
+    case USBPD_NOTIFY_USBSTACK_STOP:
+      PD_Input_Contract(0u);
+      break;
+    case USBPD_NOTIFY_REQUEST_REJECTED:
+    case USBPD_NOTIFY_REQUEST_WAIT:
+    case USBPD_NOTIFY_REQUEST_ERROR:
+      /* The previous explicit contract may remain valid. */
+      break;
+    default:
+      break;
+    }
+  }
   switch(EventVal)
   {
 //    case USBPD_NOTIFY_POWER_EXPLICIT_CONTRACT :
@@ -276,7 +309,10 @@ void USBPD_DPM_HardReset(uint8_t PortNum, USBPD_PortPowerRole_TypeDef CurrentRol
   (void)CurrentRole;
   (void)Status;
   if(PortNum == USBPD_PORT_0)
+  {
       PD_SourceStats_Clear();
+      PD_Input_Reset();
+  }
 /* USER CODE END USBPD_DPM_HardReset */
 }
 
@@ -294,8 +330,12 @@ void USBPD_DPM_GetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
   /* Check type of information targeted by request */
   switch(DataId)
   {
-//  case USBPD_CORE_DATATYPE_SNK_PDO:           /*!< Handling of port Sink PDO, requested by get sink capa*/
-    // break;
+  case USBPD_CORE_DATATYPE_SNK_PDO:
+    /* ST AN5418: GetPortPDOs returns the number of 32-bit objects.
+     * DPM callback sizes are bytes. */
+    USBPD_PWR_IF_GetPortPDOs(PortNum, DataId, Ptr, Size);
+    *Size *= sizeof(uint32_t);
+    break;
 //  case USBPD_CORE_EXTENDED_CAPA:              /*!< Source Extended capability message content          */
     // break;
 //  case USBPD_CORE_DATATYPE_REQ_VOLTAGE:       /*!< Get voltage value requested for BIST tests, expect 5V*/
@@ -333,7 +373,10 @@ void USBPD_DPM_SetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
   {
   case USBPD_CORE_DATATYPE_RCV_SRC_PDO:
     if(PortNum == USBPD_PORT_0)
+    {
         PD_SourceStats_Receive(Ptr, Size);
+        PD_Input_Caps(Ptr, Size);
+    }
     break;
 //  case USBPD_CORE_DATATYPE_RDO_POSITION:      /*!< Reset the PDO position selected by the sink only */
     // break;
@@ -375,7 +418,13 @@ void USBPD_DPM_SetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
 void USBPD_DPM_SNK_EvaluateCapabilities(uint8_t PortNum, uint32_t *PtrRequestData, USBPD_CORE_PDO_Type_TypeDef *PtrPowerObjectType)
 {
 /* USER CODE BEGIN USBPD_DPM_SNK_EvaluateCapabilities */
-  DPM_USER_DEBUG_TRACE(PortNum, "ADVICE: update USBPD_DPM_SNK_EvaluateCapabilities");
+  if(PtrRequestData != NULL && PtrPowerObjectType != NULL)
+  {
+    *PtrRequestData = 0u;
+    *PtrPowerObjectType = USBPD_CORE_PDO_TYPE_FIXED;
+    if(PortNum == USBPD_PORT_0)
+       (void)PD_Input_Evaluate(PtrRequestData, PtrPowerObjectType);
+  }
 /* USER CODE END USBPD_DPM_SNK_EvaluateCapabilities */
 }
 

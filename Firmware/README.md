@@ -120,3 +120,48 @@ Collar-Radio 的 `system_operation`、`system_statistic`、`time` 已按本机�
 - 源代码按 Collar-Radio 的“读 HAL RTC 时间后立即读日期”规范，
   复制出 32 位对齐的日历字段，规避 Cortex-M0+ 直接使用打包成员的风险；
   闰年、跨日、跨月及无效 RTC 日期均有处理。
+
+## PD Sink input negotiation / DCin classification (2026-11-01)
+
+- `APP/framework/pd_input.c/h`: one automatic selection per Type-C CAD attach session;
+  `pd_select.c/h`: deterministic, host-testable Fixed PDO ranking and RDO encoding.
+  `Settings -> PD -> Retry PD` explicitly sends GET_SOURCE_CAPABILITIES to
+  request fresh capabilities. No periodic GetSourceCaps polling or automatic
+  voltage escalation after the initial selection. After a hard reset, ST PE
+  can re-invoke the callback to recover the **same** contract; it reuses the
+  cached choice instead of running the highest-voltage algorithm again.
+- The bundled library is `USBPDCORE_PD3_CONFIG_MINSNK_CM0PLUS_Keil.lib`
+  (SPR PD3.0 Sink, no EPR entry). Thus **the current automatically
+  requestable ceiling is 20V**, despite the product policy being
+  strictly less than 32V. The 28V EPR Fixed profile, PPS/AVS and
+  proprietary 32V are NOT requested. Proper EPR requires upgrading
+  the stack and documenting cable, port and hardware limits first.
+- Request is **highest valid SPR Fixed PDO** (5/9/12/15/20V or other
+  in-range fixed voltage), limited to the source advertised current and
+  <=3A as a temporary software cap. This is NOT a validated
+  continuous load or input-power rating. Any actual power stage remains
+  OFF. Source PDO callback builds an RDO once after attach; PE
+  handles the standard initial Request/Accept/PS_RDY process.
+- VBUS ADC rank4 is PB2/ADC1_IN10. Measured ADC pin millivolts
+  (`VREF+ = 2500mV`) are multiplied by **16** to get actual BUS voltage:
+  `Vbus_mV = round(ADC_raw*2500/4095)*16`.
+  Full-scale is 40V (above this ADC saturates). The same function
+  supplies the USBPD PWR interface's VBUSGetVoltage, VBUSIsOn and ReadVA,
+  and Statistics/System VBUS row; input current is currently unknown (0).
+- Input type derives only from **PD explicit-contract notification**:
+  `PD` on explicit contract with 4.5..(<32)V bus;
+  `DCin` on valid 4.5..(<32)V bus without an explicit PD contract
+  (including XT30 and Type-C without successful PD negotiation);
+  `PD Wait` for up to 3s after CC attach; otherwise `No Input`.
+  **DCin is a fallback classification, not proof the physical XT30
+  connector is connected.** No power routing/reverse-feed protection
+  is managed by this firmware.
+- CC1/CC2 have **external permanently fitted Rd**. This module never
+  toggles any MCU pin to switch Rd/Rp. However ST's CAD/PHY code does
+  execute `USBPDM1_AssertRd()` and `LL_UCPD_SetSNKRole()`, which may
+  enable the UCPD internal Rd in parallel. Confirm actual CC1/CC2
+  voltage/equivalent Rd on the board before assuming compliance.
+- Sink Capabilities advertise five SPR Fixed PDOs at up to 3A; the PD
+  source must still accept the RDO. USBPD PWR IF no longer returns a
+  placeholder 0V or unconditionally fails Init. The Keil group
+  `IH01A/APP/framework` includes `pd_input.c` and `pd_select.c`.

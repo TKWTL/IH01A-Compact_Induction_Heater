@@ -27,7 +27,7 @@
 #endif /* _TRACE */
 
 /* USER CODE BEGIN include */
-
+#include "framework/pd_input.h"
 /* USER CODE END include */
 
 /** @addtogroup BSP
@@ -919,15 +919,10 @@ __weak int32_t BSP_USBPD_PWR_VBUSGetVoltage(uint32_t Instance, uint32_t *pVoltag
   int32_t ret = BSP_ERROR_NONE;
 
   if ((Instance >= USBPD_PWR_INSTANCES_NBR) || (NULL == pVoltage))
-  {
-    ret = BSP_ERROR_WRONG_PARAM;
-  }
-  *pVoltage = 0u;
-  /* !!!
-      BSP_PWR_VBUSGetVoltage is obsolete. You may need to move your user code
-      inside this function
-   !!! */
-  PWR_DEBUG_TRACE(Instance, "ADVICE: Update BSP_USBPD_PWR_VBUSGetVoltage");
+      return BSP_ERROR_WRONG_PARAM;
+  /* ADC Rank4 VBUS pin, ADC Vref=2.5V, hardware divider ratio x16.
+   * 12-bit ADC full-scale corresponds to 40V on the actual BUS. */
+  *pVoltage = PD_Input_VbusMillivolts();
   return ret;
   /* USER CODE END BSP_USBPD_PWR_VBUSGetVoltage */
 }
@@ -1204,24 +1199,10 @@ __weak int32_t BSP_USBPD_PWR_RegisterVBUSDetectCallback(uint32_t  Instance,
 __weak int32_t BSP_USBPD_PWR_VBUSIsOn(uint32_t Instance, uint8_t *pState)
 {
   /* USER CODE BEGIN BSP_USBPD_PWR_VBUSIsOn */
-  /* Check if instance is valid       */
-  int32_t ret;
-
-  if (Instance >= USBPD_PWR_INSTANCES_NBR)
-  {
-    ret = BSP_ERROR_WRONG_PARAM;
-  }
-  else
-  {
-    ret = BSP_ERROR_FEATURE_NOT_SUPPORTED;
-    /* !!!
-        BSP_PWR_VBUSIsOn is obsolete. You may need to move your user code
-        inside this function
-     !!! */
-    PWR_DEBUG_TRACE(Instance, "ADVICE: Update BSP_USBPD_PWR_VBUSIsOn");
-  }
-  *pState = 0u;
-  return ret;
+  if(Instance >= USBPD_PWR_INSTANCES_NBR || pState == NULL)
+      return BSP_ERROR_WRONG_PARAM;
+  *pState = (PD_Input_VbusMillivolts() >= 4500u) ? 1u : 0u;
+  return BSP_ERROR_NONE;
   /* USER CODE END BSP_USBPD_PWR_VBUSIsOn */
 }
 

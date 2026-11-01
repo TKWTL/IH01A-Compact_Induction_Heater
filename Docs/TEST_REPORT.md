@@ -117,3 +117,27 @@ Implementation pending Keil/hardware verification:
 生成弱符号，可与另一目标文件中的强定义成功链接。
 **尚未在目标 Keil ARMClang 6.24 工程中重编译验证**；下次 Rebuild 后
 检查没有 L6200E，并用 .map 确认入口在 `.ih_ramfunc` 和 SRAM VTOR 中。
+
+## 2026-11-01 PD sink/ADC VBUS framework (code only)
+
+- Added PD Input module and pure Fixed PDO selector; patched DPM
+  GetDataInfo(SNK_PDO), SetDataInfo(RCV_SRC_PDO),
+  SNK_EvaluateCapabilities and event callbacks. Request policy is one
+  automatic highest-voltage Fixed SPR profile per CC attach, <=20V with
+  present PD3.0 minimal sink library and <=3A source-limited current.
+  EPR/AVS/PPS/32V are NOT supported.
+- Patched `USBPD_PWR_IF_Init` placeholder ERROR to OK; power voltage
+  read callbacks now obtain `VBUS ADC pin voltage *16` (mV) instead
+  of zero; current remains uncalibrated. VBUS in Statistics/System now
+  reports actual divided-bus estimate.
+- Added `Settings->PD->Retry PD` and read-only input/BUS/request
+  indicators. No automatic recurring requests: PE may send a repeated
+  Request upon source retransmission/recovery, but DPM policy reuses
+  previously selected PDO rather than auto-upgrading it.
+- Pure host tests cover fixed voltage ranking, RDO bit fields, source
+  current cap, PPS/EPR/32V exclusions and malformed PDO lengths.
+- **Not yet target verified**: Keil compile/link, actual CC Rd
+  paralleling, physical dual-input isolation, initial sourcecap order,
+  5/9/15/20V negotiated transitions, manual retry on a failed contract,
+  VBUS voltage trace and >32V input overvoltage handling. Do not turn on
+  heater PWM before all are qualified.

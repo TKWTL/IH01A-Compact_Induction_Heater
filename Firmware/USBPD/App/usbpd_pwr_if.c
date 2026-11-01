@@ -32,7 +32,7 @@
 #endif /* _TRACE */
 #include "string.h"
 /* USER CODE BEGIN Include */
-
+#include "framework/pd_input.h"
 /* USER CODE END Include */
 
 /** @addtogroup STM32_USBPD_APPLICATION
@@ -115,7 +115,8 @@
 USBPD_StatusTypeDef USBPD_PWR_IF_Init(void)
 {
 /* USER CODE BEGIN USBPD_PWR_IF_Init */
-  return USBPD_ERROR;
+  /* Passive sink. No VBUS switch or sourced power rail to initialize. */
+  return USBPD_OK;
 /* USER CODE END USBPD_PWR_IF_Init */
 }
 
@@ -163,7 +164,12 @@ USBPD_StatusTypeDef USBPD_PWR_IF_SupplyReady(uint8_t PortNum, USBPD_VSAFE_Status
 USBPD_StatusTypeDef USBPD_PWR_IF_ReadVA(uint8_t PortNum, uint16_t *pVoltage, uint16_t *pCurrent)
 {
 /* USER CODE BEGIN USBPD_PWR_IF_ReadVA */
-  return USBPD_ERROR;
+  if(PortNum != USBPD_PORT_0 || pVoltage == NULL || pCurrent == NULL)
+    return USBPD_ERROR;
+  /* VBUS ADC gain x16; no calibrated current sensor is available yet. */
+  *pVoltage = (uint16_t)PD_Input_VbusMillivolts();
+  *pCurrent = 0u;
+  return USBPD_OK;
 /* USER CODE END USBPD_PWR_IF_ReadVA */
 }
 
