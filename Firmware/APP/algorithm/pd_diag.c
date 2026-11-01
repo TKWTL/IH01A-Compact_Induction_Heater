@@ -47,6 +47,8 @@ void PD_Diag_Service(void)
     case PD_DIAG_EPR_COPYPDO:label="EPR_COPY";break;
     case PD_DIAG_EPR_EVENT:label="EPR_EVT";break;
     case PD_DIAG_EPR_ACTION:label="EPR_ACT";break;
+    case PD_DIAG_GETINFO:label="GETINFO";break;
+    case PD_DIAG_SETINFO:label="SETINFO";break;
     default:label="UNKNOWN";break;
     }
     printf("[PD %lu] %s a=%lu b=0x%08lX\r\n",

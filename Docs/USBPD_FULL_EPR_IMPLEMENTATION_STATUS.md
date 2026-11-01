@@ -167,3 +167,39 @@ PDP 用 140 W 而**不是** 84 W：Sink PDO 与请求电流都是 5 A，PDP 写 
 | `EPR_ACT a=4 b=0` 反复出现 | PE 在反复做 PDO 校验，说明流程卡在 PDO 有效性而非 EPR 模式本身 |
 
 本轮 Rebuild：**0 Error(s), 0 Warning(s)**，`Code=78,676 RO-data=3,988 RW-data=468 ZI-data=21,124`；host 单测 7/7 通过。`EPR_ACT` 的 481/482 只在值变化时记录，避免 PE 轮询把 32 条诊断队列冲掉。
+
+### 2026-11-02 板端日志判读（EPR_Mode 未发出）+ 观测面再扩一圈
+
+**`U1OK` 是什么**：`DebugUART_Init()` 在 `MX_USART1_UART_Init()` 之后用 **阻塞 HAL_UART_Transmit** 发的 6 字节探针（`Firmware/Core/Src/usart.c:251`），早于所有 printf 和调度器。它证明"已烧录 + USART1 初始化跑到了 + PB6 真的在发"。因此日志里 `U1OK` 出现在上一段的末尾时，它属于**下一段启动**：`U1OK\r\n` 后面紧跟 `[BOOT]` 自带的 `\r\n`，看起来就是空行。
+
+**`flags=` 是 `RCC->CSR` 原始值**（`main.c:114` 在 HAL 初始化前抓取，且**从不清除**，所以标志会累积）：
+
+| 位 | 含义 |
+|---|---|
+| 26 `PINRSTF` | NRST 引脚复位（调试器 reset / 复位键） |
+| 27 `PWRRSTF` | 上电/掉电复位 |
+| 28 `SFTRSTF` | 软件复位 |
+| 29/30/31 | IWDG / WWDG / 低功耗复位 |
+
+- `0x04000000` = 只有 PINRST：**上次是调试器/复位键复位，MCU 单独重启而 VBUS 仍有 20 V**。
+- `0x0C000000` = PINRST + PWRRST：随后又发生过掉电复位（拔插线），即用户手动断电重启那一次。
+
+**`HARD_RESET a=` 是 `USBPD_HR_Status_TypeDef`**：0 `START_ACK`、1 `START_REQ`、2 `MSG_SENT`、3 `WAIT_VBUS_VSAFE0V`、4 `WAIT_VBUS_VSAFE5V`、5 `COMPLETED`、6 `FAILED`。
+`[PD 544] HARD_RESET a=1` → `a=3` → `[PD 1544] a=6` 的意思是：**硬复位发出去了，卡在等 VBUS 降到 vSafe0V，最后 FAILED**。也就是 Source 没有把 VBUS 拉下来（或我方放电不足/ADC 采不到），硬复位流程走不完；这也是"带电复位后一直起不来、必须拔插"的机制，不是随机故障。`[PD ...] NOTIFY a=31` 正好是 `USBPD_NOTIFY_HARDRESET_TX`（我们这边发出的硬复位）。
+
+**本次 EPR 的关键结论**：`EPR_ENTER a=0`（`USBPD_OK`，请求已投递给栈）之后 **718/4823 ms 内一条 `EPR_EVT` 都没有**，也没有任何 `EPR_ACT`，随后第二次 `pd epr` 返回 `a=3`（`USBPD_BUSY`）。这说明：栈**收下了**请求并把它标记为"进行中"，但 PE **既没有向我们索取 PDP/EPR PDO，也没有发出任何 EPR 通知**。所以此刻不是线缆/PDO/PDP 的问题，而是"PE 没开始干活"或"开始前问的东西我们没答对"。
+
+为此本轮再补三项观测（Rebuild：0 error / 0 warning，`Code=78,848 RO-data=4,000 RW-data=468 ZI-data=21,180`）：
+
+1. **`GETINFO` / `SETINFO`**：PE 每一次向 DPM 取/送数据都记录 `DataId` 与字节数，**每个 id 只记第一次**（`PD_SeenOnce`，4×32 位位图），避免 PE 轮询冲掉 32 条队列。这条最可能直接给出答案：如果 PE 在"忙"的时候向我们要了某个 DataId（例如 `USBPD_CORE_DATATYPE_EPRMODE`）而我们返回了 0 字节，就能立刻看出来。
+2. **`GetDataInfo` 的 default 分支现在写 `*Size=0`**：以前不写，PE 可能读到栈上残留长度并据此继续处理，这是"静默卡住"的典型来源。
+3. **`EPR_EVT a=0 b=0x0000D00D`**：请求已投递但 1 s 内没有任何 EPR 通知时，主动记一条"PE 静默"标记，免得日志看起来像"什么都没发生"。
+
+下一份日志需要看的新行（`DataId` 取值：`SNK_EXTENDED_CAPA`=19、`ENTERUSB`=20、`EPRMODE`=23、`SNK_PDO_EPR`=25、`RCV_SRC_PDO_EPR`=26、`REQ_COPYPDO`=29、`SNK_PDP_EPR`=30；`PECABLE` 未启用，故无 20/21 两个线缆身份项）：
+
+```
+[PD n] GETINFO a=30 b=0x00000001     ← PE 要 EPR Sink PDP，返回 1 字节(140)
+[PD n] GETINFO a=25 b=0x00000020     ← PE 要 EPR Sink PDO，返回 32 字节
+[PD n] SETINFO a=26 b=0x00000004     ← PE 交来收到的 Source EPR PDO
+[PD n] EPR_EVT a=0 b=0x0000D00D      ← 请求已投递但 1s 内 PE 完全静默
+```

@@ -15,8 +15,9 @@ static uint32_t s_caps[7], s_epr_caps[13];
 static uint8_t s_count, s_manual, s_epr_count;
 static uint8_t s_epr_mode, s_epr_enter_once, s_epr_exit_queued;
 static uint8_t s_epr_copy_valid, s_epr_user_requested;
+static uint8_t s_epr_any_event, s_epr_stall_logged;
 static uint32_t s_selected_rdo, s_copy_pdo, s_attach_ms, s_contract_ms;
-static uint32_t s_epr_mode_since_ms;
+static uint32_t s_epr_mode_since_ms, s_epr_enter_ms;
 static uint32_t s_spr_rdo,s_spr_mv,s_spr_ma;
 static uint8_t s_spr_pos;
 static PD_InputSnapshot s_state;
@@ -47,8 +48,9 @@ void PD_Input_Init(void)
     memset(s_epr_caps,0,sizeof(s_epr_caps));
     s_count=s_manual=s_epr_count=s_epr_mode=s_epr_enter_once=0u;
     s_epr_exit_queued=s_epr_copy_valid=s_epr_user_requested=0u;
+    s_epr_any_event=s_epr_stall_logged=0u;
     s_selected_rdo=s_copy_pdo=s_attach_ms=s_contract_ms=0u;
-    s_epr_mode_since_ms=0u;
+    s_epr_mode_since_ms=s_epr_enter_ms=0u;
     s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
 }
 void PD_Input_Attach(uint8_t attached)
@@ -65,8 +67,10 @@ void PD_Input_Reset(void)
     s_epr_enter_once=1u;
     s_epr_user_requested=0u;
     s_epr_exit_queued=0u;
+    s_epr_any_event=0u;
+    s_epr_stall_logged=0u;
     s_selected_rdo=s_copy_pdo=0u;
-    s_epr_mode_since_ms=0u;
+    s_epr_mode_since_ms=s_epr_enter_ms=0u;
     s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
     memset(s_caps,0,sizeof(s_caps));
     memset(s_epr_caps,0,sizeof(s_epr_caps));
@@ -163,6 +167,7 @@ void PD_Input_EPR_Notify(uint32_t event)
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
     /* Log EVERY EPR notification first: this is the only proof that the
      * PE really exchanged EPR_Mode / EPR capability messages. */
+    s_epr_any_event=1u;
     PD_Diag_Record(PD_DIAG_EPR_EVENT,event,
                    (uint32_t)s_epr_mode|((uint32_t)s_epr_copy_valid<<1)|
                    ((uint32_t)s_epr_enter_once<<2));
@@ -309,6 +314,16 @@ void PD_Input_EPR_Poll(void)
         s_epr_exit_queued=1u;
         PD_Diag_Record(PD_DIAG_EPR_MODE,0u,0xBAD1u);
     }
+    /* The PE accepted the EPR_Mode request but produced no notification at
+     * all: report it once, so a silent stall is visible in the log instead
+     * of looking like "nothing happened". */
+    if(s_epr_enter_ms&&s_epr_enter_once&&!s_epr_mode&&!s_epr_any_event&&
+       !s_epr_stall_logged&&
+       (uint32_t)(HAL_GetTick()-s_epr_enter_ms)>1000u)
+    {
+        s_epr_stall_logged=1u;
+        PD_Diag_Record(PD_DIAG_EPR_EVENT,0u,0xD00Du);
+    }
     if(s_epr_exit_queued)
     {
         s_epr_exit_queued=0u; /* only one exit attempt */
@@ -320,6 +335,9 @@ void PD_Input_EPR_Poll(void)
        !PD_SourceIsEPRCapable() ||
        (uint32_t)(HAL_GetTick()-s_contract_ms)<250u)return;
     s_epr_enter_once=1u; /* only one request for this attachment */
+    s_epr_enter_ms=HAL_GetTick();
+    s_epr_any_event=0u;
+    s_epr_stall_logged=0u;
     {
         /* Raw USBPD_StatusTypeDef: 0=OK 1=NOTSUPPORTED 2=ERROR 3=BUSY.
          * A boolean hid the difference between "submitted" and "refused". */

@@ -7,7 +7,9 @@ enum {
     PD_DIAG_EPR_ENTER, PD_DIAG_EPR_MODE, PD_DIAG_EPR_CAPS, PD_DIAG_EPR_RDO,
     PD_DIAG_EPR_PDO2, PD_DIAG_EPR_COPYPDO,
     PD_DIAG_EPR_EVENT,      /* a=raw USBPD_NOTIFY_EPR* id, b=state bitmask */
-    PD_DIAG_EPR_ACTION      /* a=USBPD_ACTION_*, b=raw reply to the PE    */
+    PD_DIAG_EPR_ACTION,     /* a=USBPD_ACTION_*, b=raw reply to the PE    */
+    PD_DIAG_GETINFO,        /* a=USBPD_CORE_DATATYPE_*, b=bytes returned  */
+    PD_DIAG_SETINFO         /* a=USBPD_CORE_DATATYPE_*, b=bytes received  */
 };
 void PD_Diag_Record(uint8_t code,uint32_t a,uint32_t b);
 void PD_Diag_Service(void);

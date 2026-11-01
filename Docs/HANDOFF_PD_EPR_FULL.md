@@ -98,7 +98,7 @@ USBPD 中间件已在 `.ioc` 里**取消勾选**（`753c4d1`）：CubeMX 不再�
 ### 步骤 5　EPR 试入　🟡 已可用，待空载首测
 - 许可：`IH01A_EPR_28V5A_HARDWARE_APPROVED=1`（硬件负责人确认输入通路可承受 28 V）；自动进入仍关闭（`..._AUTO_ENTER=0`），入口是串口 `pd epr`。
 - 已接：EPR Mode Enter/Exit、独立 EPR PDO 数组解析（1..6 对象 → 位置 8..13，兼容合并布局）、28 V/5 A 选档、8 字节 RDO+CopyPDO、2.5 s 能力超时、拒绝/失败回退 SPR。
-- 诊断码（2026-11-02 新增，用于定位"EPR 进不去"）：`EPR_ENTER` 记原始 `USBPD_StatusTypeDef`；`EPR_EVT` 记全部 112..119 通知并打印事件名；`EPR_ACT` 记 PE 的 `USBPD_ACTION_*` 提问与我们的回答（4=CHECK_PDO、481=SNK_PDP_EPR、482=SNK_PDO_EPR）。判读表在 `Docs/USBPD_FULL_EPR_IMPLEMENTATION_STATUS.md`。
+- 诊断码（2026-11-02 新增，用于定位"EPR 进不去"）：`EPR_ENTER` 记原始 `USBPD_StatusTypeDef`；`EPR_EVT` 记全部 112..119 通知并打印事件名（`a=0 b=0xD00D` = 请求投递后 1 s 内 PE 完全静默）；`EPR_ACT` 记 PE 的 `USBPD_ACTION_*` 提问与我们的回答（4=CHECK_PDO、481=SNK_PDP_EPR、482=SNK_PDO_EPR）；`GETINFO`/`SETINFO` 记 PE 每次取/送数据的 `DataId` 与字节数（每个 id 只记第一次）。判读表在 `Docs/USBPD_FULL_EPR_IMPLEMENTATION_STATUS.md`。
 - **验收**：见 `Docs/USBPD_FULL_EPR_IMPLEMENTATION_STATUS.md` 的里程碑与异常定位表；`EPR_CAPS a` 的判读也写在那份文档里。
 - 设置 sink EPR 支持位与 Operational PDP（28V×5A=140W）；SPR 契约稳定后调用 `USBPD_PE_Request_EPRModeEnter(0)`。
 - 处理成功/失败通知，读 EPR Source Capabilities，选 28V/5A（拒绝 36/48V），发 **EPR Request（RDO + 匹配的 CopyPDO）**。

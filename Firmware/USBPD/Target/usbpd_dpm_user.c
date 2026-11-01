@@ -40,6 +40,23 @@
 #include "algorithm/pd_input.h"
 #include "algorithm/pd_epr_policy.h"
 #include "algorithm/pd_diag.h"
+
+/* First-occurrence filter. The diag queue holds only 32 entries, and the PE
+ * polls GetDataInfo often; recording every call would push out the event
+ * sequence we are trying to see. Each id is reported once per power-up. */
+#define PD_SEEN_WORDS 4u
+static uint32_t s_seen_notify[PD_SEEN_WORDS];
+static uint32_t s_seen_get[PD_SEEN_WORDS];
+static uint32_t s_seen_set[PD_SEEN_WORDS];
+static uint8_t PD_SeenOnce(uint32_t *map, uint32_t id)
+{
+    uint32_t w, b;
+    if (id >= (PD_SEEN_WORDS * 32u)) return 0u;
+    w = id >> 5u; b = 1u << (id & 31u);
+    if ((map[w] & b) != 0u) return 0u;
+    map[w] |= b;
+    return 1u;
+}
 /* USER CODE END Includes */
 
 /** @addtogroup STM32_USBPD_APPLICATION
@@ -317,6 +334,10 @@ void USBPD_DPM_Notification(uint8_t PortNum, USBPD_NotifyEventValue_TypeDef Even
 //    case USBPD_NOTIFY_DATAROLESWAP_UFP :
 //      break;
     default:
+      /* First occurrence of any notification we do not act on: it is often
+       * the only trace of why a stack operation did not progress. */
+      if ((PortNum == USBPD_PORT_0) && PD_SeenOnce(s_seen_notify, (uint32_t)EventVal))
+        PD_Diag_Record(PD_DIAG_NOTIFY, (uint32_t)EventVal, 0u);
       DPM_USER_DEBUG_TRACE(PortNum, "ADVICE: USBPD_DPM_Notification:%d", EventVal);
       break;
   }
@@ -434,9 +455,15 @@ void USBPD_DPM_GetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
     break;
 #endif
   default:
+    /* Never leave *Size untouched: the PE would consume whatever happened to
+     * be on the stack. "0 bytes" is the correct "not provided" answer. */
+    if(Size)*Size=0u;
     DPM_USER_DEBUG_TRACE(PortNum, "ADVICE: update USBPD_DPM_GetDataInfo:%d", DataId);
     break;
   }
+  /* Which data the PE actually asks for, and how many bytes we handed over. */
+  if ((PortNum == USBPD_PORT_0) && PD_SeenOnce(s_seen_get, (uint32_t)DataId))
+    PD_Diag_Record(PD_DIAG_GETINFO, (uint32_t)DataId, Size ? *Size : 0xFFFFFFFFu);
 /* USER CODE END USBPD_DPM_GetDataInfo */
 }
 
@@ -492,6 +519,9 @@ void USBPD_DPM_SetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
     DPM_USER_DEBUG_TRACE(PortNum, "ADVICE: update USBPD_DPM_SetDataInfo:%d", DataId);
     break;
   }
+  /* Which data the PE pushes into us (EPR mode info, EPR capabilities, ...) */
+  if ((PortNum == USBPD_PORT_0) && PD_SeenOnce(s_seen_set, (uint32_t)DataId))
+    PD_Diag_Record(PD_DIAG_SETINFO, (uint32_t)DataId, Size);
 /* USER CODE END USBPD_DPM_SetDataInfo */
 
 }
