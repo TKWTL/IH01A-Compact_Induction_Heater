@@ -170,6 +170,11 @@ USBPD_StatusTypeDef USBPD_DPM_RequestSecurityRequest(uint8_t PortNum);
   * @}
   */
 
+
+#if defined(USBPDCORE_EPR)
+uint32_t USBPD_DPM_RequestWhatToDo(uint8_t PortNum, uint32_t IDAction);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

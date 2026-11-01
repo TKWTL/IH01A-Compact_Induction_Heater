@@ -948,3 +948,25 @@ USBPD_StatusTypeDef USBPD_DPM_RequestSecurityRequest(uint8_t PortNum)
 /**
   * @}
   */
+
+/* ST FULL v5.4.1 policy callback: new EPR/USB-data action slot.
+ * A conservative SPR-only answer until the EPR policy validation is in place.
+ * Unsupported advanced modes must NEVER be acknowledged here implicitly.
+ */
+#if defined(USBPDCORE_EPR)
+uint32_t USBPD_DPM_RequestWhatToDo(uint8_t PortNum, uint32_t IDAction)
+{
+    if(PortNum != USBPD_PORT_0) return USBPD_REJECT;
+    switch(IDAction)
+    {
+    case USBPD_ACTION_CHECK_PDO:
+        /* Real PDO validation is wired in the EPR policy stage. */
+        return USBPD_OK;
+    case USBPD_ACTION_REPLY_ENTER_USB:
+    case USBPD_ACTION_REPLY_DATA_RESET:
+    case USBPD_ACTION_REPLY_ENTER_MODE:
+    default:
+        return USBPD_NOTSUPPORTED;
+    }
+}
+#endif
