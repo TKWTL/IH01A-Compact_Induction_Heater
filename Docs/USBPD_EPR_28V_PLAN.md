@@ -11,10 +11,10 @@
 
 - Preserve the existing SPR 3A ceiling, RDO, and MINSNK behavior.
 - Update the *offline / pure* extended-capability selector and EPR Fixed RDO to allow a full 5A (28V/5A -> 140W) **only if called after validated EPR mode**.
-- Supply `PD_Input_FixedRDOForEPR()` which sets bit22 in the initial SPR RDO, but do NOT use it until an EPR-capable FULL library is installed and configured.
-- Host regression tests verify SPR remains 3A and EPR helper generates 28V/5A position 8, with valid initial RDO EPR bit.
+- The old hand-built EPR RDO helpers have been removed. All SPR/EPR RDOs are encoded from the matching FULL stack's typed `USBPD_SNKRDO_TypeDef` in `pd_input.c`.
+- Host regression tests verify SPR selector remains 3A and EPR selector chooses 28V/5A position 8. RDO encoding must be checked during ArmClang rebuild and with a PD analyzer.
 
-**This commit does NOT enable 28V at runtime. There is no valid EPR negotiation path with the currently linked MINSNK stack.**
+**The branch now links the FULL EPR-capable stack and includes an EPR policy path, but 28V negotiation is intentionally disabled at runtime by `IH01A_EPR_28V5A_HARDWARE_APPROVED=0`. Keil compilation, 20V regression and 140W hardware clearance remain required.**
 
 ## Next firmware migration: must be done as one matched middleware upgrade
 
