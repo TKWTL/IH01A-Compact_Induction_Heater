@@ -1,8 +1,8 @@
 # 交接：IH01A USB-PD FULL/EPR 迁移（下一棒从这里继续）
 
-**分支**：`feature/pd-epr-28v5a`　**HEAD**：`9762dee`　**基点**：`main@668e541`
-**当前可运行状态**：FULL 栈（v5.4.1）**已链接进镜像**、CubeMX 护栏已就位；`main` 仍是 20 V 稳定版。
-**待做**：板端回归——刷 `6f4b5e0` 后确认 `[PD_INIT] FULL v5.4.1 initialized`、VBUS ≈ 20 V、OLED/UART 正常。EPR（28 V/5 A）仍由 `IH01A_EPR_28V5A_HARDWARE_APPROVED 0` 关闭。
+**分支**：`feature/pd-epr-28v5a`　**基点**：`main@668e541`　**HEAD 见 `git log -1`**（本文档随代码一起提交）
+**当前状态**：FULL 栈（v5.4.1）已链接并**板端 20 V SPR 回归通过**（`SPR_CAPS a=6` → `REQUEST a=20000` → `CONTRACT`，实测 20.048 V）。EPR 许可已由硬件负责人改为 `IH01A_EPR_28V5A_HARDWARE_APPROVED=1`，但 `..._AUTO_ENTER=0`：**只有串口 `pd epr` 才会试 28 V**，普通插电仍停在 20 V。
+**待做**：28 V 空载首测（PWM 禁开、独立 OVP、240 W e-mark 线）；细节与里程碑见 `Docs/USBPD_FULL_EPR_IMPLEMENTATION_STATUS.md`。
 
 ---
 
@@ -90,12 +90,15 @@ USBPD 中间件已在 `.ioc` 里**取消勾选**（`753c4d1`）：CubeMX 不再�
 按 `Docs/USBPD_FULL_EPR_MIGRATION_IMPACT.md` §3 的 7 项：define 换 `USBPDCORE_LIB_PD3_FULL`、库路径、两条 IncludePath、`usbpd_trace.c`、7 个设备层 `.c` 路径。
 **验收**：Rebuild 通过，且 20 V 协商**仍然成功**。
 
-### 步骤 4　20 V 回归　🟡 待板端验收（这一步不做完不许碰 EPR）
-- 编译已过（`6f4b5e0`，0 error / 0 warning）；只剩上板确认。
-- 保持 `PD_Input_BestFixed()` 的 SPR 路径，请求仍 20V/3A。
-- **验收**：串口出现 `[PD_INIT] LIB_ID=0x30410000 check=OK` + `[PD_INIT] FULL v5.4.1 initialized`；`SPR_CAPS` → `SPR REQUEST` → `PS_RDY` 全链路正常，实测 VBUS ≈ 20 V，`USBPD_DPM_UserExecute` 周期无退化，ADC/OLED 不卡，调试器不再停在 `UCPD1_2_IRQHandler`。
+### 步骤 4　20 V 回归　✅ 通过（2026-11-02，板端实测 20.048 V）
+- 保持 `PD_Input_BestFixed()` 的 SPR 路径，请求 20V/3A。
+- **实测**：`[PD_INIT] LIB_ID=0x30410000 check=1 reqmem=4506 heap=8192` → `FULL v5.4.1 initialized` → `SPR_CAPS a=6` → `REQUEST a=20000` → `CONTRACT a=1`；`[CLI] bus=20048 mV select=20000 mV current=3000 mA PDO=5`。UART/ADC/OLED 正常。
+- 一次「已带电时 MCU 单独复位」出现多轮 HARD_RESET（Source 仍持旧契约、未重发 Capabilities），断电重上电即恢复；不阻塞 EPR 首测，但要留意冷启动时序。
 
-### 步骤 5　EPR 试入　⛔ 闸门关（`IH01A_EPR_28V5A_HARDWARE_APPROVED 0` + §5 硬件未确认）
+### 步骤 5　EPR 试入　🟡 已可用，待空载首测
+- 许可：`IH01A_EPR_28V5A_HARDWARE_APPROVED=1`（硬件负责人确认输入通路可承受 28 V）；自动进入仍关闭（`..._AUTO_ENTER=0`），入口是串口 `pd epr`。
+- 已接：EPR Mode Enter/Exit、独立 EPR PDO 数组解析（1..6 对象 → 位置 8..13，兼容合并布局）、28 V/5 A 选档、8 字节 RDO+CopyPDO、2.5 s 能力超时、拒绝/失败回退 SPR。
+- **验收**：见 `Docs/USBPD_FULL_EPR_IMPLEMENTATION_STATUS.md` 的里程碑与异常定位表；`EPR_CAPS a` 的判读也写在那份文档里。
 - 设置 sink EPR 支持位与 Operational PDP（28V×5A=140W）；SPR 契约稳定后调用 `USBPD_PE_Request_EPRModeEnter(0)`。
 - 处理成功/失败通知，读 EPR Source Capabilities，选 28V/5A（拒绝 36/48V），发 **EPR Request（RDO + 匹配的 CopyPDO）**。
 - **失败一律回落 SPR ≤20V，不自动重试**（只允许 UI 手动 Retry）。

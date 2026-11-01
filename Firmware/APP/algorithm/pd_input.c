@@ -79,10 +79,11 @@ void PD_Input_Caps(const uint8_t *data,uint32_t bytes)
     s_count=(uint8_t)(bytes/4u);
     PD_Diag_Record(PD_DIAG_CAPS,s_count,s_caps[0]);
 }
-/* ST reports EPR PDOs SEPARATELY from the seven SPR positions.
- * EPR callback size is typically 1..6 objects (4..24 bytes), not 32..52.
- * Reserve slots 1..7 and map the first EPR PDO to object position 8.
- * Never guess missing objects if an ST chunked callback is truncated.
+/* ST reports EPR PDOs SEPARATELY from the seven SPR positions: the EPR
+ * callback carries 1..6 objects (4..24 bytes) and the first one is EPR
+ * object position 8. Some PE builds hand over the combined SPR+EPR list
+ * instead, so the size decides the layout and no result silently shifts
+ * every object position. Truncated/odd payloads are dropped.
  */
 void PD_Input_EPRCaps(const uint8_t *data,uint32_t bytes)
 {
@@ -91,19 +92,29 @@ void PD_Input_EPRCaps(const uint8_t *data,uint32_t bytes)
     s_epr_count=0u;
     s_epr_copy_valid=0u;
     memset(s_epr_caps,0,sizeof(s_epr_caps));
-    if(!s_epr_mode||!data||bytes<4u||
-       bytes>(USBPD_MAX_NB_EPRPDO*4u)||(bytes&3u)!=0u)
+    if(!s_epr_mode||!data||bytes<4u||(bytes&3u)!=0u||
+       bytes>((USBPD_MAX_NB_PDO+USBPD_MAX_NB_EPRPDO)*4u))
     {
         PD_Diag_Record(PD_DIAG_EPR_CAPS,bytes,0u);
         return;
     }
     count=bytes/4u;
-    memcpy(&s_epr_caps[USBPD_MAX_NB_PDO],data,bytes);
-    s_epr_count=(uint8_t)(USBPD_MAX_NB_PDO+count);
-    memcpy(&first,data,sizeof(first));
+    if(count<=USBPD_MAX_NB_EPRPDO)
+    {
+        /* EPR-only payload: slots 1..7 stay for SPR, first EPR PDO = position 8. */
+        memcpy(&s_epr_caps[USBPD_MAX_NB_PDO],data,bytes);
+        s_epr_count=(uint8_t)(USBPD_MAX_NB_PDO+count);
+    }
+    else
+    {
+        /* Combined SPR+EPR payload: object position already equals index+1. */
+        memcpy(&s_epr_caps[0],data,bytes);
+        s_epr_count=(uint8_t)count;
+    }
+    memcpy(&first,&s_epr_caps[USBPD_MAX_NB_PDO],sizeof(first));
     PD_Diag_Record(PD_DIAG_EPR_CAPS,bytes,first);
     /* Additional second object helps diagnose AVS after 28V Fixed. */
-    if(count>1u)
+    if(s_epr_count>8u)
         PD_Diag_Record(PD_DIAG_EPR_PDO2,2u,s_epr_caps[8]);
 #else
     (void)data;(void)bytes;

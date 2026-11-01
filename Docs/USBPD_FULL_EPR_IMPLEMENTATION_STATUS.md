@@ -2,7 +2,7 @@
 
 **分支**：`feature/pd-epr-28v5a`；基点 `main@668e541`。`main` 未被改动。
 
-**重要**：本分支已经替换编译配置并准备了 EPR 请求代码，但当前执行环境没有 Keil Arm Compiler 6、板端或 140 W 输入硬件验证。**尚未证明能够编译、保持 20V SPR 或请求 28V**，禁止直接作为生产固件。
+**重要**：本分支已替换编译配置并接入 EPR 请求代码；**Keil armclang 已实测 0 error / 0 warning**（见文末 2026-11-02 记录），20V SPR 已板端回归通过。**EPR 28V 尚未在板端验证**，禁止作为生产固件。
 
 ## 交接 §4 的实际验收
 
@@ -58,7 +58,9 @@
 
 - 用户确认输入硬件路径可以承受 28V。将 `IH01A_EPR_28V5A_HARDWARE_APPROVED=1`，但 `IH01A_EPR_28V5A_AUTO_ENTER=0`。**普通插电只会自动请求 SPR ≤20V；不会主动跳 28V。**
 - 使用证实支持 28V/5A EPR 的 Source 和 240W（50V/5A）电子标记 USB-C 线缆，确认独立过压/过流保护；28V 首测空载、PWM 禁用、示波器监测 VBUS。
-- EPR Source PDO 以独立数组交付：`USBPD_CORE_DATATYPE_RCV_SRC_PDO_EPR` 预期 4..24 字节（1..6 对象），映射到逻辑 PDO 8..13；不能把 4 字节当成完整 32 字节的合并数组。诊断 `EPR_CAPS a=原始字节数 b=首个原始 PDO`。
+- EPR Source PDO 以独立数组交付：`USBPD_CORE_DATATYPE_RCV_SRC_PDO_EPR` 预期 4..24 字节（1..6 对象），映射到逻辑 PDO 8..13；不能把 4 字节当成完整 32 字节的合并数组。诊断 `EPR_CAPS a=原始字节数 b=首个 EPR PDO`。
+  - `a` 的判读：**`a ≤ 24` → 库只交付 EPR 对象**（本次预期）；**`a ≥ 28` → 库交付的是 SPR+EPR 合并列表**。两种布局解析器都能吃：合并布局下对象索引本身就是位置（7 个 SPR 在前），EPR 部分从位置 8 起，结果一致。
+  - 解析器只在 `a` 的取值上分支，**不会**推测缺失对象；`a=0` 或奇数字节直接丢弃并记录。
 - EPR_REQUEST 按 FULL DPM 回调传入 **8 字节**，内容是 ST 类型化 RDO + 匹配的 CopyPDO；日志分别打印 `EPR_REQUEST` 和 `EPR_COPY`。若回调只收到 4 字节，考虑 ST EPR 分块重组缺陷，先分析协议仪而非手工拼造缺失 PDO。
 - 没有可用的 28V/5A 固定 PDO、请求被拒绝或等待能力超时 2.5 秒，退出 EPR 返回 SPR，不自动重新进入。允许 CLI 或 UI 明确人工发起下一次尝试。
 
@@ -98,3 +100,11 @@ uart
 ### 本次离线验证
 
 在当前执行环境，使用主机 C 编译器和 AddressSanitizer/UndefinedBehaviorSanitizer 对独立复现的 `pd_select.c` 选择逻辑运行了 SPR 固定 20V、单个 4B EPR Fixed 28V/5A、AVS 忽略、30V/36V 排除测试，全部通过。**这不是 Keil 真正 Rebuild，也不能替代板端 EPR 协议验收。**
+
+### 2026-11-02 Keil Rebuild + EPR 能力解析加固（交接机复测）
+
+- `Keil UV4 -r` Rebuild All Target Files：**0 Error(s), 0 Warning(s)**，`Code=78,312 RO-data=3,916 RW-data=464 ZI-data=21,120`（Flash 128 KiB 用 82,228 B ≈ 63%）。
+- host 单测 7/7 通过（`pm_timer` / `mini_format` / `pd_source_stats` / `time` / `pd_select` / `ntc_lut` / `temp_service`，mingw gcc 8.1 `-Wall -Wextra -Werror`）。
+- `PD_Input_EPRCaps()` 增加**布局自适应**：`a ≤ 24` 按 EPR-only 存放到 `s_epr_caps[7..12]`（首对象=位置 8），`a ≥ 28` 按合并布局存放到 `s_epr_caps[0..]`；上限校验放宽到 `(USBPD_MAX_NB_PDO+USBPD_MAX_NB_EPRPDO)*4 = 52` 字节。这样 ST 到底交付哪种布局都不会把对象位置整体错位，也不会因为 4 字节载荷静默失败。
+- `EPR_CAPS` 的 `b` 改为**首个 EPR PDO**（位置 8），两种布局下都是同一个对象，便于直接核对是不是 `0x...` 的 28V Fixed。
+- 保留了「必须 28V **且** 5A」的严格条件：28V/3A 的适配器会被判为不合格并退回 SPR（`EPR_MODE b=0xBAD0`），这是本产品 140W 目标的刻意取舍。
