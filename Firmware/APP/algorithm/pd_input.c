@@ -279,7 +279,7 @@ void PD_Input_EPR_Poll(void)
 {
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
     if(!s_state.attached)return;
-    if(s_epr_mode && s_epr_count==0u &&
+    if(s_epr_mode && !s_epr_copy_valid &&
        (uint32_t)(HAL_GetTick()-s_epr_mode_since_ms)>2500u)
     {
         s_epr_user_requested=0u;

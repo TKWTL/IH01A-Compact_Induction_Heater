@@ -138,10 +138,10 @@ USBPD_USER_SettingsTypeDef       DPM_USER_Settings[USBPD_PORT_COUNT] =
        .SinkModes              = 0,          /*!< Sink Modes based on combination of @ref USBPD_SKEDB_SINKMODES  */
        .SinkMinimumPDP        = 0,          /*!< The Minimum PDP required by the Sink to operate without
                                                   consuming any power from its Battery(s) should it have one     */
-       .SinkOperationalPDP     = 0,          /*!< The PDP the Sink requires to operate normally. For Sinks with
+       .SinkOperationalPDP     = IH01A_EPR_28V5A_HARDWARE_APPROVED ? 140u : 0u,          /*!< The PDP the Sink requires to operate normally. For Sinks with
                                                   a Battery, it is the PDP rating of the charger supplied with
                                                   it or recommended for it.                                      */
-       .SinkMaximumPDP         = 0,          /*!< The Maximum PDP the Sink can consume to operate and
+       .SinkMaximumPDP         = IH01A_EPR_28V5A_HARDWARE_APPROVED ? 140u : 0u,          /*!< The Maximum PDP the Sink can consume to operate and
                                                   charge its Battery(s) should it have one                       */
       },
 #if defined(USBPD_REV30_SUPPORT)
