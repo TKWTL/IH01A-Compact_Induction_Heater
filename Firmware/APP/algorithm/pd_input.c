@@ -111,10 +111,15 @@ void PD_Input_Contract(uint8_t ready)
     if(ready && !s_state.explicit_contract)s_contract_ms=HAL_GetTick();
     s_state.explicit_contract=ready?1u:0u;
 }
-uint8_t PD_Input_EPR_CopyPDO(uint32_t *out)
+/* USBPD_CORE_DATATYPE_REQ_COPYPDO expects the entire two-object EPR
+ * Request payload: object 0 is the RDO, object 1 is the copied Source
+ * PDO. Supplying only a four-byte CopyPDO leaves one DO absent.
+ */
+uint8_t PD_Input_EPR_RequestPayload(uint32_t out[2])
 {
     if(!out||!s_epr_mode||!s_epr_copy_valid)return 0u;
-    *out=s_copy_pdo;
+    out[0]=s_selected_rdo;
+    out[1]=s_copy_pdo;
     return 1u;
 }
 uint8_t PD_Input_EPR_Active(void){return s_epr_mode;}
@@ -211,6 +216,7 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
             s_state.selected_mv=mv;
             s_state.requested_ma=ma;
             PD_Diag_Record(PD_DIAG_EPR_RDO,mv,nrdo);
+            PD_Diag_Record(PD_DIAG_EPR_COPYPDO,pos,p);
             *rdo=nrdo;
             *type=USBPD_CORE_PDO_TYPE_FIXED;
             return 1u;

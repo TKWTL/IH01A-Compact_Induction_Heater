@@ -399,11 +399,12 @@ void USBPD_DPM_GetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
   case USBPD_CORE_DATATYPE_REQ_COPYPDO:
     if(Size)
     {
-      uint32_t copy=0u;
-      if(Ptr && PD_Input_EPR_CopyPDO(&copy))
+      uint32_t objects[2]={0u,0u};
+      if(Ptr && PD_Input_EPR_RequestPayload(objects))
       {
-        memcpy(Ptr,&copy,sizeof(copy));
-        *Size=sizeof(copy);
+        /* EPR_REQUEST = RDO + copied PDO, 8 bytes in total. */
+        memcpy(Ptr,objects,sizeof(objects));
+        *Size=sizeof(objects);
       }
       else *Size=0u;
     }
