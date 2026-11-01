@@ -171,9 +171,9 @@ $itC = Join-Path $RepoRoot 'Firmware/Core/Src/stm32g0xx_it.c'
 if (Test-Path $itC) {
     $ic = Get-Content $itC -Raw
     if ($ic.Contains('USBPD_DPM_TimerCounter();')) { $actions.Add('SysTick keeps USBPD_DPM_TimerCounter()') }
+    else { $problems.Add('stm32g0xx_it.c lost USBPD_DPM_TimerCounter() (PD 1ms time base)') }
     if ($ic.Contains('USBPD_PORT0_IRQHandler();')) { $actions.Add('UCPD1_2_IRQHandler keeps USBPD_PORT0_IRQHandler()') }
     else { $problems.Add('stm32g0xx_it.c lost USBPD_PORT0_IRQHandler() in the UCPD ISR (UCPD flags never cleared -> interrupt storm)') }
-    else { $problems.Add('stm32g0xx_it.c lost USBPD_DPM_TimerCounter() (PD 1ms time base)') }
 }
 # --- 4. 输出 ---------------------------------------------------------------
 Write-Host ''
