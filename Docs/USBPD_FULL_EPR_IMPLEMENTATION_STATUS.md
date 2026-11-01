@@ -287,3 +287,40 @@ PD 报文类型编号（Header bits 4..0）：`1`=Source_Capabilities、`2`=Requ
 | `PD_TXREJ a=10` | PHY 因 RX 未让出总线而拒发 | 属我方集成问题 |
 
 Rebuild：0 Error / 0 Warning，`Code=79,092 RO=4,096 RW=468 ZI=21,196`。
+
+### 2026-11-02 反汇编 `USBPD_PE_Request_EPRModeEnter()`：它只"登记"，不发送
+
+`fromelf --text -s/-c` 解出该函数（`0x0800f61c`，68 字节）的实际逻辑：
+
+```asm
+r2 = PE_Handle[PortNum]                 ; 0x200001a8 + 4*port
+r3 = r2 + (0x13<<5)                     ; +0x260，即通用状态机上下文
+if (byte[r3+0xA] != 0) return 3         ; BUSY：已有一个 EPR 机器挂起
+r4 = word[r2+4]                         ; 当前/最近一条报文（含 2 字节头）
+if ((byte[r4+1] & 0x10) == 0) return 3  ; 要求是带 1 个 DO 的报文
+if ((byte[r4+1] & 0x07) != 3) return 2
+if ((byte[r4+0] & 0x07) != 2) return 2  ; 要求报文类型 = Request(0x02)
+byte[r3+0xA] = 0xA8                     ; 登记"要跑 EPR 进入机器"
+word[r3+0]   = 1
+call PE_Handle->callbacks[10]()          ; = USBPD_PE_TaskWakeUp()
+return 0                                 ; USBPD_OK
+```
+
+而**真正发 EPR_Mode 的通用状态机只有一个调用点**：`USBPD_PE_StateMachine_SNK` 的 `PE_STATE_GENERIC` 分支里的 `PE_GENMACH_StateMachine_Run()`
+（`0x08010370`，紧跟在 `MOVS r0,#0x13 / BL USBPD_PE_Notification` 之后）。
+
+结论：`EPR_ENTER a=0` **不等于报文要发出去了**——它只是把 0xA8 写进 PE 的机器状态字节并唤醒 PE。如果 PE 不进入 `PE_STATE_GENERIC`，这个请求就永远挂着，于是：
+
+- 第二次 `pd epr` 必然命中第一个判断 → `EPR_BUSY(3)`（与板端完全一致）；
+- 没有 `GETINFO(30/25)`、没有任何 `EPR_EVT`、PHY 侧也没有 `PD_TX a=10`（与板端完全一致）。
+
+所以这不是"数据没给对"，而是**库的状态机没被驱动**。按板端请求，不走 ST 支持，直接在本分支做两条旁路验证（`IH01A_EPR_STALL_FALLBACK`，仅在"已投递但 1 s 无任何 EPR 事件"时触发一次）：
+
+| 实验 | 做法 | 预期日志 |
+|---|---|---|
+| **A** | `USBPD_PE_Request_DataMessage(0, USBPD_DATAMSG_EPR_MODE, &mdo)`，`mdo = (1<<24) \| (140<<16)`（EPR Mode Action=Enter、Sink PDP 140 W） | `EPR_ACT a=673 b=<rc>`（673=0x2A1），随后 `PD_TX a=10 b=…` |
+| **B** | A 返回非 OK 时：用 `USBPD_PE_Send_Request()` 重发当前 SPR Request（制造 Request 上下文），并在 `POWER_EXPLICIT_CONTRACT` 通知里调用 `USBPD_PE_Request_EPRModeEnter()` | `EPR_ACT a=674 b=<rc>`（0x2A2）→ `EPR_ACT a=675 b=<rc>`（0x2A3）→ `PD_TX a=10` |
+
+判读：**只要出现 `PD_TX a=10`，就说明 EPR_Mode 真的上总线了**；之后看源端是否回 `EPR_Mode`（源端 ACK 会带来 `EPR_EVT a=113`）。
+
+Rebuild：0 Error / 0 Warning，`Code=79,556 RO=4,096 RW=468 ZI=21,196`。

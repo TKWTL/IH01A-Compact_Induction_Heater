@@ -264,6 +264,22 @@ void USBPD_DPM_Notification(uint8_t PortNum, USBPD_NotifyEventValue_TypeDef Even
     case USBPD_NOTIFY_POWER_SNK_READY:
       PD_Input_Contract(1u);
       PD_Diag_Record(PD_DIAG_CONTRACT,1u,(uint32_t)EventVal);
+#if IH01A_EPR_STALL_FALLBACK
+      /* Fallback B: register the EPR entry from PE callback context. The
+       * library only executes the EPR generic machine from the
+       * PE_STATE_GENERIC branch of USBPD_PE_StateMachine_SNK, so posting it
+       * from the idle main loop can leave it pending for ever. */
+      {
+        extern volatile uint8_t g_epr_ctx_pending;
+        if(g_epr_ctx_pending)
+        {
+          USBPD_StatusTypeDef rc;
+          g_epr_ctx_pending=0u;
+          rc=USBPD_PE_Request_EPRModeEnter(USBPD_PORT_0);
+          PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A3u,(uint32_t)rc);
+        }
+      }
+#endif
       break;
 #if defined(USBPDCORE_EPR)
     case USBPD_NOTIFY_EPRMODE_INVALID:

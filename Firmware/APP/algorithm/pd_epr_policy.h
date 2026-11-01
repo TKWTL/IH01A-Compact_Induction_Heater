@@ -32,4 +32,19 @@
  * the request is clamped to the PDO current, so 5 A can only happen on a
  * 5 A e-marked cable. */
 #define IH01A_PD_SPR_MAX_MA        5000u
+
+/* USBPD_PE_Request_EPRModeEnter() only registers a generic machine and wakes
+ * the PE (see its disassembly: it validates the last Request header, writes
+ * 0xA8 into the PE "machine state" byte and calls the wake-up callback).
+ * The machine itself is only executed from the PE_STATE_GENERIC branch of
+ * USBPD_PE_StateMachine_SNK, so a request posted while the sink sits idle in
+ * PE_SNK_Ready can stay pending for ever (second call then returns BUSY).
+ * With this switch the app tries two fallbacks once the request has been
+ * pending for 1 s:
+ *   A) USBPD_PE_Request_DataMessage(USBPD_DATAMSG_EPR_MODE) directly;
+ *   B) re-issue the current SPR Request so the PE processes a Request
+ *      context, then register EPR entry from the POWER_EXPLICIT_CONTRACT
+ *      notification (i.e. from PE callback context).
+ */
+#define IH01A_EPR_STALL_FALLBACK   1
 #endif

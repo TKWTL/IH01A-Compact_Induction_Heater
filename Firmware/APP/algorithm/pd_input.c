@@ -16,6 +16,8 @@ static uint8_t s_count, s_manual, s_epr_count;
 static uint8_t s_epr_mode, s_epr_enter_once, s_epr_exit_queued;
 static uint8_t s_epr_copy_valid, s_epr_user_requested;
 static uint8_t s_epr_any_event, s_epr_stall_logged;
+/* Set by the stall fallback, consumed from USBPD_DPM_Notification(). */
+volatile uint8_t g_epr_ctx_pending;
 static uint32_t s_selected_rdo, s_copy_pdo, s_attach_ms, s_contract_ms;
 static uint32_t s_epr_mode_since_ms, s_epr_enter_ms;
 static uint32_t s_spr_rdo,s_spr_mv,s_spr_ma;
@@ -323,6 +325,27 @@ void PD_Input_EPR_Poll(void)
     {
         s_epr_stall_logged=1u;
         PD_Diag_Record(PD_DIAG_EPR_EVENT,0u,0xD00Du);
+#if IH01A_EPR_STALL_FALLBACK
+        /* Fallback A: ask the PE to emit EPR_Mode as a plain data message.
+         * The EPR_Mode data object is (EPR Mode Action << 24) | (PDP W << 16)
+         * as used by the working reference sink. */
+        {
+            uint32_t mdo=(1UL<<24)|((uint32_t)IH01A_EPR_SINK_PDP_W<<16);
+            USBPD_StatusTypeDef rc;
+            rc=USBPD_PE_Request_DataMessage(USBPD_PORT_0,USBPD_DATAMSG_EPR_MODE,&mdo);
+            PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A1u,(uint32_t)rc);
+            if(rc!=USBPD_OK)
+            {
+                /* Fallback B: re-open a Request context, then register the EPR
+                 * entry from the contract notification (PE callback context). */
+                uint32_t back=s_spr_rdo?s_spr_rdo:s_selected_rdo;
+                USBPD_StatusTypeDef rb=USBPD_PE_Send_Request(USBPD_PORT_0,back,
+                                                             USBPD_CORE_PDO_TYPE_FIXED);
+                PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A2u,(uint32_t)rb);
+                if(rb==USBPD_OK)g_epr_ctx_pending=1u;
+            }
+        }
+#endif
     }
     if(s_epr_exit_queued)
     {
