@@ -1,0 +1,21 @@
+# 统一缩进规则(项目级,VSCode / clangd / 其他编辑器都会读)
+# 目标:新建行一律 4 个空格,不再出现 tab 与空格混用。
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 4
+tab_width = 4
+
+# Keil 自己生成的工程文件本身是 tab 缩进(宽度 8),别让编辑器改写它们,
+# 否则每存一次就是整文件 diff。
+[*.uvprojx]
+indent_style = tab
+indent_size = 8
+tab_width = 8
+
+[*.uvoptx]
+indent_style = tab
+indent_size = 8
+tab_width = 8
