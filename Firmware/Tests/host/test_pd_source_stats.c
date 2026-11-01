@@ -1,5 +1,5 @@
 /* Host regression of Source PDO decode; no HAL, RTOS or real USBPD library. */
-#include "pd_source_stats.h"
+#include "algorithm/pd_source_stats.h"
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>

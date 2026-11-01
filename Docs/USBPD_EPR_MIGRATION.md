@@ -57,8 +57,10 @@ request also needs the selected PDO copy and a complete EPR capable stack.
    the SPR Source_Capabilities array or issuing a plain SPR Request.
 6. **EPR capability selection:** Handle
    `USBPD_CORE_DATATYPE_RCV_SRC_PDO_EPR` in
-   `USBPD_DPM_SetDataInfo`. The EPR-only list contains up to six PDOs,
-   starting at *combined* object position 8. Filter fixed PDOs to
+   `USBPD_DPM_SetDataInfo`. The received EPR capabilities message contains a **combined** list
+   of up to seven SPR positions followed by EPR objects at positions
+   8..13. Parse from position 8, not offset zero; the helper requires the
+   complete combined 8..13-object array. Filter fixed PDOs to
    `20 V < voltage < 32 V`; prefer the highest voltage and then current,
    clamp request to 3 A, and ignore AVS/PPS for the initial upgrade.
    Use the selected object position and EPR-capable RDO; provide a
@@ -89,3 +91,7 @@ The existing 20 V working firmware remains the build default. The
 EPR selector alone is not a deployable 28 V upgrade. Do not enable
 28 V solely by defining `USBPDCORE_EPR`, replacing `PD_INPUT_SPR_MAX_MV`,
 or modifying the SPR PDO array.
+
+### Project directory structure
+
+IH01A application policy resides in `Firmware/APP/algorithm/{pd_input,pd_select,pd_source_stats}.{c,h}` and its UI bridge in `Firmware/APP/MiaoUI/pd_ui.{c,h}`. ST's CubeMX-generated USBPD middleware remains at `Firmware/USBPD/` and `Firmware/Middlewares/` (not moved to the application policy directory); this isolates algorithms without breaking the UCPD build. C140 hardware observations and reset/timing triage are in `Docs/PD_C140_COMPARISON.md`.

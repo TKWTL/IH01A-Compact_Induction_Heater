@@ -35,8 +35,8 @@
 #endif /* _TRACE */
 /* USER CODE BEGIN Includes */
 #include "app_tasks.h"
-#include "pd_source_stats.h"
-#include "framework/pd_input.h"
+#include "algorithm/pd_source_stats.h"
+#include "algorithm/pd_input.h"
 /* USER CODE END Includes */
 
 /** @addtogroup STM32_USBPD_APPLICATION

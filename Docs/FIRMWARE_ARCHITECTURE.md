@@ -58,7 +58,7 @@ with a logic analyzer before treating USB-PD interleaving as validated.
 
 `USBPD_DPM_SetDataInfo(USBPD_CORE_DATATYPE_RCV_SRC_PDO)` copies valid
 4-byte-aligned Source PDO data (max seven objects) into
-`APP/pd_source_stats.c`; detach, stack stop and reset clear the mirror.
+`APP/algorithm/pd_source_stats.c`; detach, stack stop and reset clear the mirror.
 `IH_Statistics_Poll()` formats fixed-size row labels at 20ms UI time,
 rather than doing formatted output inside time-critical PD callbacks.
 The Statistics/PD in `UI_PAGE_TEXT` uses seven statically allocated
@@ -112,9 +112,9 @@ HT/TC→控制状态机；中断执行期间拉高 ISR_TIME(PF1)，结束拉低�
 
 ## USBPD sink-only input & DCin (2026-11-01)
 
-`framework/pd_input.c/h` handles CAD attach/detach session, Source
+`APP/algorithm/pd_input.c/h` handles CAD attach/detach session, Source
 Capabilities events, fixed RDO selection, explicit-contract state and
-manual refresh via Settings/PD. `pd_select.c/h` is a pure selector for
+manual refresh via Settings/PD. `APP/algorithm/pd_select.c/h` is a pure selector for
 host tests; no heap, no float, no PWM/heater enable. It requests the
 highest source-advertised **Fixed SPR** voltage below product 32V limit
 (current linked PD3 MINSNK library only supports up to 20V SPR; EPR is
@@ -129,3 +129,11 @@ XT30 or USB-C default/non-PD and does not prove connector identity.
 CAD/PHY analog internal Rd may coexist with board-level permanent
 external Rd; confirm CC voltage on target before assuming compliant
 Type-C attach current detection. No EPR entry or power-stage use.
+
+## 2026-11-01 PD 模块解耦
+
+- `APP/algorithm/`：`pd_input.c/h`（Sink 会话、固定 SPR RDO、手动重试、VBUS）、`pd_select.c/h`（纯 PDO/RDO 算法）、`pd_source_stats.c/h`（Source PDO 缓存与格式化）；不包含 MiaoUI 头文件，也不执行页面渲染。
+- `APP/MiaoUI/pd_ui.c/h`：Settings/PD 页面、100ms 可见数据刷新；`ui_conf.c` 只调用 `PD_UI_AddSettings()` / `PD_UI_Poll()`。
+- `USBPD/App` 和 `USBPD/Target`：CubeMX/ST UCPD 硬件与 DPM 回调适配。保留自动 GoodCRC、系统 1ms 计数和非 RTOS 主循环，不移植 CH32X035 USBPD 寄存器操作。
+- Keil 项目单独设 `IH01A/APP/algorithm/PD` Group，编译三份算法源码；旧框架版 PD 文件删除，以免重复符号。
+- C140/EPR 实测回归和时序疑点详见 `Docs/PD_C140_COMPARISON.md`；**主程序仍为 SPR 20V，EPR Full 协议库尚未接入**。

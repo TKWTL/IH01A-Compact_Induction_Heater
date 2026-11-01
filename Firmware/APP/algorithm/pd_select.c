@@ -2,7 +2,7 @@
  * EPR helpers do not enter EPR mode; the full stack must handle entry,
  * chunking, keepalives and the copied PDO in EPR_REQUEST.
  */
-#include "framework/pd_select.h"
+#include "algorithm/pd_select.h"
 #include <string.h>
 
 uint8_t PD_Input_BestFixed(const uint8_t *data,uint32_t len,
@@ -37,9 +37,9 @@ uint32_t PD_Input_FixedRDO(uint8_t pos,uint32_t ma)
     return ((uint32_t)pos<<28u)|(1u<<24u)|(n<<10u)|n;
 }
 
-/* In EPR Source Capabilities the first seven positions are SPR slots,
- * followed by at most six EPR PDOs (positions 8..13). Only EPR Fixed
- * voltages under 32V are eligible; AVS is intentionally excluded. */
+/* EPR Source Capabilities is a combined list: SPR positions 1..7,
+ * followed by EPR positions 8..13. Never treat the beginning of the
+ * extended message as EPR position 8. AVS is excluded intentionally. */
 uint8_t PD_Input_BestEPRFixed(const uint8_t *data,uint32_t len,
                              uint8_t *pos,uint32_t *mv,uint32_t *ma,
                              uint32_t *selected_pdo)
@@ -47,8 +47,8 @@ uint8_t PD_Input_BestEPRFixed(const uint8_t *data,uint32_t len,
     uint32_t i,best_v=0u,best_c=0u,best_pdo=0u;
     uint8_t best_pos=0u;
     if(!data||!pos||!mv||!ma||!selected_pdo||
-       !len||(len&3u)||len>24u)return 0u;
-    for(i=0u;i<len/4u;++i)
+       (len&3u)||len<32u||len>52u)return 0u;
+    for(i=7u;i<len/4u;++i)
     {
         uint32_t p,v,c;
         memcpy(&p,data+4u*i,4u);
@@ -60,7 +60,7 @@ uint8_t PD_Input_BestEPRFixed(const uint8_t *data,uint32_t len,
         if(v>best_v||(v==best_v&&c>best_c))
         {
             best_v=v;best_c=c;best_pdo=p;
-            best_pos=(uint8_t)(8u+i);
+            best_pos=(uint8_t)(i+1u);
         }
     }
     if(!best_pos)return 0u;

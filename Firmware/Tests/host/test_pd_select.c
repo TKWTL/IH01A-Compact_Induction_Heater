@@ -1,5 +1,5 @@
 /* Host-only USBPD PDO/RDO regression; no HAL/USBPD binary needed. */
-#include "framework/pd_select.h"
+#include "algorithm/pd_select.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -40,24 +40,28 @@ int main(void)
     assert(PD_Input_FixedRDO(0u,3000u)==0u);
     assert(PD_Input_FixedRDO(1u,5000u)==
            PD_Input_FixedRDO(1u,3000u));
-    /* EPR payload is separate from the seven SPR slots. */
+    /* Extended caps include seven SPR slots, followed by EPR position 8. */
     {
-        uint32_t epr[6]={0u};
+        uint32_t epr[10]={0u};
         uint32_t chosen=0u;
-        epr[0]=fixed(28000u,5000u);
-        epr[1]=(3u<<30u)|(1u<<28u)|(280u<<17u)|(150u<<8u)|140u; /* AVS */
-        epr[2]=fixed(36000u,5000u); /* above strict 32V ceiling */
+        uint8_t j;
+        for(j=0u;j<7u;++j)epr[j]=fixed(5000u,3000u);
+        epr[7]=fixed(28000u,5000u);
+        epr[8]=(3u<<30u)|(1u<<28u)|(280u<<17u)|(150u<<8u)|140u; /* AVS */
+        epr[9]=fixed(36000u,5000u); /* above strict 32V ceiling */
         assert(PD_Input_BestEPRFixed((const uint8_t *)epr,sizeof(epr),
                                      &pos,&mv,&ma,&chosen));
         assert(pos==8u && mv==28000u && ma==3000u);
-        assert(chosen==epr[0]);
+        assert(chosen==epr[7]);
         rdo=PD_Input_EPRFixedRDO(pos,ma);
         assert((rdo>>28u)==8u && (rdo&(1u<<22u))!=0u);
         assert((rdo&1023u)==300u);
-        epr[0]=0u;
+        epr[7]=0u;
         assert(!PD_Input_BestEPRFixed((const uint8_t *)epr,sizeof(epr),
                                       &pos,&mv,&ma,&chosen));
         assert(!PD_Input_BestEPRFixed((const uint8_t *)epr,25u,
+                                      &pos,&mv,&ma,&chosen));
+        assert(!PD_Input_BestEPRFixed((const uint8_t *)epr,28u,
                                       &pos,&mv,&ma,&chosen));
         assert(PD_Input_EPRFixedRDO(7u,3000u)==0u);
         assert(PD_Input_EPRFixedRDO(14u,3000u)==0u);

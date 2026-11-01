@@ -12,4 +12,4 @@ failures. The mock is under `Tests/host/rtc_mock` and is used only by
 host tests; it does not alter the STM32 HAL or the Keil project.
 
 `test_pd_select.c` verifies highest eligible Fixed SPR PDO, current
-clamp, RDO object position/units and rejection of EPR/PPS/invalid bytes.
+clamp, RDO object position/units and rejection of EPR/PPS/invalid bytes in SPR, plus full combined EPR capabilities parsing (28V Fixed position 8; AVS and >=32V rejected).

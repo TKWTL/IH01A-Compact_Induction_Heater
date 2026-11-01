@@ -10,10 +10,10 @@
 #include "display/dispDriver.h"
 #include "images/image.h"
 #include "framework/pm_ui_register.h"
-#include "pd_source_stats.h"
+#include "algorithm/pd_source_stats.h"
 #include "dashboard.h"
 #include "framework/system.h"
-#include "framework/pd_input.h"
+#include "pd_ui.h"
 #include <stdint.h>
 
 static ui_page_t s_root, s_settings, s_display, s_system;
@@ -35,7 +35,7 @@ void IH_Statistics_Poll(void)
     uint32_t revision = PD_SourceStats_Revision();
     PowerDashboard_Poll();
     System_Poll();
-    PD_Input_Poll();
+    PD_UI_Poll();
     uint8_t i;
 
     if(revision == s_pd_revision)
@@ -98,7 +98,7 @@ void Create_MenuTree(ui_t *ui)
         AddPage("[Display]", &s_display, UI_PAGE_TEXT, &s_settings);
             AddItem("[Return]", UI_ITEM_RETURN, 0, &s_back_display, &s_display, &s_settings, 0);
             Add_Disp_Items(&s_display);
-        PD_Input_AddSettings(&s_settings);
+        PD_UI_AddSettings(&s_settings);
         AddItem("-System", UI_ITEM_PARENTS, 0, &s_system_item, &s_settings, &s_system, 0);
         AddPage("[System]", &s_system, UI_PAGE_TEXT, &s_settings);
             AddItem("[Return]", UI_ITEM_RETURN, 0, &s_back_system, &s_system, &s_settings, 0);

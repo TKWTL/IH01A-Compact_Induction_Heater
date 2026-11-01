@@ -32,7 +32,7 @@
 #endif /* _TRACE */
 #include "string.h"
 /* USER CODE BEGIN Include */
-#include "framework/pd_input.h"
+#include "algorithm/pd_input.h"
 /* USER CODE END Include */
 
 /** @addtogroup STM32_USBPD_APPLICATION

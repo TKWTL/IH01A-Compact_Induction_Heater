@@ -27,7 +27,7 @@
 #endif /* _TRACE */
 
 /* USER CODE BEGIN include */
-#include "framework/pd_input.h"
+#include "algorithm/pd_input.h"
 /* USER CODE END include */
 
 /** @addtogroup BSP
