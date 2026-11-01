@@ -261,13 +261,15 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
         if(!s_epr_exit_queued && s_epr_count>=8u &&
            PD_Input_BestEPRFixed((const uint8_t *)s_epr_caps,
            (uint32_t)s_epr_count*4u,&pos,&mv,&ma,&p) &&
-           mv==28000u && ma==5000u)
+           mv==28000u && ma>=IH01A_EPR_REQUEST_MA)
         {
             uint32_t nrdo;
             /* EPR_Source_Capabilities numbers its own PDOs 1..6; asking for
              * slot 8 makes the Source answer with a Hard Reset. */
             if(s_epr_local_pos && pos>(uint8_t)USBPD_MAX_NB_PDO)
                 pos=(uint8_t)(pos-(uint8_t)USBPD_MAX_NB_PDO);
+            /* Request the configured current, never more than the PDO offers. */
+            if(ma>IH01A_EPR_REQUEST_MA)ma=IH01A_EPR_REQUEST_MA;
             nrdo=PD_EncodeFixedRDO(pos,ma,1u);
             if(!nrdo)return 0u;
             if(!s_epr_copy_valid)
