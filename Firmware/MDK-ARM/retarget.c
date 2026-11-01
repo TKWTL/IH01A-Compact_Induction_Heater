@@ -8,12 +8,14 @@
  *   __use_no_semihosting causes a LINK ERROR if a semihosted libc path
  *   remains (prefer a clear L6915E to a mysterious target BKPT).
  *
- * No UART/ITM/SWO implementation here; recorded output is inspectable
- * via the Keil Watch/Memory window. _sys_exit is a fatal exit path,
+ * Console output is mirrored to RAM and the nonblocking USART1 DMA queue.
+ * The UART may be unavailable during early boot or power loss; RAM remains
+ * inspectable via the Keil Watch/Memory window. _sys_exit is a fatal exit path,
  * deliberately halted with its code preserved, NOT quietly resumed.
  */
 #include <stdint.h>
 #include <stdio.h>
+#include "debug_uart.h"
 
 #if !defined(__ARMCC_VERSION) || (__ARMCC_VERSION < 6000000)
 #error "IH01A retarget.c requires ARMCLANG 6 (the configured Keil toolchain)."
@@ -45,6 +47,7 @@ void IH_RuntimePutChar(char ch)
     g_runtime_log_head = (head + 1u) & (IH_RUNTIME_LOG_CAPACITY - 1u);
     if(g_runtime_log_count < IH_RUNTIME_LOG_CAPACITY)
         ++g_runtime_log_count;
+    DebugUART_WriteByte((uint8_t)ch);
 }
 
 /* Runtime diagnostics from assert/exit may reach _ttywrch directly. */

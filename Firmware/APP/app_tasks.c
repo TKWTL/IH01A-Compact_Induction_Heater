@@ -12,6 +12,9 @@
 #include "core/ui.h"
 #include "display/dispDriver.h"
 #include "ui_conf.h"
+#include "debug_uart.h"
+#include "console_cli.h"
+#include "algorithm/pd_diag.h"
 
 static coro_scheduler_t s_scheduler;
 static ui_t s_ui;
@@ -93,6 +96,10 @@ void APP_Tasks_Init(void)
 }
 void APP_Tasks_RunOnce(void)
 {
+    /* Deferred PD diagnostic text; no UART transmission in PD callbacks. */
+    PD_Diag_Service();
+    ConsoleCLI_Poll();
+    DebugUART_Service();
     CoroOS_RunOnce(&s_scheduler);
     SSD1315_Display_Service();
 }

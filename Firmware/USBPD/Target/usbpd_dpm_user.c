@@ -37,6 +37,7 @@
 #include "app_tasks.h"
 #include "algorithm/pd_source_stats.h"
 #include "algorithm/pd_input.h"
+#include "algorithm/pd_diag.h"
 /* USER CODE END Includes */
 
 /** @addtogroup STM32_USBPD_APPLICATION
@@ -189,12 +190,14 @@ void USBPD_DPM_UserCableDetection(uint8_t PortNum, USBPD_CAD_EVENT State)
     if(State == USBPD_CAD_EVENT_ATTACHED)
     {
       PD_Input_Attach(1u);
+      PD_Diag_Record(PD_DIAG_ATTACH,1u,0u);
     }
     else if(State == USBPD_CAD_EVENT_DETACHED ||
             State == USBPD_CAD_EVENT_EMC)
     {
       PD_SourceStats_Clear();
       PD_Input_Attach(0u);
+      PD_Diag_Record(PD_DIAG_DETACH,(uint32_t)State,0u);
     }
   }
 /* USER CODE END USBPD_DPM_UserCableDetection */
@@ -241,15 +244,24 @@ void USBPD_DPM_Notification(uint8_t PortNum, USBPD_NotifyEventValue_TypeDef Even
     case USBPD_NOTIFY_POWER_EXPLICIT_CONTRACT:
     case USBPD_NOTIFY_POWER_SNK_READY:
       PD_Input_Contract(1u);
+      PD_Diag_Record(PD_DIAG_CONTRACT,1u,(uint32_t)EventVal);
       break;
     case USBPD_NOTIFY_POWER_SNK_STOP:
     case USBPD_NOTIFY_USBSTACK_STOP:
       PD_Input_Contract(0u);
+      PD_Diag_Record(PD_DIAG_CONTRACT,0u,(uint32_t)EventVal);
       break;
     case USBPD_NOTIFY_REQUEST_REJECTED:
     case USBPD_NOTIFY_REQUEST_WAIT:
     case USBPD_NOTIFY_REQUEST_ERROR:
       /* The previous explicit contract may remain valid. */
+      PD_Diag_Record(PD_DIAG_NOTIFY,(uint32_t)EventVal,0u);
+      break;
+    case USBPD_NOTIFY_REQUEST_ACCEPTED:
+    case USBPD_NOTIFY_HARDRESET_RX:
+    case USBPD_NOTIFY_HARDRESET_TX:
+    case USBPD_NOTIFY_USBSTACK_START:
+      PD_Diag_Record(PD_DIAG_NOTIFY,(uint32_t)EventVal,0u);
       break;
     default:
       break;
@@ -307,10 +319,10 @@ void USBPD_DPM_HardReset(uint8_t PortNum, USBPD_PortPowerRole_TypeDef CurrentRol
 {
 /* USER CODE BEGIN USBPD_DPM_HardReset */
   (void)CurrentRole;
-  (void)Status;
   if(PortNum == USBPD_PORT_0)
   {
       PD_SourceStats_Clear();
+      PD_Diag_Record(PD_DIAG_RESET,(uint32_t)Status,(uint32_t)CurrentRole);
       PD_Input_Reset();
   }
 /* USER CODE END USBPD_DPM_HardReset */

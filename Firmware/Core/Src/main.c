@@ -37,6 +37,8 @@
 #include "app_tasks.h"
 #include "framework/time_service.h"
 #include "conv_controller.h"
+#include "debug_uart.h"
+#include <stdio.h>
 
 /* USER CODE END Includes */
 
@@ -102,6 +104,9 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+  /* Capture reset flags before HAL or RCC initialization touches them. */
+  uint32_t boot_reset_flags=RCC->CSR;
+  __HAL_RCC_CLEAR_RESET_FLAGS();
 
   /* USER CODE END 1 */
 
@@ -138,6 +143,7 @@ int main(void)
   MX_TIM6_Init();
   MX_UCPD2_Init();
   MX_USART1_UART_Init();
+  DebugUART_Init(boot_reset_flags);
   MX_CRC_Init();
   MX_TIM14_Init();
   /* USER CODE BEGIN 2 */

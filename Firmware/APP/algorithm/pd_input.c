@@ -8,6 +8,7 @@
 #include "conv_adc.h"
 #include "usbpd_core.h"
 #include "usbpd_dpm_user.h"
+#include "algorithm/pd_diag.h"
 #include <string.h>
 
 static uint32_t s_caps[7];
@@ -52,6 +53,7 @@ void PD_Input_Caps(const uint8_t *data,uint32_t bytes)
     }
     memcpy(s_caps,data,bytes);
     s_count=(uint8_t)(bytes/4u);
+    PD_Diag_Record(PD_DIAG_CAPS,s_count,s_caps[0]);
 }
 void PD_Input_Contract(uint8_t ready)
 {
@@ -95,6 +97,7 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
     s_state.selected_mv=mv;
     s_state.requested_ma=ma;
     s_manual=0u;
+    PD_Diag_Record(PD_DIAG_RDO,mv,s_selected_rdo);
     *rdo=s_selected_rdo;
     *type=USBPD_CORE_PDO_TYPE_FIXED;
     return 1u;
@@ -108,6 +111,7 @@ uint8_t PD_Input_Manual(void)
     if(!s_state.attached)return 0u;
     if(USBPD_DPM_RequestGetSourceCapability(0u)!=USBPD_OK)return 0u;
     s_manual=1u;
+    PD_Diag_Record(PD_DIAG_MANUAL,1u,0u);
     return 1u;
 }
 void PD_Input_GetSnapshot(PD_InputSnapshot *out)

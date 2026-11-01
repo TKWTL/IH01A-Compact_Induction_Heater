@@ -3397,6 +3397,11 @@
               <FileType>1</FileType>
               <FilePath>../APP/algorithm/pd_source_stats.c</FilePath>
             </File>
+            <File>
+              <FileName>pd_diag.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/algorithm/pd_diag.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -3481,6 +3486,16 @@
               <FileName>mini_stdio.c</FileName>
               <FileType>1</FileType>
               <FilePath>../BSP/Console/mini_stdio.c</FilePath>
+            </File>
+            <File>
+              <FileName>debug_uart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../BSP/Console/debug_uart.c</FilePath>
+            </File>
+            <File>
+              <FileName>console_cli.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../BSP/Console/console_cli.c</FilePath>
             </File>
           </Files>
         </Group>

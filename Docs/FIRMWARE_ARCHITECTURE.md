@@ -137,3 +137,17 @@ Type-C attach current detection. No EPR entry or power-stage use.
 - `USBPD/App` 和 `USBPD/Target`：CubeMX/ST UCPD 硬件与 DPM 回调适配。保留自动 GoodCRC、系统 1ms 计数和非 RTOS 主循环，不移植 CH32X035 USBPD 寄存器操作。
 - Keil 项目单独设 `IH01A/APP/algorithm/PD` Group，编译三份算法源码；旧框架版 PD 文件删除，以免重复符号。
 - C140/EPR 实测回归和时序疑点详见 `Docs/PD_C140_COMPARISON.md`；**主程序仍为 SPR 20V，EPR Full 协议库尚未接入**。
+
+## 2026-11-01 USART1 debug transport
+
+`BSP/Console/debug_uart.c/h` provides nonblocking USART1 DMA TX and circular
+DMA RX with IDLE + HT/TC events, using separate 512B TX and RX rings and a
+128B DMA staging buffer. `console_cli.c/h` offers help/ping/pd/uart. The
+existing `mini_stdio.c` and no-semihosting `retarget.c` mirror RAM diagnostic
+output to this TX queue. `APP/algorithm/pd_diag.c/h` stores small binary
+PD callback events and formats **one** event per main-loop pass; USBPD callbacks
+never transmit or block for debug output. USART1 PB6/PB7 at 115200 baud,
+DMA1 Ch4 RX circular and Ch5 TX normal. UART and Ch4-7 DMA IRQ priorities
+are kept equal (1) to avoid RX IDLE / HT-TC producer reentrancy.
+The firmware remains SPR-only. See `BSP/Console/README.md` and
+`Docs/PD_UART_DIAG.md` for usage.
