@@ -22,6 +22,7 @@
 #include "stm32g0xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "usbpd_hw_if.h"  /* USBPD_PORT0_IRQHandler */
 #include "usbpd.h"
 /* USER CODE END Includes */
 
@@ -160,6 +161,10 @@ void SysTick_Handler(void)
 void UCPD1_2_IRQHandler(void)
 {
   /* USER CODE BEGIN UCPD1_2_IRQn 0 */
+  /* UCPD2 = PD port 0: 清 UCPD 状态并驱动 TX/RX/CAD 事件。
+   * CubeMX 勾选 USBPD 时会生成在 USER CODE 之外, 取消勾选就丢了, 结果是
+   * UCPD 中断标志永不清除 -> 中断风暴, 表现成卡在这个 ISR 里。 */
+  USBPD_PORT0_IRQHandler();
 
   /* USER CODE END UCPD1_2_IRQn 0 */
   /* USER CODE BEGIN UCPD1_2_IRQn 1 */
