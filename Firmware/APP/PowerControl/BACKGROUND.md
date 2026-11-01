@@ -55,6 +55,7 @@
 - 目录已放入 `Firmware/APP/PowerControl/`，**没有加入 Keil 工程（`.uvprojx`），不参与编译**，
   也不保证在当前工程下能编译通过（源工程的文件名/变量名与 G0 外设不匹配）。
 - 除本说明文件外，所有 `.c/.h/.md` 与源工程逐字节一致，未改名、未裁剪、未修补 include。
+  例外：`stm32g4xx_it.c`、`stm32g474xx_flash.sct` 只在文件头加了"仅作参考"横幅，正文未改。
 - 本工程的构建里目前只包含 `MiaoUI/`、`framework/` 与 `Core/`，`PowerControl/` 属纯参考代码。
 
 ## 5. 建议的移植顺序
@@ -72,3 +73,21 @@
 - 源工程总说明：`NUEDC_2026A\README.md`、`NUEDC_2026A\copy_manual.md`、`Docs\A题_AC-AC变换电路.pdf`
 - 本目录源文档：`README.md`（信号链与文件职责）
 - 本工程：`Docs/FIRMWARE_ARCHITECTURE.md`、`Docs/PORTING_NOTES.md`、`Docs/NEXT_STAGE_PLAN.md`
+
+## 7. 参考文件：RAM 执行速度优化（仅参考，移植后删除）
+
+从源工程额外借来两份文件，用于说明"把热路径放进 RAM 执行"的完整做法：
+
+| 文件 | 源位置 | 示范内容 |
+|---|---|---|
+| `stm32g4xx_it.c` | `Firmware_0/Core/Src/` | `RAMFUNC` 标注 ADC-DMA 半传输中断 → 直接调用 `MainLoop()`（开关频率级热路径）；故障处理里 `PWM_Stop()` + `NVIC_SystemReset()` 的兜底写法 |
+| `stm32g474xx_flash.sct` | `Firmware_0/MDK-ARM/` | 分散加载：`.ccm_text` 进 CCM SRAM（`0x10000000`）、512 B 向量表进 CCM（`0x10007E00`）、`ram_ro`/`ram_data` 进 SRAM2、栈置顶 |
+| `README_RAM_EXEC.md` | 本仓库 | 该实践的动机、三处措施、代价与坑、G071 上的移植改法与"卸磨杀驴"清单 |
+
+要点：源工程 240 MHz / Flash 5 WS，把中断向量表与 `MainLoop()` 搬进 CCM SRAM 后免掉取指等待；
+配套 `RAMVAR`/`RAMRO` 把环路系数与常量池放在 SRAM2。**本工程 G071 没有 CCM SRAM、主频仅 64 MHz、
+Flash 等待少，收益很小，暂不建议实施**（详见 `README_RAM_EXEC.md` 第 4 节）。
+
+这三个文件**都不属于 PowerControl**：中断向量归 `Core/Src/`，链接分区归 `MDK-ARM/`，且没有跨 MCU 复用的价值。
+移植消化完成后应按 `README_RAM_EXEC.md` 第 5 节删除，真正落地到本工程的只有
+`Core/Src/stm32g0xx_it.c` 的 `RAMFUNC` 标注与 `MDK-ARM/Ld/*.sct` 的分区改动。
