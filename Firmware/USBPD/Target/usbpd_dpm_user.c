@@ -37,6 +37,7 @@
 #include "app_tasks.h"
 #include "algorithm/pd_source_stats.h"
 #include "algorithm/pd_input.h"
+#include "algorithm/pd_epr_policy.h"
 #include "algorithm/pd_diag.h"
 /* USER CODE END Includes */
 
@@ -246,6 +247,14 @@ void USBPD_DPM_Notification(uint8_t PortNum, USBPD_NotifyEventValue_TypeDef Even
       PD_Input_Contract(1u);
       PD_Diag_Record(PD_DIAG_CONTRACT,1u,(uint32_t)EventVal);
       break;
+#if defined(USBPDCORE_EPR)
+    case USBPD_NOTIFY_EPRMODE_SUCCEEDED:
+    case USBPD_NOTIFY_EPRMODE_FAILED:
+    case USBPD_NOTIFY_EPRMODE_INVALID:
+    case USBPD_NOTIFY_EPRMODE_EXIT:
+      PD_Input_EPR_Notify((uint32_t)EventVal);
+      break;
+#endif
     case USBPD_NOTIFY_POWER_SNK_STOP:
     case USBPD_NOTIFY_USBSTACK_STOP:
       PD_Input_Contract(0u);
@@ -362,6 +371,42 @@ void USBPD_DPM_GetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
     // break;
 //  case USBPD_CORE_BATTERY_CAPABILITY:         /*!< Retrieve of Battery capability message content      */
     // break;
+#if defined(USBPDCORE_EPR)
+  case USBPD_CORE_DATATYPE_SNK_PDP_EPR:
+    if(Size)
+    {
+      if(Ptr)Ptr[0]=(uint8_t)(IH01A_EPR_28V5A_HARDWARE_APPROVED ? 140u : 0u);
+      *Size=Ptr?1u:0u;
+    }
+    break;
+  case USBPD_CORE_DATATYPE_SNK_PDO_EPR:
+    if(Ptr && Size && IH01A_EPR_28V5A_HARDWARE_APPROVED)
+    {
+      uint32_t pdos[8]={0u};
+      USBPD_PDO_TypeDef epr={0};
+      memcpy(pdos,PORT0_PDO_ListSNK,PORT0_NB_SINKPDO*sizeof(uint32_t));
+      epr.SNKFixedPDO.FixedSupply=USBPD_CORE_PDO_TYPE_FIXED;
+      epr.SNKFixedPDO.VoltageIn50mVunits=28000u/50u;
+      epr.SNKFixedPDO.OperationalCurrentIn10mAunits=5000u/10u;
+      pdos[7]=epr.d32;
+      memcpy(Ptr,pdos,sizeof(pdos));
+      *Size=sizeof(pdos);
+    }
+    else if(Size)*Size=0u;
+    break;
+  case USBPD_CORE_DATATYPE_REQ_COPYPDO:
+    if(Size)
+    {
+      uint32_t copy=0u;
+      if(Ptr && PD_Input_EPR_CopyPDO(&copy))
+      {
+        memcpy(Ptr,&copy,sizeof(copy));
+        *Size=sizeof(copy);
+      }
+      else *Size=0u;
+    }
+    break;
+#endif
   default:
     DPM_USER_DEBUG_TRACE(PortNum, "ADVICE: update USBPD_DPM_GetDataInfo:%d", DataId);
     break;
@@ -383,6 +428,11 @@ void USBPD_DPM_SetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
   /* Check type of information targeted by request */
   switch(DataId)
   {
+#if defined(USBPDCORE_EPR)
+  case USBPD_CORE_DATATYPE_RCV_SRC_PDO_EPR:
+    if(PortNum==USBPD_PORT_0)PD_Input_EPRCaps(Ptr,Size);
+    break;
+#endif
   case USBPD_CORE_DATATYPE_RCV_SRC_PDO:
     if(PortNum == USBPD_PORT_0)
     {

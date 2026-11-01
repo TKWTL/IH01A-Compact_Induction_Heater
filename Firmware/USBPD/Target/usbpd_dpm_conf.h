@@ -28,6 +28,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "usbpd_pdo_defs.h"
 #include "usbpd_dpm_user.h"
+#include "algorithm/pd_epr_policy.h"
 
 /* USER CODE BEGIN Includes */
 /* Section where include file can be added */
@@ -85,7 +86,11 @@ USBPD_SettingsTypeDef       DPM_Settings[USBPD_PORT_COUNT] =
       .Is_GetCountryInfo_Supported      = USBPD_FALSE,  /*!< Country_Info message supported or not by DPM */
       .Is_SecurityRequest_Supported     = USBPD_FALSE,  /*!< Security_Response message supported or not by DPM */
       .Is_FirmUpdateRequest_Supported   = USBPD_FALSE,  /*!< Firmware update response message supported by PE */
-      .Is_GetBattery_Supported          = USBPD_FALSE,  /*!< Get Battery Capabitity and Status messages supported by PE */
+      .Is_GetBattery_Supported          = USBPD_FALSE,
+#if defined(USBPDCORE_EPR)
+      .Is_EPR_Supported_SNK = IH01A_EPR_28V5A_HARDWARE_APPROVED ? USBPD_TRUE : USBPD_FALSE,
+      .Is_EPR_Supported_SRC = USBPD_FALSE,
+#endif  /*!< Get Battery Capabitity and Status messages supported by PE */
     },
 
     .CAD_SRCToggleTime = 0,                    /* uint8_t CAD_SRCToggleTime; */

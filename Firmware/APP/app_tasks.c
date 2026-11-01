@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include "console_cli.h"
 #include "algorithm/pd_diag.h"
+#include "algorithm/pd_input.h"
 #include "temp_service.h"
 
 static coro_scheduler_t s_scheduler;
@@ -112,6 +113,7 @@ void APP_Tasks_RunOnce(void)
 {
     /* Deferred PD diagnostic text; no UART transmission in PD callbacks. */
     g_uart_boot_stage=5u;
+    PD_Input_EPR_Poll(); /* foreground-only one-shot EPR PE requests */
     PD_Diag_Service();
     ConsoleCLI_Poll();
     DebugUART_Service();
