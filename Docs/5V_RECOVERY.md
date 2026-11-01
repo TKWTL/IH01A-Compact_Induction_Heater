@@ -14,6 +14,10 @@ Type-C VBUS resets during Keil stepping/halt.
   no Sink Request is sent; the passive external CC Rd remains present.
 - `MX_ADC1_Init`, `MX_TIM6_Init`, `ConvController_Init`:
   20kHz ADC/ISR disabled, temperature dashboard shows waiting/fault.
+- **LSE oscillator wait**, `MX_RTC_Init()`, and `Time_Init()`:
+  RTC/calendar omitted entirely to eliminate an unbounded LSE-ready
+  wait before UART initialization. `TIME_Millis()` still uses SysTick.
+  RTC-based uptime/calendar in Settings may show unavailable.
 - `MX_TIM1_Init`, `MX_TIM15_Init`, `MX_COMP1_Init`,
   `MX_COMP2_Init`, `MX_DAC1_Init`, `MX_I2C1_Init`:
   unnecessary stages skipped during early recovery. PWM_EN remains low.
@@ -53,9 +57,8 @@ contract, disconnect the cable and let VBUS discharge before reconnecting.
    4=enter main loop; 5=APP_Tasks_RunOnce runs.
    Inspect `g_uart_probe_result` (0 HAL_OK, 0xffffffff not reached).
    Also inspect `g_recovery_init_stage`: 0=before recovery init;
-   1=UART complete; 2=RTC initialized; 3=SPI initialized;
-   4=CRC/TIM14 initialized; 5=Time_Init returned;
-   6=APP_Tasks_Init returned.
+   1=UART complete; 2=SPI initialized; 3=CRC/TIM14 initialized;
+   4=RTC/Time_Init intentionally skipped; 5=APP_Tasks_Init returned.
 6. If both OLED and UART work in this profile but fail in main,
    investigate the USB-PD negotiation and the **blocking SSD1315
    u8g2 initialization during USBPD_DPM_UserExecute**. This code
@@ -64,3 +67,55 @@ contract, disconnect the cable and let VBUS discharge before reconnecting.
 
 Once baseline is stable, make ONE change at a time. Do not treat
 the 5V diagnostic firmware as a working PD implementation.
+
+## Second recovery update: cold start and OLED throughput
+
+- Removed the unbounded LSE oscillator-ready wait from the recovery
+  `SystemClock_Config()`, and skipped RTC initialization entirely.
+  A cold-start LSE problem can prevent USART1 from being reached at all.
+- Replaced `HAL_Delay(1)` after every scheduler pass with `__WFI()`:
+  the loop now wakes on DMA/SysTick interrupts, permitting the next
+  SSD1315 page transition as soon as the interrupt completes.
+- A heartbeat every 3s reports cumulative UI iterations,
+  display frame count and display flush requests.
+- Terminal command `status` reports the same counters plus init phases.
+  A 128x64 SSD1315 frame is 8 pages, 16 DMA transactions. If
+  `flush` increases but `frames` remains fixed, investigate
+  DMA1 Ch1/SPI1 completion IRQs and D/C/CS. If `frames` increases
+  regularly but no pixels appear, inspect external OLED VCC and
+  reset wiring. If UI updates stop, inspect PM state and OLED init.
+
+No conclusion has yet been drawn about the charger or the real board:
+these changes are instrumented experiments, not a verified hardware fix.
+
+## New OLED transport counters and reset interpretation
+
+Terminal commands: `help`, `ping`, `uart`, `status`.
+`status` prints `oled_ready`, cumulative `frames` and `flush`, plus:
+- `SPI init_err`: failed startup DMA transfers/aborts;
+- `start_err`: HAL_SPI_Transmit_DMA errors;
+- `busy`: driver tried to start a DMA while busy;
+- `irq_err`: HAL_SPI_ErrorCallback count;
+- `timeout`: no DMA completion within the 50ms runtime watchdog.
+
+Two `status` readings about 5 seconds apart give actual
+`(frame_count_2-frame_count_1)/5` FPS. The 3s recovery heartbeat also
+shows the count without any UART RX input.
+
+STM32G071 CMSIS maps RCC->CSR `0x1C000000` to
+`PINRSTF | PWRRSTF | SFTRSTF`: pin, power and software reset flags.
+These may accumulate until RMVF clears them, so they do NOT by
+themselves establish USB-PD Hard Reset or a 3.3V brownout.
+
+Power-up test sequence: physically disconnect the source so a
+previous high-voltage contract is cleared, check default VBUS ~5V,
+MCU 3.3V and **external** OLED VCC, then power on without entering
+Keil Debug. Observe whether `U1OK` and the 3s heartbeat appear.
+If cold startup remains silent even after skipping LSE, use
+SWD "Connect under Reset" and inspect PC/HardFault and rails.
+Keil's Debug "Run" may resume a halted CPU that is not configured
+to run after flash download; it is not equivalent to an independent
+power-on run. Confirm flash configuration "Reset and Run" separately.
+
+The 5V branch is not a fix for 20V/EPR PD negotiation: the main branch
+still needs a nonblocking OLED startup design for reliable PD deadlines.

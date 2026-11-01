@@ -4,6 +4,15 @@
 #include "algorithm/pd_input.h"
 #include <stdio.h>
 #include <string.h>
+#include "ssd1315_display.h"
+#include "display/dispDriver.h"
+#include "ih01a_recovery_profile.h"
+#include "main.h"
+#if IH01A_RECOVERY_5V_ONLY
+extern volatile uint32_t g_recovery_init_stage;
+extern volatile uint32_t g_recovery_ui_stage;
+extern volatile uint32_t g_recovery_ui_updates;
+#endif
 static char s_line[48];
 static uint8_t s_len;
 static void cli_dispatch(void)
@@ -11,9 +20,34 @@ static void cli_dispatch(void)
     PD_InputSnapshot pd;
     DebugUART_Stats stats;
     if(!strcmp(s_line,"help"))
-        printf("[CLI] help, ping, pd, uart\r\n");
+        printf("[CLI] help, ping, pd, uart, status\r\n");
     else if(!strcmp(s_line,"ping"))
         printf("[CLI] pong\r\n");
+    else if(!strcmp(s_line,"status"))
+    {
+        SSD1315_DisplayStats oled;
+        SSD1315_Display_GetStats(&oled);
+#if IH01A_RECOVERY_5V_ONLY
+        printf("[CLI] recovery init=%lu ui=%lu updates=%lu t=%lu ms\r\n",
+               (unsigned long)g_recovery_init_stage,
+               (unsigned long)g_recovery_ui_stage,
+               (unsigned long)g_recovery_ui_updates,
+               (unsigned long)HAL_GetTick());
+#else
+        printf("[CLI] normal mode t=%lu ms\r\n",
+               (unsigned long)HAL_GetTick());
+#endif
+        printf("[CLI] oled_ready=%u frames=%lu flush=%lu\r\n",
+               SSD1315_Display_IsReady(),
+               (unsigned long)SSD1315_Display_GetFrameCount(),
+               (unsigned long)Disp_GetFlushCount());
+        printf("[CLI] SPI init_err=%lu start_err=%lu busy=%lu irq_err=%lu timeout=%lu\r\n",
+               (unsigned long)oled.init_timeouts,
+               (unsigned long)oled.dma_start_failed,
+               (unsigned long)oled.dma_busy,
+               (unsigned long)oled.dma_irq_errors,
+               (unsigned long)oled.dma_runtime_timeouts);
+    }
     else if(!strcmp(s_line,"pd"))
     {
         PD_Input_GetSnapshot(&pd);

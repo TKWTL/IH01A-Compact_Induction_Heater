@@ -143,13 +143,13 @@ int main(void)
   DebugUART_Init(boot_reset_flags);
   g_uart_boot_stage=3u;
   g_recovery_init_stage=1u; /* UART probe and first DMA kicked */
-  MX_RTC_Init();
-  g_recovery_init_stage=2u;
+  /* RTC/LSE are entirely omitted in the recovery build: RTC setup can
+   * also wait indefinitely for LSE and is irrelevant to OLED/UART. */
   MX_SPI1_Init();
-  g_recovery_init_stage=3u;
+  g_recovery_init_stage=2u; /* SPI initialized */
   MX_CRC_Init();
   MX_TIM14_Init();
-  g_recovery_init_stage=4u; /* basic peripherals ready */
+  g_recovery_init_stage=3u; /* basic peripherals ready */
 #else
   MX_COMP1_Init();
   MX_COMP2_Init();
@@ -173,9 +173,12 @@ int main(void)
   /* USER CODE BEGIN 2 */
   /* RTC was reset to a relative calendar origin by MX_RTC_Init().
    * Record the boot epoch after all CubeMX peripheral initialization. */
-  Time_Init();
 #if IH01A_RECOVERY_5V_ONLY
-  g_recovery_init_stage=5u; /* RTC time service ready */
+  /* No RTC on this branch. Time_Millis() still uses HAL SysTick;
+   * System uptime stats may report calendar unavailable (expected). */
+  g_recovery_init_stage=4u; /* bypassed RTC time service */
+#else
+  Time_Init();
 #endif
   /* USER CODE END 2 */
 
@@ -193,7 +196,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   APP_Tasks_Init();
 #if IH01A_RECOVERY_5V_ONLY
-  g_recovery_init_stage=6u; /* APP scheduler initialized */
+  g_recovery_init_stage=5u; /* APP scheduler initialized */
 #endif
   /* Safe read-only TIM6->ADC1->DMA control ISR; TIM1/PWM_EN remain OFF. */
 #if !IH01A_RECOVERY_5V_ONLY
@@ -211,7 +214,9 @@ int main(void)
      * user execute hook. With USBPD disabled, execute it directly.
      * No PD deadlines exist in this special diagnostic firmware. */
     APP_Tasks_RunOnce();
-    HAL_Delay(1u);
+    /* Wake on SPI/USART DMA completion or the 1ms HAL SysTick.
+     * No mandatory 1ms sleep between successive OLED page states. */
+    __WFI();
   }
 #else
   while (1)
@@ -243,13 +248,16 @@ void SystemClock_Config(void)
   {
   }
 
+#if !IH01A_RECOVERY_5V_ONLY
   LL_PWR_EnableBkUpAccess();
-  /* LSE configuration and activation */
+  /* RTC LSE is optional for recovery but required by normal firmware.
+   * This production path is intentionally unchanged. */
   LL_RCC_LSE_SetDriveCapability(LL_RCC_LSEDRIVE_LOW);
   LL_RCC_LSE_Enable();
   while(LL_RCC_LSE_IsReady() != 1)
   {
   }
+#endif
 
   /* Main PLL configuration and activation */
   LL_RCC_PLL_ConfigDomain_TIM1(LL_RCC_PLLSOURCE_HSI, LL_RCC_PLLM_DIV_1, 16, LL_RCC_PLLQ_DIV_2);

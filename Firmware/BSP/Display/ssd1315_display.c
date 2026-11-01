@@ -42,6 +42,7 @@ static volatile uint8_t s_dma_phase;
 static volatile uint8_t s_dma_complete;
 static volatile uint8_t s_dma_failed;
 static uint32_t s_dma_started_ms;
+static SSD1315_DisplayStats s_stats;
 
 /* Shared DMA primitive for both startup commands and cooperative runtime.
  * The startup path may wait; ordinary page refresh never waits.
@@ -82,7 +83,10 @@ static uint8_t U8X8_Byte(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_p
         }
         success = (s_dma_complete && !s_dma_failed) ? 1u : 0u;
         if(!success)
+        {
+            ++s_stats.init_timeouts;
             (void)HAL_SPI_Abort(&hspi1);
+        }
         s_dma_phase = OLED_DMA_IDLE;
         s_dma_complete = 0u;
         s_dma_failed = 0u;
@@ -116,7 +120,10 @@ static uint8_t oled_start_dma(uint8_t *data, uint16_t length,
 {
     if(s_dma_phase != OLED_DMA_IDLE ||
        HAL_SPI_GetState(&hspi1) != HAL_SPI_STATE_READY)
+    {
+        ++s_stats.dma_busy;
         return 0u;
+    }
 
     if(data_mode)
         LL_GPIO_SetOutputPin(D_C_GPIO_Port, D_C_Pin);
@@ -129,6 +136,7 @@ static uint8_t oled_start_dma(uint8_t *data, uint16_t length,
     s_dma_started_ms = HAL_GetTick();
     if(HAL_SPI_Transmit_DMA(&hspi1, data, length) != HAL_OK)
     {
+        ++s_stats.dma_start_failed;
         s_dma_phase = OLED_DMA_IDLE;
         return 0u;
     }
@@ -145,7 +153,10 @@ void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
 void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
 {
     if(hspi->Instance == SPI1 && s_dma_phase != OLED_DMA_IDLE)
+    {
+        ++s_stats.dma_irq_errors;
         s_dma_failed = 1u;
+    }
 }
 
 void SSD1315_Display_Init(u8g2_t *screen)
@@ -164,6 +175,7 @@ void SSD1315_Display_Init(u8g2_t *screen)
     s_dma_failed = 0u;
     s_u8x8_dc = 0u;
     s_frames = 0u;
+    memset(&s_stats,0,sizeof(s_stats));
     /* Keep user-corrected initial display rotation. */
     u8g2_Setup_ssd1315_128x64_f(screen, U8G2_R2, U8X8_Byte, U8X8_GPIO);
     u8g2_InitDisplay(screen);
@@ -204,6 +216,7 @@ void SSD1315_Display_Service(void)
             /* Missing IRQ must not leave the display state machine stuck. */
             if((uint32_t)(HAL_GetTick() - s_dma_started_ms) <= 50u)
                 return;
+            ++s_stats.dma_runtime_timeouts;
             s_dma_failed = 1u;
         }
 
@@ -284,3 +297,8 @@ void SSD1315_Display_Service(void)
 
 uint8_t SSD1315_Display_IsReady(void) { return s_ready; }
 uint32_t SSD1315_Display_GetFrameCount(void) { return s_frames; }
+
+void SSD1315_Display_GetStats(SSD1315_DisplayStats *out)
+{
+    if(out)*out=s_stats; /* foreground diagnostics only */
+}

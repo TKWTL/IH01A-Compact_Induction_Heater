@@ -10,6 +10,14 @@ void SSD1315_Display_RequestFlush(const uint8_t *framebuffer);
 void SSD1315_Display_RequestContrast(uint8_t contrast);
 void SSD1315_Display_RequestPowerSave(uint8_t enable);
 void SSD1315_Display_Service(void);
+typedef struct {
+    uint32_t init_timeouts;
+    uint32_t dma_start_failed;
+    uint32_t dma_busy;
+    uint32_t dma_irq_errors;
+    uint32_t dma_runtime_timeouts;
+} SSD1315_DisplayStats;
+void SSD1315_Display_GetStats(SSD1315_DisplayStats *out);
 uint8_t SSD1315_Display_IsReady(void);
 uint32_t SSD1315_Display_GetFrameCount(void);
 #endif

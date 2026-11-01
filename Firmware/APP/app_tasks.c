@@ -16,10 +16,16 @@
 #include "console_cli.h"
 #include "algorithm/pd_diag.h"
 #include "temp_service.h"
+#include "ih01a_recovery_profile.h"
+#include <stdio.h>
 
 volatile uint32_t g_recovery_ui_stage;
+volatile uint32_t g_recovery_ui_updates;
 static coro_scheduler_t s_scheduler;
 static ui_t s_ui;
+#if IH01A_RECOVERY_5V_ONLY
+static uint32_t s_recovery_last_health;
+#endif
 
 THRD_DECLARE(thread_ui)
 {
@@ -40,6 +46,7 @@ THRD_DECLARE(thread_ui)
         {
             IH_Statistics_Poll();
             ui_loop(&s_ui);
+            ++g_recovery_ui_updates;
         }
     }
     THRD_END;
@@ -110,4 +117,21 @@ void APP_Tasks_RunOnce(void)
     TempService_Poll(); /* 10Hz; never in the 20kHz ADC ISR */
     CoroOS_RunOnce(&s_scheduler);
     SSD1315_Display_Service();
+#if IH01A_RECOVERY_5V_ONLY
+    /* 3-second low-rate heartbeat: observe continuous execution and
+     * compare UI iterations with frames actually sent to the panel. */
+    {
+        uint32_t now=TIME_Millis();
+        if((uint32_t)(now-s_recovery_last_health)>=3000u)
+        {
+            s_recovery_last_health=now;
+            printf("[RECOVERY %lu] ui_stage=%lu updates=%lu frames=%lu flush=%lu\r\n",
+                   (unsigned long)now,
+                   (unsigned long)g_recovery_ui_stage,
+                   (unsigned long)g_recovery_ui_updates,
+                   (unsigned long)SSD1315_Display_GetFrameCount(),
+                   (unsigned long)Disp_GetFlushCount());
+        }
+    }
+#endif
 }
