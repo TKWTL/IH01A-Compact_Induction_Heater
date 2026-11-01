@@ -34,6 +34,7 @@
 #include "stdio.h"
 #endif /* _TRACE */
 /* USER CODE BEGIN Includes */
+#include <string.h>   /* memcpy/memset: 上面 ST 的 string.h 被 #if defined(_TRACE) 包住,本工程不定义 _TRACE */
 #include "app_tasks.h"
 #include "algorithm/pd_source_stats.h"
 #include "algorithm/pd_input.h"
