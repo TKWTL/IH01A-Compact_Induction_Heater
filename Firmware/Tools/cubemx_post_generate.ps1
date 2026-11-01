@@ -158,6 +158,21 @@ if ((Test-Path $ioc) -and (Test-Path $startup)) {
     }
 }
 
+# --- 3b. 检查 USER CODE 里的关键调用是否还在(代码层面, CubeMX 碰不到) ----------
+$mainC = Join-Path $RepoRoot 'Firmware/Core/Src/main.c'
+if (Test-Path $mainC) {
+    $mc = Get-Content $mainC -Raw
+    foreach ($needle in @('USBPD_DPM_Run();', 'MX_USBPD_Init();', 'DebugUART_Init(boot_reset_flags);')) {
+        if ($mc.Contains($needle)) { $actions.Add("main.c keeps $needle") }
+        else { $problems.Add("main.c lost '$needle' (must live inside USER CODE)") }
+    }
+}
+$itC = Join-Path $RepoRoot 'Firmware/Core/Src/stm32g0xx_it.c'
+if (Test-Path $itC) {
+    $ic = Get-Content $itC -Raw
+    if ($ic.Contains('USBPD_DPM_TimerCounter();')) { $actions.Add('SysTick keeps USBPD_DPM_TimerCounter()') }
+    else { $problems.Add('stm32g0xx_it.c lost USBPD_DPM_TimerCounter() (PD 1ms time base)') }
+}
 # --- 4. 输出 ---------------------------------------------------------------
 Write-Host ''
 Write-Host '=== cubemx_post_generate ===' -ForegroundColor Cyan

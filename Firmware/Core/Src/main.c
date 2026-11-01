@@ -176,7 +176,12 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    /* coroOS now runs through USBPD_DPM_UserExecute() USER CODE. */
+    /* PD 栈 + coroOS 的主驱动, 链路:
+     *   USBPD_DPM_Run() -> USBPD_DPM_UserExecute() -> APP_Tasks_RunOnce()
+     *                   -> CoroOS_RunOnce() + SSD1315_Display_Service()
+     * CubeMX 取消 USBPD 后不再自动插入这一行, 必须留在 USER CODE, 否则调度器
+     * 永远不会被调用(表现: 停在 while(1), UI/ADC/PD 全部无反应)。 */
+    USBPD_DPM_Run();
   }
   /* USER CODE END 3 */
 }
