@@ -4,11 +4,12 @@
  * this module never toggles CC GPIOs or power source mode.
  */
 #include "framework/pd_input.h"
+#include "main.h"
 #include "conv_adc.h"
-#include "usbpd_dpm_user.h"
-#include "usbpd_dpm_core.h"
 #include "usbpd_core.h"
-#include "usbpd_def.h"
+#include "usbpd_dpm_core.h"
+#include "usbpd_dpm_conf.h"
+#include "usbpd_dpm_user.h"
 #include "core/ui.h"
 #include <stdio.h>
 #include <string.h>
