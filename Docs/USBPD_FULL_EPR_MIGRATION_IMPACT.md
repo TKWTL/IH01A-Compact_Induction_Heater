@@ -49,13 +49,13 @@
 
 新版设备层 7 个 `.c` 全部 `#include "usbpd_devices_conf.h"`（旧版没有这个依赖）。最小内容由模板 `usbpd_devices_conf_template.h` 派生，本板只需保留 UCPD2 相关项：
 
-- `UCPD_INSTANCE1  UCPD2`
+- `UCPD_INSTANCE0  UCPD2`（逻辑端口 0）
 - RX：`DMA1` / `DMA_REQUEST_UCPD2_RX` / `LL_DMA_CHANNEL_2` / `DMA1_Channel2`
 - TX：`DMA1` / `DMA_REQUEST_UCPD2_TX` / `LL_DMA_CHANNEL_4` / `DMA1_Channel4`
-- `UCPD_INSTANCE1_ENABLEIRQ`（UCPD2 中断使能宏）
+- `UCPD_INSTANCE0_ENABLEIRQ`（UCPD2 中断使能宏）
 - FRS 段：本板未用 FRS，按“不启用”配置
 
-需与 `Core/Src/dma.c` 的实际 DMA 通道分配核对后再落笔（当前 `MX_DMA_Init` 里 UCPD2 RX/TX 用的是哪些通道，要一一对上）。
+已核对：UCPD2 实际 DMA 分配在 `Core/Src/ucpd.c`，RX CH6/TX CH7；`dma.c` 只配 NVIC。ADC 使用 CH2，USART RX 使用 CH4，必须维持这些占用。
 
 ## 5. 应用层需要跟进的地方
 

@@ -48,8 +48,8 @@ Code=59,192  RO-data=3,060  RW-data=464  ZI-data=13,840     0 Error(s), 0 Warnin
 ## 4. 下一棒：按这个顺序做，每步都有验收标准
 
 ### 步骤 1　生成 `usbpd_devices_conf.h`
-- 从 `Firmware/Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/inc/usbpd_devices_conf_template.h` 派生，只保留 UCPD2 相关项：`UCPD_INSTANCE1=UCPD2`、RX(`DMA1`/`DMA_REQUEST_UCPD2_RX`/`LL_DMA_CHANNEL_2`/`DMA1_Channel2`)、TX(`DMA1`/`DMA_REQUEST_UCPD2_TX`/`LL_DMA_CHANNEL_4`/`DMA1_Channel4`)、`UCPD_INSTANCE1_ENABLEIRQ`；FRS 段按未使用处理。
-- 放到 `Firmware/USBPD/Target/usbpd_devices_conf.h`。
+- 从 `Firmware/Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/inc/usbpd_devices_conf_template.h` 派生，只保留 UCPD2 相关项：`UCPD_INSTANCE0=UCPD2`（唯一逻辑端口 0）、RX(`DMA1`/`DMA_REQUEST_UCPD2_RX`/`LL_DMA_CHANNEL_6`/`DMA1_Channel6`)、TX(`DMA1`/`DMA_REQUEST_UCPD2_TX`/`LL_DMA_CHANNEL_7`/`DMA1_Channel7`)、`UCPD_INSTANCE1_ENABLEIRQ`；FRS 段按未使用处理。
+- 使用已有的 `Firmware/USBPD/Target/usbpd_devices_conf.h`，适配 FULL 单端口 UCPD2 后保留 TIM3 时基。**错误的 2/4 通道会分别冲突 ADC DMA CH2 和 UART RX DMA CH4。**
 - **验收**：与 `Firmware/Core/Src/dma.c` 里 UCPD2 的实际 DMA 通道、`usbpd.c` 里的 UCPD2 初始化逐项对上；此步不接入编译。
 
 ### 步骤 2　换 `usbpd_dpm_core.c`

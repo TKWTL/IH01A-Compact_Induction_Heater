@@ -1,3 +1,4 @@
+/* FULL v5.4.1 device configuration: single USBPD logical port 0 is\n * UCPD2 (NOT UCPD1), RX DMA1/CH6, TX DMA1/CH7.\n * Respect ADC/CH2, UART RX/CH4, UART TX/CH5 and SPI/CH1.\n * Do not paste the two-UCPD ST template's INSTANCE1 CH2/CH4 settings.\n */
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
@@ -20,6 +21,10 @@
 
 #ifndef USBPD_DEVICE_CONF_H
 #define USBPD_DEVICE_CONF_H
+
+#if USBPD_PORT_COUNT != 1
+#error "IH01A UCPD2 is logical port 0; this configuration is single-port only"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
