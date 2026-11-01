@@ -1,23 +1,28 @@
 # 交接：IH01A USB-PD FULL/EPR 迁移（下一棒从这里继续）
 
-**分支**：`feature/pd-epr-28v5a`　**HEAD**：`814a81f`　**基点**：`main@668e541`
-**当前可运行状态**：板端 20 V 协商正常（实测 ~20.08 V），加热 PWM 关闭；镜像行为与 main **完全一致**。
+**分支**：`feature/pd-epr-28v5a`　**HEAD**：`9762dee`　**基点**：`main@668e541`
+**当前可运行状态**：FULL 栈（v5.4.1）**已链接进镜像**、CubeMX 护栏已就位；`main` 仍是 20 V 稳定版。
+**待做**：板端回归——刷 `6f4b5e0` 后确认 `[PD_INIT] FULL v5.4.1 initialized`、VBUS ≈ 20 V、OLED/UART 正常。EPR（28 V/5 A）仍由 `IH01A_EPR_28V5A_HARDWARE_APPROVED 0` 关闭。
 
 ---
 
-## 1. 这条分支已经完成的事（4 个提交）
+## 1. 这条分支已经完成的事
 
 | 提交 | 内容 | 验证 |
 |---|---|---|
 | `55cddb9` | `pd_select.{c,h}` 增加 EPR 选档预备：`PD_INPUT_EPR_MAX_MA 5000`、`PD_Input_BestEPRFixed()`、`PD_Input_EPRFixedRDO()`、`PD_Input_FixedRDOForEPR()`；`test_pd_select.c` 增加 28V/5A、AVS 排除、36V 越界用例 | host 测试通过 |
 | `dcf687b` | 修 `Tests/host/run.sh`：Windows 的 `snprintf` 需 `-D__USE_MINGW_ANSI_STDIO=1`；修 `\\` 续行、输出目录、`build_run` 封装 | 7/7 用例通过 |
 | `814a81f` | vendored ST FULL 中间件 v5.4.1（未接入编译）+ 影响面清单 | 批处理编译 0 error / 0 warning |
+| `753c4d1` | `.ioc` 取消勾选 USBPD（TIM3 释放）+ 恢复 PD plumbing（`usbpd.h` include、SysTick/IRQ 分发、8 KiB heap、FULL define/库/include） | Rebuild 通过 |
+| `862beb7` | `USBPD_DPM_Run()` 搬进 `USER CODE BEGIN 3`（CubeMX 生成时删掉了它 → 调度器全线不跑，卡死在 `main.c` 的 `while(1)`） | Code 48,476 → 75,936 |
+| `6f4b5e0` | `UCPD1_2_IRQHandler` 里恢复 `USBPD_PORT0_IRQHandler()`（同样被 CubeMX 删掉 → UCPD 标志永不清理 → 中断风暴，调试器停在 ISR 里） | `Code=76,316 RO=3,736 RW=464 ZI=21,024`，0 error / 0 warning |
+| `9762dee` | `cubemx_post_generate.ps1` 的 `USBPD_PORT0_IRQHandler()` 检查修成独立 if/else（原先多出一个悬挂 `else`，脚本直接退 1） | 干净状态下运行 exit 0 |
 | （`main` 上的 `0991678`/`187114b`/`668e541`） | uvprojx / uvoptx 的 Keil 原生序列化基线、`RunUserProg2=0`、uvoptx 重新纳入跟踪 | — |
 
-编译实测（Keil 批处理）：
+编译实测（Keil 批处理，`6f4b5e0`）：
 
 ```
-Code=59,192  RO-data=3,060  RW-data=464  ZI-data=13,840     0 Error(s), 0 Warning(s)
+Code=76,316  RO-data=3,736  RW-data=464  ZI-data=21,024     0 Error(s), 0 Warning(s)
 ```
 
 **注意**：新增的 `PD_Input_*EPR*` 函数**能编过但不在镜像里**——`One ELF Section per Function` + 链接器 gc 掉了（`fromelf` 已确认：`pd_select.o` 里有、`.axf` 里没有）。这是设计意图，不是漏编。
@@ -26,13 +31,12 @@ Code=59,192  RO-data=3,060  RW-data=464  ZI-data=13,840     0 Error(s), 0 Warnin
 
 | 事实 | 数据 |
 |---|---|
-| 当前链接的 PD 栈 | `USBPDCORE_PD3_CONFIG_MINSNK_CM0PLUS_Keil.lib`（81,116 B），宏 `USBPDCORE_LIB_PD3_CONFIG_MINSNK` |
-| 现有 USBPD 头文件 | `usbpd_core.h`/`usbpd_def.h`/`usbpd_trace.h`，**`EPR` 关键字出现 0 次** |
-| 新版 FULL 库 | `USBPDCORE_PD3_FULL_CM0PLUS_Keil.lib`（**140,892 B**），v5.4.1 `aafa359` |
+| 当前链接的 PD 栈 | `USBPDCORE_PD3_FULL_CM0PLUS_Keil.lib`（**140,892 B**），宏 `USBPDCORE_LIB_PD3_FULL`；**MINSNK 旧库已不在工程里** |
+| 当前 USBPD 头文件 | 全部来自 vendored `STM32_USBPD_Library_v541`（v5.4.1 `aafa359`），`EPR` API 可用 |
 | 新版 EPR API | `USBPD_PE_Request_EPRModeEnter(uint8_t PortNum)` / `...EPRModeExit(...)`（`usbpd_core.h`） |
-| 新版设备层强依赖 | 7 个 `.c` 全部 `#include "usbpd_devices_conf.h"`（旧版没有此依赖，仓库里也没有这个文件） |
-| 应用层 API 落差 | 应用层引用 382 个 `USBPD_/DPM_/PE_` 符号，新版 Core 头文件里**缺 180 个**（`DPM_Settings`/`DPM_Params`/`PE_PD3_Support` 等）→ `USBPD/App/usbpd_dpm_core.c` 需整体换新（本地 14,028 B vs 新版 30,189 B） |
-| 内存余量 | Flash 128 KiB（已用 ~59 KiB + 3 KiB RO），RAM 36 KiB（ZI 13.8 KiB + 栈/堆各 1 KiB） |
+| 设备层强依赖 | 7 个 `.c` 全部 `#include "usbpd_devices_conf.h"`；已按 UCPD2/CH6-CH7/TIM3 派生 |
+| 应用层 | `USBPD/App/usbpd_dpm_core.c` 已整体换成 FULL 版（30,189 B 口径，1019 行 + 诊断宏）；`usbpd_dpm_user.c` 的 EPR 代码在 `#if` 闸门后 |
+| 内存占用（实测 `6f4b5e0`） | Flash 128 KiB：Code 76,316 + RO 3,736（约 60%）；RAM 36 KiB：RW 464 + ZI 21,024 + **栈 1 KiB + microLIB 堆 8 KiB** |
 | 工具链配置 | **MicroLIB 开启**（`<useUlib>1`）、`mini_stdio.c` 已从 Target 排除、`retarget.c` 提供 `_sys_*` 桩（无半主机） |
 
 ## 3. 纪律与坑（踩过的，别再来一次）
@@ -46,7 +50,7 @@ Code=59,192  RO-data=3,060  RW-data=464  ZI-data=13,840     0 Error(s), 0 Warnin
 7. `Docs/USBPD_EPR_MIGRATION.md` 是 2026-11-01 的旧记录，其中"电流钳到 3 A"已被本分支的 5 A EPR 上限取代，以本文件和 `Docs/USBPD_FULL_EPR_MIGRATION_IMPACT.md` 为准。
 8. **`memcpy` 声明被条件编译挡掉**：`usbpd_dpm_user.c` 里 ST 把 `#include "string.h"` 放在 `#if defined(_TRACE)` 内，本工程不定义 `_TRACE`，于是新加的 EPR 代码用 `memcpy` 会报 `-Wimplicit-function-declaration`。已在 `USER CODE BEGIN Includes` 里显式加 `<string.h>`。
 9. **microLIB 堆必须放大到 8 KiB**：FULL 栈用 `malloc` 建 PE/PRL/CAD 句柄，实测需求 `PRL 0x396 + CAD 0x24 + PE (0x6F<<5) = 4506 B`（双口口径；`USBPD_PE_GetMemoryConsumption()` 返回值）。startup 原来 `Heap_Size = 0x400` 只有 1 KiB，`USBPD_PE_Init()` 直接返回 `USBPD_MALLOCERROR`（枚举值 21 / 0x15），表现为 `MX_USBPD_Init()` 里 `while(1)` 死等。现为 `0x2000`（RAM 静态占用约 22.5/36 KiB）。
-10. **CubeMX 可以继续用来改配置，但必须走"生成 → 跑脚本 → Rebuild"三步**（见 §4.2）。直接 Generate 会：覆盖 `Firmware/USBPD/**`、把 `uvprojx` 的 define/库/include 改回 MINSNK、删掉 IH01A 自己的文件组，并**删掉 `main.c` 里 `DebugUART_Init()` 的调用**（串口会彻底没输出）。
+10. **CubeMX 可以继续用来改配置，但必须走"生成 → 跑脚本 → Rebuild"三步**（见 §4.2）。直接 Generate 会：覆盖 `Firmware/USBPD/**` 与 `_v541`、删掉 `stm32g0xx_ll_tim.c`、把 `uvprojx` 的 define/库/include 改回 MINSNK、删掉 IH01A 自己的文件组，并删除非 USER-CODE 区域的关键调用——已实测被删过的有 `DebugUART_Init()`（串口全哑）、`USBPD_DPM_Run()`（调度器不跑，停在 `main.c` 的 `while(1)`）、`USBPD_DPM_TimerCounter()`（PD 无 1 ms 时基）、`USBPD_PORT0_IRQHandler()`（UCPD 标志不清理 → 中断风暴，调试器一直停在 `UCPD1_2_IRQHandler`）。这四处现在都住在 USER CODE 里，脚本的 3b 段会逐个校验。
 
 ## 4.2 CubeMX 工作流（已加护栏，2026-11-02）
 
@@ -54,10 +58,11 @@ Code=59,192  RO-data=3,060  RW-data=464  ZI-data=13,840     0 Error(s), 0 Warnin
 
 | 位置 | 做法 |
 |---|---|
-| `main.c` | 与 CubeMX 无关的调用全部搬进 `USER CODE`：`DebugUART_Init()`、`MX_USBPD_Init()` 现在都在 `USER CODE BEGIN 2` 里，重新生成不会丢 |
+| `main.c` | 与 CubeMX 无关的调用全部搬进 `USER CODE`：`DebugUART_Init()`、`MX_USBPD_Init()`（BEGIN 2）、`USBPD_DPM_Run()`（BEGIN 3）、`g_uart_boot_stage` 全部在手写区，重新生成不会丢 |
 | `main.c` `USER CODE BEGIN 0` | 加了**生成护栏**：若 `USBPDCORE_LIB_PD3_FULL` 未定义（= 刚被 CubeMX 重写过），直接 `#error` 并提示去跑脚本 —— 不会静默编出 MINSNK 版本 |
-| `Firmware/Tools/cubemx_post_generate.ps1` | 一键修复：恢复 `uvprojx` 为仓库版本 → 把新生成/已删除的 `Core/Src/*.c` 同步进工程 → 校验 define/库/include/旧目录残留/heap 一致性。幂等，干净状态下运行不改一个字节 |
-| `.ioc` | `ProjectManager.HeapSize=0x2000` 已写入，CubeMX 生成时会保持 |
+| `stm32g0xx_it.c` | `USBPD_DPM_TimerCounter()`（SysTick 1 ms）与 `USBPD_PORT0_IRQHandler()`（`UCPD1_2_IRQHandler`）都在 USER CODE 里 |
+| `Firmware/Tools/cubemx_post_generate.ps1` | 一键修复：恢复 `uvprojx` / `Firmware/USBPD` / `_v541` / `stm32g0xx_ll_tim.c` 为仓库版本 → 把新生成/已删除的 `Core/Src/*.c` 同步进工程 → 校验 define/库/include/旧目录残留/heap → 校验 4 个 USER CODE 关键调用。幂等，干净状态下运行不改一个字节 |
+| `.ioc` | `ProjectManager.HeapSize=0x2000` 已写入；USBPD 中间件**已取消勾选**（TIM3 不再被 CubeMX 占用，PD 时基由 `USBPD_TIM_Init()` 自己配） |
 
 标准流程：
 
@@ -68,28 +73,29 @@ powershell -ExecutionPolicy Bypass -File Firmware/Tools/cubemx_post_generate.ps1
 # 3) Keil: Rebuild（若跳过第 2 步，main.c 的 #error 会挡住编译并提示跑脚本）
 ```
 
-仍建议在 CubeMX 里**取消勾选 USBPD 中间件**（`Middlewares` 面板）：这样它连 `Firmware/USBPD/**` 都不会再尝试生成；不取消也能工作，只是每次生成后 `git diff` 里会出现那 5 个文件的旧模板内容，脚本不会替它们做内容回滚（那是 git 的活）。
+USBPD 中间件已在 `.ioc` 里**取消勾选**（`753c4d1`）：CubeMX 不再生成 `Firmware/USBPD/**`，CubeMX 也不再占用 TIM3（PD 时基由 `USBPD_TIM_Init()` 自己配）。若将来想改回去，勾上之后每次 Generate 都会把那 5 个文件写成旧模板，`git diff` 里会出现噪音。
 
 ## 4. 下一棒：按这个顺序做，每步都有验收标准
 
-### 步骤 1　生成 `usbpd_devices_conf.h`
+### 步骤 1　生成 `usbpd_devices_conf.h`　✅ 已完成
 - 从 `Firmware/Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/inc/usbpd_devices_conf_template.h` 派生，只保留 UCPD2 相关项：`UCPD_INSTANCE0=UCPD2`（唯一逻辑端口 0）、RX(`DMA1`/`DMA_REQUEST_UCPD2_RX`/`LL_DMA_CHANNEL_6`/`DMA1_Channel6`)、TX(`DMA1`/`DMA_REQUEST_UCPD2_TX`/`LL_DMA_CHANNEL_7`/`DMA1_Channel7`)、`UCPD_INSTANCE1_ENABLEIRQ`；FRS 段按未使用处理。
 - 使用已有的 `Firmware/USBPD/Target/usbpd_devices_conf.h`，适配 FULL 单端口 UCPD2 后保留 TIM3 时基。**错误的 2/4 通道会分别冲突 ADC DMA CH2 和 UART RX DMA CH4。**
 - **验收**：与 `Firmware/Core/Src/dma.c` 里 UCPD2 的实际 DMA 通道、`usbpd.c` 里的 UCPD2 初始化逐项对上；此步不接入编译。
 
-### 步骤 2　换 `usbpd_dpm_core.c`
+### 步骤 2　换 `usbpd_dpm_core.c`　✅ 已完成
 - 用新版 `stm32-mw-usbpd-core/src/usbpd_dpm_core.c`（30,189 B）替换工程的 14,028 B 版本，按本板裁剪（单端口、sink、无 VDM）。
 - **验收**：Keil Rebuild 0 error；`.map` 里 `Code/RO` 增量记录在案；`USBPD_PE_CheckLIB()` 返回 OK。
 
-### 步骤 3　切换 `.uvprojx`（做成一个可 revert 的提交）
+### 步骤 3　切换 `.uvprojx`　✅ 已完成（`753c4d1`，FULL define + 140,892 B 库 + v541 include）
 按 `Docs/USBPD_FULL_EPR_MIGRATION_IMPACT.md` §3 的 7 项：define 换 `USBPDCORE_LIB_PD3_FULL`、库路径、两条 IncludePath、`usbpd_trace.c`、7 个设备层 `.c` 路径。
 **验收**：Rebuild 通过，且 20 V 协商**仍然成功**。
 
-### 步骤 4　20 V 回归（这一步不做完不许碰 EPR）
+### 步骤 4　20 V 回归　🟡 待板端验收（这一步不做完不许碰 EPR）
+- 编译已过（`6f4b5e0`，0 error / 0 warning）；只剩上板确认。
 - 保持 `PD_Input_BestFixed()` 的 SPR 路径，请求仍 20V/3A。
-- **验收**：`SPR_CAPS` → `SPR REQUEST` → `PS_RDY` 全链路正常，实测 VBUS ≈ 20 V，`USBPD_DPM_UserExecute` 周期无退化，ADC/OLED 不卡。
+- **验收**：串口出现 `[PD_INIT] LIB_ID=0x30410000 check=OK` + `[PD_INIT] FULL v5.4.1 initialized`；`SPR_CAPS` → `SPR REQUEST` → `PS_RDY` 全链路正常，实测 VBUS ≈ 20 V，`USBPD_DPM_UserExecute` 周期无退化，ADC/OLED 不卡，调试器不再停在 `UCPD1_2_IRQHandler`。
 
-### 步骤 5　EPR 试入
+### 步骤 5　EPR 试入　⛔ 闸门关（`IH01A_EPR_28V5A_HARDWARE_APPROVED 0` + §5 硬件未确认）
 - 设置 sink EPR 支持位与 Operational PDP（28V×5A=140W）；SPR 契约稳定后调用 `USBPD_PE_Request_EPRModeEnter(0)`。
 - 处理成功/失败通知，读 EPR Source Capabilities，选 28V/5A（拒绝 36/48V），发 **EPR Request（RDO + 匹配的 CopyPDO）**。
 - **失败一律回落 SPR ≤20V，不自动重试**（只允许 UI 手动 Retry）。
