@@ -8,6 +8,12 @@
 *.wvproj   text eol=crlf
 *.launch   text eol=crlf
 
+# Keil MDK 工程文件:Keil 自己写 LF,这里固定 eol=lf 把行尾钉死,
+# 否则 text=auto + core.autocrlf=true 会把它检出成 CRLF,Keil 每保存一次
+# 工作区就变回 LF,git 视作整文件修改,反复挡住 pull/rebase(参见 PB02B 同名规则)。
+*.uvprojx  text eol=lf
+*.uvoptx   text eol=lf
+
 # 二进制资产不被 Git 触碰:PDF / 图片 / 固件镜像必须逐字节保持不变。
 *.pdf  binary
 *.png  binary
