@@ -15,7 +15,7 @@
  */
 #include <stdint.h>
 #include <stdio.h>
-#include "debug_uart.h"
+#include "usart.h"
 
 #if !defined(__ARMCC_VERSION) || (__ARMCC_VERSION < 6000000)
 #error "IH01A retarget.c requires ARMCLANG 6 (the configured Keil toolchain)."

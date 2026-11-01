@@ -119,3 +119,27 @@ power-on run. Confirm flash configuration "Reset and Run" separately.
 
 The 5V branch is not a fix for 20V/EPR PD negotiation: the main branch
 still needs a nonblocking OLED startup design for reliable PD deadlines.
+
+## 2026-11-01 CubeMX transport & coroutine refactor
+
+This branch incorporates the Core I/O ownership refactor from main:
+- UART DMA, 512B TX and RX software rings and USART IRQ callbacks reside
+  in `Core/Src/usart.c` USER CODE; the old standalone `debug_uart.c/h`
+  are removed. Public UART API lives in `Core/Inc/usart.h`.
+- SPI HAL TxDMA, completion/error/async-abort callbacks reside in
+  `Core/Src/spi.c` USER CODE. `ssd1315_display.c` contains only
+  SSD1315 command sequencing and application state.
+- `diapInit()` begins SSD1315 initialization but **returns immediately**;
+  the UI coroutine yields until `SSD1315_Display_InitState()` reports
+  READY (or FAILED). No `HAL_Delay` or busy-wait is used in OLED startup.
+
+Recovery variable `g_recovery_ui_stage` meanings are now:
+1=entered coroutine; 2=async SSD1315 initialization pending;
+3=SSD1315 initialization READY, preparing MiaoUI;
+4=MiaoUI setup completed; 6=OLED initialization failed.
+For an OLED failure, `status` prints SPI `init_err`, `start_err`,
+`busy`, `irq_err` and `timeout` counts.
+
+This remains 5V-only diagnostics; it is **not** production firmware
+and does not request USB PD 20V or 28V. Source power, OLED external
+VCC, MCU 3.3V and NRST must be checked on the actual board.

@@ -12,7 +12,7 @@
 #include "core/ui.h"
 #include "display/dispDriver.h"
 #include "ui_conf.h"
-#include "debug_uart.h"
+#include "usart.h"
 #include "console_cli.h"
 #include "algorithm/pd_diag.h"
 #include "temp_service.h"
@@ -35,8 +35,21 @@ THRD_DECLARE(thread_ui)
      * power sequencing; wait cooperatively without starving USB-PD. */
     THRD_DELAY(250u);
     g_recovery_ui_stage=2u; /* entering OLED u8g2 init */
-    diapInit();
-    g_recovery_ui_stage=3u; /* OLED init returned */
+    if(!diapInit())
+    {
+        g_recovery_ui_stage=6u; /* invalid begin */
+        printf("[OLED] begin rejected\r\n");
+        while(1) { THRD_DELAY(1000u); }
+    }
+    /* Hardware initialization proceeds in one DMA state per scheduler pass. */
+    THRD_UNTIL(SSD1315_Display_InitState()!=SSD1315_INIT_PENDING);
+    if(SSD1315_Display_InitState()!=SSD1315_INIT_READY)
+    {
+        g_recovery_ui_stage=6u; /* retries exhausted */
+        printf("[OLED] async init failed\r\n");
+        while(1) { THRD_DELAY(1000u); }
+    }
+    g_recovery_ui_stage=3u; /* OLED init completed */
     MiaoUi_Setup(&s_ui);
     g_recovery_ui_stage=4u; /* UI tree ready */
     while(1)

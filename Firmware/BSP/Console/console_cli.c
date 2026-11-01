@@ -1,6 +1,6 @@
 /* Bounded UART RX line shell. Never blocks the USBPD cooperative loop. */
 #include "console_cli.h"
-#include "debug_uart.h"
+#include "usart.h"
 #include "algorithm/pd_input.h"
 #include <stdio.h>
 #include <string.h>

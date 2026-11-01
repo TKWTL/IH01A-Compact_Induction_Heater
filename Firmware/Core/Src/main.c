@@ -37,7 +37,7 @@
 #include "app_tasks.h"
 #include "framework/time_service.h"
 #include "conv_controller.h"
-#include "debug_uart.h"
+#include "usart.h"
 #include "ih01a_recovery_profile.h"
 #include <stdio.h>
 
