@@ -3493,11 +3493,6 @@
               <FilePath>../BSP/Console/mini_format.c</FilePath>
             </File>
             <File>
-              <FileName>mini_stdio.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../BSP/Console/mini_stdio.c</FilePath>
-            </File>
-            <File>
               <FileName>console_cli.c</FileName>
               <FileType>1</FileType>
               <FilePath>../BSP/Console/console_cli.c</FilePath>
