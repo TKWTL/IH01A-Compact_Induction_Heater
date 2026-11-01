@@ -338,9 +338,9 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>USE_FULL_LL_DRIVER,STM32G071xx,USBPD_PORT_COUNT=1,_SNK,USBPDCORE_LIB_PD3_CONFIG_MINSNK,USE_HAL_DRIVER</Define>
+              <Define>USE_FULL_LL_DRIVER,STM32G071xx,USBPD_PORT_COUNT=1,_SNK,USBPDCORE_LIB_PD3_FULL,USE_HAL_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../APP;../APP/algorithm;../APP/MiaoUI;../APP/framework;../BSP/Buttons;../BSP/Display;../BSP/Console;../APP/PowerControl;../Peripheral/Time;./Scheduler;../ThirdParty/u8g2;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../USBPD/App;../USBPD/Target;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Middlewares/ST/STM32_USBPD_Library/Core/inc;../Middlewares/ST/STM32_USBPD_Library/Devices/STM32G0XX/inc</IncludePath>
+              <IncludePath>../Core/Inc;../APP;../APP/algorithm;../APP/MiaoUI;../APP/framework;../BSP/Buttons;../BSP/Display;../BSP/Console;../APP/PowerControl;../Peripheral/Time;./Scheduler;../ThirdParty/u8g2;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../USBPD/App;../USBPD/Target;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Middlewares/ST/STM32_USBPD_Library_v541/Core/inc;../Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/inc</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -3319,9 +3319,9 @@
           </GroupOption>
           <Files>
             <File>
-              <FileName>USBPDCORE_PD3_CONFIG_MINSNK_CM0PLUS_Keil.lib</FileName>
+              <FileName>USBPDCORE_PD3_FULL_CM0PLUS_Keil.lib</FileName>
               <FileType>4</FileType>
-              <FilePath>../Middlewares/ST/STM32_USBPD_Library/Core/lib/USBPDCORE_PD3_CONFIG_MINSNK_CM0PLUS_Keil.lib</FilePath>
+              <FilePath>../Middlewares/ST/STM32_USBPD_Library_v541/Core/lib/USBPDCORE_PD3_FULL_CM0PLUS_Keil.lib</FilePath>
               <FileOption>
                 <CommonProperty>
                   <UseCPPCompiler>2</UseCPPCompiler>
@@ -3345,7 +3345,7 @@
             <File>
               <FileName>usbpd_trace.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Middlewares/ST/STM32_USBPD_Library/Core/src/usbpd_trace.c</FilePath>
+              <FilePath>../Middlewares/ST/STM32_USBPD_Library_v541/Core/src/usbpd_trace.c</FilePath>
               <FileOption>
                 <CommonProperty>
                   <UseCPPCompiler>2</UseCPPCompiler>
@@ -3401,7 +3401,7 @@
             <File>
               <FileName>usbpd_cad_hw_if.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Middlewares/ST/STM32_USBPD_Library/Devices/STM32G0XX/src/usbpd_cad_hw_if.c</FilePath>
+              <FilePath>../Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/src/usbpd_cad_hw_if.c</FilePath>
               <FileOption>
                 <CommonProperty>
                   <UseCPPCompiler>2</UseCPPCompiler>
@@ -3457,7 +3457,7 @@
             <File>
               <FileName>usbpd_hw.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Middlewares/ST/STM32_USBPD_Library/Devices/STM32G0XX/src/usbpd_hw.c</FilePath>
+              <FilePath>../Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/src/usbpd_hw.c</FilePath>
               <FileOption>
                 <CommonProperty>
                   <UseCPPCompiler>2</UseCPPCompiler>
@@ -3513,7 +3513,7 @@
             <File>
               <FileName>usbpd_hw_if_it.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Middlewares/ST/STM32_USBPD_Library/Devices/STM32G0XX/src/usbpd_hw_if_it.c</FilePath>
+              <FilePath>../Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/src/usbpd_hw_if_it.c</FilePath>
               <FileOption>
                 <CommonProperty>
                   <UseCPPCompiler>2</UseCPPCompiler>
@@ -3569,7 +3569,7 @@
             <File>
               <FileName>usbpd_phy.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Middlewares/ST/STM32_USBPD_Library/Devices/STM32G0XX/src/usbpd_phy.c</FilePath>
+              <FilePath>../Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/src/usbpd_phy.c</FilePath>
               <FileOption>
                 <CommonProperty>
                   <UseCPPCompiler>2</UseCPPCompiler>
@@ -3625,7 +3625,7 @@
             <File>
               <FileName>usbpd_phy_hw_if.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Middlewares/ST/STM32_USBPD_Library/Devices/STM32G0XX/src/usbpd_phy_hw_if.c</FilePath>
+              <FilePath>../Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/src/usbpd_phy_hw_if.c</FilePath>
               <FileOption>
                 <CommonProperty>
                   <UseCPPCompiler>2</UseCPPCompiler>
@@ -3681,7 +3681,7 @@
             <File>
               <FileName>usbpd_pwr_hw_if.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Middlewares/ST/STM32_USBPD_Library/Devices/STM32G0XX/src/usbpd_pwr_hw_if.c</FilePath>
+              <FilePath>../Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/src/usbpd_pwr_hw_if.c</FilePath>
               <FileOption>
                 <CommonProperty>
                   <UseCPPCompiler>2</UseCPPCompiler>
@@ -3737,7 +3737,7 @@
             <File>
               <FileName>usbpd_timersserver.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Middlewares/ST/STM32_USBPD_Library/Devices/STM32G0XX/src/usbpd_timersserver.c</FilePath>
+              <FilePath>../Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/src/usbpd_timersserver.c</FilePath>
               <FileOption>
                 <CommonProperty>
                   <UseCPPCompiler>2</UseCPPCompiler>
