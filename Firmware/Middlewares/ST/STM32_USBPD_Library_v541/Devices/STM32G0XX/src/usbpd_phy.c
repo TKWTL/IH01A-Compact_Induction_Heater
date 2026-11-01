@@ -339,6 +339,15 @@ void PHY_Rx_Completed(uint8_t PortNum, uint32_t MsgType)
     case USBPD_SOPTYPE_SOP2_DEBUG :
       if (!((uint8_t)(0x1u << _msgtype) != (PHY_Ports[PortNum].SupportedSOP & (uint8_t)(0x1u << _msgtype))))
       {
+        /* IH01A: trace what the partner sends (type + raw header). Queue
+         * only, this runs in the RX interrupt context. */
+        {
+          extern void PD_RxTrace(uint32_t type, uint32_t hdr);
+          const uint8_t *rb = Ports[PortNum].ptr_RxBuff;
+          if (rb != (const uint8_t *)0)
+            PD_RxTrace((uint32_t)(rb[0] & 0x1FU),
+                       (uint32_t)rb[0] | ((uint32_t)rb[1] << 8));
+        }
         PHY_Ports[PortNum].USBPD_PHY_MessageReceived(PortNum, _msgtype);
       }
 #if defined(DEBUG_NOTFWD)

@@ -17,6 +17,10 @@ static uint8_t s_epr_mode, s_epr_enter_once, s_epr_exit_queued;
 static uint8_t s_epr_copy_valid, s_epr_user_requested;
 static uint8_t s_epr_any_event, s_epr_stall_logged, s_epr_probe;
 static uint8_t s_epr_local_pos;   /* 1 = EPR PDOs are numbered 1..6 */
+#if IH01A_EPR_DELAY_GETCAP
+static uint32_t s_epr_getcap_due_ms;
+static uint8_t  s_epr_getcap_sent;
+#endif
 /* Set by the stall fallback, consumed from USBPD_DPM_Notification(). */
 volatile uint8_t g_epr_ctx_pending;
 static uint32_t s_selected_rdo, s_copy_pdo, s_attach_ms, s_contract_ms;
@@ -188,6 +192,11 @@ void PD_Input_EPR_Notify(uint32_t event)
         s_epr_mode_since_ms=HAL_GetTick();
         s_epr_count=0u;
         s_epr_copy_valid=0u;
+#if IH01A_EPR_DELAY_GETCAP
+        /* Fetch the EPR capabilities ourselves after the reference delay. */
+        s_epr_getcap_due_ms=HAL_GetTick()+IH01A_EPR_GETCAP_DELAY_MS;
+        s_epr_getcap_sent=0u;
+#endif
         PD_Diag_Record(PD_DIAG_EPR_MODE,1u,event);
         break;
 #if defined(USBPD_NOTIFY_EPR_SRCCAP_RECEIVED)
@@ -238,6 +247,17 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
     if(s_epr_mode)
     {
+#if IH01A_EPR_DELAY_GETCAP
+        /* Decline the capability set the PE fetched immediately after
+         * EPRMODE_SUCCEEDED; we ask for a fresh one after the reference
+         * delay, which is what the working CH32X035 sink does. */
+        if(!s_epr_getcap_sent && !s_epr_exit_queued)
+        {
+            *rdo=0u;
+            *type=USBPD_CORE_PDO_TYPE_FIXED;
+            return 0u;
+        }
+#endif
         if(!s_epr_exit_queued && s_epr_count>=8u &&
            PD_Input_BestEPRFixed((const uint8_t *)s_epr_caps,
            (uint32_t)s_epr_count*4u,&pos,&mv,&ma,&p) &&
@@ -363,6 +383,18 @@ void PD_Input_EPR_Poll(void)
         }
 #endif
     }
+#if IH01A_EPR_DELAY_GETCAP
+    /* After the reference delay, fetch the EPR capabilities ourselves. */
+    if(s_epr_mode && !s_epr_getcap_sent &&
+       (int32_t)(HAL_GetTick()-s_epr_getcap_due_ms)>=0)
+    {
+        USBPD_StatusTypeDef r;
+        s_epr_getcap_sent=1u;
+        r=USBPD_PE_Send_ExtendeControlMessage(USBPD_PORT_0,
+                                              USBPD_EXTENDED_CONTROL_EPR_GETSRCCAPA);
+        PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A6u,(uint32_t)r);
+    }
+#endif
     if(s_epr_exit_queued)
     {
         s_epr_exit_queued=0u; /* only one exit attempt */

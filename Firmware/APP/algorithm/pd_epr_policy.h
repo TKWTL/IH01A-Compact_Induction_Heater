@@ -62,4 +62,11 @@
  * dropped, while reactive messages still work (SPR is fine). Force the
  * predicate TRUE so the PE actually transmits. */
 #define IH01A_PD_FORCE_SINK_TXOK   1
+
+/* The verified CH32X035 sink delays EPR_Get_Source_Cap by 120 ms after
+ * EPRMODE_SUCCEEDED; their notes record that sending it immediately caused
+ * 'Enter Succeeded followed by Source Hard Reset'. ST's PE sends it after
+ * 7 ms, so decline that early capability set and fetch it ourselves later. */
+#define IH01A_EPR_DELAY_GETCAP     1
+#define IH01A_EPR_GETCAP_DELAY_MS  120u
 #endif

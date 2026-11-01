@@ -75,8 +75,9 @@ USBPD_StatusTypeDef USBPD_HW_IF_SendBuffer(uint8_t PortNum, USBPD_SOPType_TypeDe
    * and the PHY dropped it"; this can. Queue only, no printing here. */
   if ((USBPD_SOPTYPE_HARD_RESET != Type) && (0U != Size))
   {
-    extern void PD_TxTrace(uint32_t type, uint32_t size);
-    PD_TxTrace((uint32_t)(pBuffer[0] & 0x1FU), Size);
+    extern void PD_TxTrace(uint32_t type, uint32_t hdr, uint32_t size);
+    PD_TxTrace((uint32_t)(pBuffer[0] & 0x1FU),
+               (uint32_t)pBuffer[0] | ((uint32_t)pBuffer[1] << 8), Size);
   }
 
   if (USBPD_SOPTYPE_HARD_RESET == Type)

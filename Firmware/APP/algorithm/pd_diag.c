@@ -27,18 +27,30 @@ void PD_Diag_Record(uint8_t code,uint32_t a,uint32_t b)
  * message (header MessageType 0x0A) on the wire, or did the PHY refuse it?
  * No printf here: PD callbacks and the PHY run in interrupt/sender-response
  * context, so only a queue record is made. */
-void PD_TxTrace(uint32_t type,uint32_t size)
+void PD_TxTrace(uint32_t type,uint32_t hdr,uint32_t size)
 {
     /* GoodCRC floods the queue so it is reported once; every other message
      * type is reported every time - "was the Request really re-sent?" is
-     * exactly the question the EPR diagnosis needs to answer. */
+     * exactly the question the EPR diagnosis needs to answer.
+     * b = (raw 16-bit header << 16) | size, so the log shows revision,
+     * message id and NDO as well as the type. */
     static uint32_t seen;
     if(type==1u)
     {
         if((seen&2UL)!=0u)return;
         seen|=2UL;
     }
-    PD_Diag_Record(PD_DIAG_PD_TX,type,size);
+    PD_Diag_Record(PD_DIAG_PD_TX,type,((hdr&0xFFFFUL)<<16)|(size&0xFFFFUL));
+}
+void PD_RxTrace(uint32_t type,uint32_t hdr)
+{
+    static uint32_t seen;
+    if(type==1u)
+    {
+        if((seen&2UL)!=0u)return;
+        seen|=2UL;
+    }
+    PD_Diag_Record(PD_DIAG_PD_RX,type,hdr&0xFFFFUL);
 }
 void PD_TxReject(uint32_t type,uint32_t status)
 {
@@ -95,6 +107,7 @@ void PD_Diag_Service(void)
     case PD_DIAG_PD_TX:label="PD_TX";break;
     case PD_DIAG_PD_TXREJ:label="PD_TXREJ";break;
     case PD_DIAG_PD_TXDONE:label="PD_TXDONE";break;
+    case PD_DIAG_PD_RX:label="PD_RX";break;
     default:label="UNKNOWN";break;
     }
     printf("[PD %lu] %s a=%lu b=0x%08lX\r\n",
