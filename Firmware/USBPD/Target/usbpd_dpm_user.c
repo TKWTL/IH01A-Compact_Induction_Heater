@@ -459,12 +459,15 @@ void USBPD_DPM_GetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
   case USBPD_CORE_DATATYPE_REQ_COPYPDO:
     if(Size)
     {
-      uint32_t objects[2]={0u,0u};
-      if(Ptr && PD_Input_EPR_RequestPayload(objects))
+      uint32_t copy=0u;
+      if(Ptr && PD_Input_EPR_CopyPDO(&copy))
       {
-        /* EPR_REQUEST = RDO + copied PDO, 8 bytes in total. */
-        memcpy(Ptr,objects,sizeof(objects));
-        *Size=sizeof(objects);
+        /* Hand back ONLY the copied Source PDO; the policy engine adds the
+         * RDO itself. Sending 8 bytes here made DO2 a duplicate of our RDO
+         * (visible in the logic-analyser capture) and the Source answered the
+         * EPR_Request with a Hard Reset. */
+        memcpy(Ptr,&copy,sizeof(copy));
+        *Size=sizeof(copy);
       }
       else *Size=0u;
     }

@@ -74,5 +74,5 @@
  * even with a bit-exact RDO/CopyPDO, so 5 A is the next suspect: a Source that
  * cannot grant 5 A (cable e-marker rating) may answer with a Hard Reset. Drop to
  * 3 A to find out whether current is the discriminator. */
-#define IH01A_EPR_REQUEST_MA       3000u
+#define IH01A_EPR_REQUEST_MA       5000u
 #endif

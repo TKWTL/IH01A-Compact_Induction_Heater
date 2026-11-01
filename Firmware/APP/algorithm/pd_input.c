@@ -147,11 +147,16 @@ void PD_Input_Contract(uint8_t ready)
  * Request payload: object 0 is the RDO, object 1 is the copied Source
  * PDO. Supplying only a four-byte CopyPDO leaves one DO absent.
  */
-uint8_t PD_Input_EPR_RequestPayload(uint32_t out[2])
+/* USBPD_CORE_DATATYPE_REQ_COPYPDO supplies ONLY the copied Source PDO; the
+ * policy engine builds the EPR_Request as DO1=RDO, DO2=what we return here.
+ * The logic-analyser capture proved that returning RDO+PDO (8 bytes) made the
+ * engine copy our first four bytes, so DO2 became 0x11C4B12C (our RDO)
+ * instead of 0x0008C1F4 (the 28V/5A EPR PDO) and the Source answered with a
+ * Hard Reset. Always hand back exactly four bytes: the copied PDO. */
+uint8_t PD_Input_EPR_CopyPDO(uint32_t *out)
 {
     if(!out||!s_epr_mode||!s_epr_copy_valid)return 0u;
-    out[0]=s_selected_rdo;
-    out[1]=s_copy_pdo;
+    *out=s_copy_pdo;
     return 1u;
 }
 uint8_t PD_Input_EPR_Active(void){return s_epr_mode;}
