@@ -55,6 +55,7 @@
 ```
 Firmware/APP/PowerControl/stm32g4xx_it.c          ← 只留 Core/Src/stm32g0xx_it.c 中的 RAMFUNC 标注
 Firmware/APP/PowerControl/stm32g474xx_flash.sct   ← 只留 MDK-ARM/Ld/*.sct 中的分区改动
+Firmware/APP/PowerControl/REF_main_h_main_c.md    ← 只留 main.h/main.c 中的宏与常量池定义
 Firmware/APP/PowerControl/README_RAM_EXEC.md      ← 本文件
 ```
 
@@ -63,6 +64,7 @@ Firmware/APP/PowerControl/README_RAM_EXEC.md      ← 本文件
 ```bash
 git rm Firmware/APP/PowerControl/stm32g4xx_it.c \
        Firmware/APP/PowerControl/stm32g474xx_flash.sct \
+       Firmware/APP/PowerControl/REF_main_h_main_c.md \
        Firmware/APP/PowerControl/README_RAM_EXEC.md
 ```
 

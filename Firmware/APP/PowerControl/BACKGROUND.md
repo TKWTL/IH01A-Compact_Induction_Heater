@@ -83,6 +83,7 @@
 | `stm32g4xx_it.c` | `Firmware_0/Core/Src/` | `RAMFUNC` 标注 ADC-DMA 半传输中断 → 直接调用 `MainLoop()`（开关频率级热路径）；故障处理里 `PWM_Stop()` + `NVIC_SystemReset()` 的兜底写法 |
 | `stm32g474xx_flash.sct` | `Firmware_0/MDK-ARM/` | 分散加载：`.ccm_text` 进 CCM SRAM（`0x10000000`）、512 B 向量表进 CCM（`0x10007E00`）、`ram_ro`/`ram_data` 进 SRAM2、栈置顶 |
 | `README_RAM_EXEC.md` | 本仓库 | 该实践的动机、三处措施、代价与坑、G071 上的移植改法与"卸磨杀驴"清单 |
+| `REF_main_h_main_c.md` | 本仓库（摘录源 `Core/Inc/main.h`、`Core/Src/main.c`） | `RAMFUNC`/`RAMVAR`/`RAMRO` 宏定义、SRAM2 常量池（`INV_3_F32`…）的声明与定义、`RelocateVectorTable()`（VTOR 重定位）、`VECT_TAB_START`、`ADC_VREF`、HRTIM 周期/死区常量，附源行号与移植映射表 |
 
 要点：源工程 240 MHz / Flash 5 WS，把中断向量表与 `MainLoop()` 搬进 CCM SRAM 后免掉取指等待；
 配套 `RAMVAR`/`RAMRO` 把环路系数与常量池放在 SRAM2。**本工程 G071 没有 CCM SRAM、主频仅 64 MHz、
@@ -91,3 +92,7 @@ Flash 等待少，收益很小，暂不建议实施**（详见 `README_RAM_EXEC.
 这三个文件**都不属于 PowerControl**：中断向量归 `Core/Src/`，链接分区归 `MDK-ARM/`，且没有跨 MCU 复用的价值。
 移植消化完成后应按 `README_RAM_EXEC.md` 第 5 节删除，真正落地到本工程的只有
 `Core/Src/stm32g0xx_it.c` 的 `RAMFUNC` 标注与 `MDK-ARM/Ld/*.sct` 的分区改动。
+
+另外 `REF_main_h_main_c.md` 摘录了源的 `Core/Inc/main.h` 与 `Core/Src/main.c` 中相关定义
+（`RAMFUNC`/`RAMVAR`/`RAMRO` 宏、SRAM2 常量池、`VECT_TAB_START` + `RelocateVectorTable()`、`ADC_VREF`、
+HRTIM 周期/死区常量），并给出到本工程的移植映射表；同样属参考文件，移植后一并删除。
