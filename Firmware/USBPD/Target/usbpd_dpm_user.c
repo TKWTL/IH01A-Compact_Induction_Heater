@@ -385,7 +385,13 @@ void USBPD_DPM_GetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
        * the Source answer the EPR request with an invalid/zero field. */
       if(Ptr)Ptr[0]=(uint8_t)(IH01A_EPR_28V5A_HARDWARE_APPROVED ? IH01A_EPR_SINK_PDP_W : 0u);
       *Size=Ptr?1u:0u;
-      PD_Diag_Record(PD_DIAG_EPR_ACTION,0x1E1u,*Size);
+      /* The PE may poll; log only on change so the 32-entry diag queue
+       * cannot flood and drop the EPR event records. */
+      {
+        static uint32_t last=0xFFFFFFFFu;
+        uint32_t now=(uint32_t)*Size|((uint32_t)(Ptr?Ptr[0]:0u)<<8);
+        if(now!=last){last=now;PD_Diag_Record(PD_DIAG_EPR_ACTION,0x1E1u,now);}
+      }
     }
     break;
   case USBPD_CORE_DATATYPE_SNK_PDO_EPR:
@@ -401,7 +407,10 @@ void USBPD_DPM_GetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
       pdos[7]=epr.d32;
       memcpy(Ptr,pdos,sizeof(pdos));
       *Size=sizeof(pdos);
-      PD_Diag_Record(PD_DIAG_EPR_ACTION,0x1E2u,*Size);
+      {
+        static uint32_t last=0xFFFFFFFFu;
+        if(*Size!=last){last=*Size;PD_Diag_Record(PD_DIAG_EPR_ACTION,0x1E2u,*Size);}
+      }
     }
     else if(Size)*Size=0u;
     break;

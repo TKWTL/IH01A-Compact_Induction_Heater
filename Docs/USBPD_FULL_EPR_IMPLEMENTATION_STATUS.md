@@ -166,4 +166,4 @@ PDP 用 140 W 而**不是** 84 W：Sink PDO 与请求电流都是 5 A，PDP 写 
 | `EPR_EVT a=119` 之后才有 `EPR_CAPS` | 能力消息到了但对象没被识别：看 `EPR_CAPS a` 字节数与 `b` 首个 PDO |
 | `EPR_ACT a=4 b=0` 反复出现 | PE 在反复做 PDO 校验，说明流程卡在 PDO 有效性而非 EPR 模式本身 |
 
-本轮 Rebuild：**0 Error(s), 0 Warning(s)**，`Code=78,632 RO-data=3,988 RW-data=464 ZI-data=21,120`；host 单测 7/7 通过。
+本轮 Rebuild：**0 Error(s), 0 Warning(s)**，`Code=78,676 RO-data=3,988 RW-data=468 ZI-data=21,124`；host 单测 7/7 通过。`EPR_ACT` 的 481/482 只在值变化时记录，避免 PE 轮询把 32 条诊断队列冲掉。
