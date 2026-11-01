@@ -43,6 +43,7 @@ void PD_Diag_Service(void)
     case PD_DIAG_EPR_MODE:label="EPR_MODE";break;
     case PD_DIAG_EPR_CAPS:label="EPR_CAPS";break;
     case PD_DIAG_EPR_RDO:label="EPR_REQUEST";break;
+    case PD_DIAG_EPR_PDO2:label="EPR_PDO2";break;
     default:label="UNKNOWN";break;
     }
     printf("[PD %lu] %s a=%lu b=0x%08lX\r\n",

@@ -12,7 +12,7 @@ static void cli_dispatch(void)
     PD_InputSnapshot pd;
     DebugUART_Stats stats;
     if(!strcmp(s_line,"help"))
-        printf("[CLI] help, ping, pd, uart\r\n");
+        printf("[CLI] help, ping, pd, pd epr, uart\r\n");
     else if(!strcmp(s_line,"ping"))
         printf("[CLI] pong\r\n");
     else if(!strcmp(s_line,"pd"))
@@ -26,6 +26,13 @@ static void cli_dispatch(void)
         printf("[CLI] EPR enabled=%u mode=%u (28V/5A gated)\r\n",
                (unsigned)IH01A_EPR_28V5A_HARDWARE_APPROVED,
                (unsigned)PD_Input_EPR_Active());
+    }
+    else if(!strcmp(s_line,"pd epr"))
+    {
+        if(PD_Input_ManualEPR())
+            printf("[CLI] EPR enter queued; verify 240W cable, monitor VBUS\r\n");
+        else
+            printf("[CLI] EPR unavailable: need SPR contract, EPR source and approval\r\n");
     }
     else if(!strcmp(s_line,"uart"))
     {

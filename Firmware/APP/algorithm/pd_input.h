@@ -20,6 +20,7 @@ uint8_t PD_Input_EPR_CopyPDO(uint32_t *out);
 uint8_t PD_Input_EPR_Active(void);
 uint8_t PD_Input_Evaluate(uint32_t *rdo, uint32_t *type);
 uint8_t PD_Input_Manual(void);
+uint8_t PD_Input_ManualEPR(void);
 void PD_Input_GetSnapshot(PD_InputSnapshot *out);
 uint32_t PD_Input_VbusMillivolts(void);
 #endif

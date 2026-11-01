@@ -14,7 +14,7 @@
 static uint32_t s_caps[7], s_epr_caps[13];
 static uint8_t s_count, s_manual, s_epr_count;
 static uint8_t s_epr_mode, s_epr_enter_once, s_epr_exit_queued;
-static uint8_t s_epr_copy_valid;
+static uint8_t s_epr_copy_valid, s_epr_user_requested;
 static uint32_t s_selected_rdo, s_copy_pdo, s_attach_ms, s_contract_ms;
 static uint32_t s_spr_rdo,s_spr_mv,s_spr_ma;
 static uint8_t s_spr_pos;
@@ -45,7 +45,7 @@ void PD_Input_Init(void)
     memset(s_caps,0,sizeof(s_caps));
     memset(s_epr_caps,0,sizeof(s_epr_caps));
     s_count=s_manual=s_epr_count=s_epr_mode=s_epr_enter_once=0u;
-    s_epr_exit_queued=s_epr_copy_valid=0u;
+    s_epr_exit_queued=s_epr_copy_valid=s_epr_user_requested=0u;
     s_selected_rdo=s_copy_pdo=s_attach_ms=s_contract_ms=0u;
     s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
 }
@@ -61,6 +61,7 @@ void PD_Input_Reset(void)
     s_state.explicit_contract=0u;
     s_manual=s_count=s_epr_count=s_epr_mode=s_epr_copy_valid=0u;
     s_epr_enter_once=1u;
+    s_epr_user_requested=0u;
     s_epr_exit_queued=0u;
     s_selected_rdo=s_copy_pdo=0u;
     s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
@@ -75,14 +76,32 @@ void PD_Input_Caps(const uint8_t *data,uint32_t bytes)
     s_count=(uint8_t)(bytes/4u);
     PD_Diag_Record(PD_DIAG_CAPS,s_count,s_caps[0]);
 }
+/* ST reports EPR PDOs SEPARATELY from the seven SPR positions.
+ * EPR callback size is typically 1..6 objects (4..24 bytes), not 32..52.
+ * Reserve slots 1..7 and map the first EPR PDO to object position 8.
+ * Never guess missing objects if an ST chunked callback is truncated.
+ */
 void PD_Input_EPRCaps(const uint8_t *data,uint32_t bytes)
 {
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
-    if(!s_epr_mode||!data||bytes<32u||bytes>sizeof(s_epr_caps)||
-       (bytes&3u)!=0u) {s_epr_count=0u;return;}
-    memcpy(s_epr_caps,data,bytes);
-    s_epr_count=(uint8_t)(bytes/4u);
-    PD_Diag_Record(PD_DIAG_EPR_CAPS,s_epr_count,0u);
+    uint32_t count, first=0u;
+    s_epr_count=0u;
+    s_epr_copy_valid=0u;
+    memset(s_epr_caps,0,sizeof(s_epr_caps));
+    if(!s_epr_mode||!data||bytes<4u||
+       bytes>(USBPD_MAX_NB_EPRPDO*4u)||(bytes&3u)!=0u)
+    {
+        PD_Diag_Record(PD_DIAG_EPR_CAPS,bytes,0u);
+        return;
+    }
+    count=bytes/4u;
+    memcpy(&s_epr_caps[USBPD_MAX_NB_PDO],data,bytes);
+    s_epr_count=(uint8_t)(USBPD_MAX_NB_PDO+count);
+    memcpy(&first,data,sizeof(first));
+    PD_Diag_Record(PD_DIAG_EPR_CAPS,bytes,first);
+    /* Additional second object helps diagnose AVS after 28V Fixed. */
+    if(count>1u)
+        PD_Diag_Record(PD_DIAG_EPR_PDO2,2u,s_epr_caps[8]);
 #else
     (void)data;(void)bytes;
 #endif
@@ -113,6 +132,7 @@ void PD_Input_EPR_RequestRejected(void)
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
     if(s_epr_mode && s_epr_copy_valid)
     {
+        s_epr_user_requested=0u;
         PD_EPR_RestoreSPR();
         s_epr_exit_queued=1u;
         PD_Diag_Record(PD_DIAG_EPR_MODE,0u,0xFFFFu);
@@ -137,6 +157,7 @@ void PD_Input_EPR_Notify(uint32_t event)
         s_epr_count=0u;
         s_epr_copy_valid=0u;
         s_epr_exit_queued=0u;
+        s_epr_user_requested=0u;
         PD_EPR_RestoreSPR();
         PD_Diag_Record(PD_DIAG_EPR_MODE,0u,event);
         break;
@@ -195,6 +216,7 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
             return 1u;
         }
         /* No suitable 28V/5A Fixed EPR PDO: stay at SPR voltage and exit EPR. */
+        s_epr_user_requested=0u;
         s_epr_exit_queued=1u;
     }
 #endif
@@ -241,7 +263,8 @@ void PD_Input_EPR_Poll(void)
         (void)USBPD_PE_Request_EPRModeExit(USBPD_PORT_0);
         return;
     }
-    if(s_epr_enter_once||s_epr_mode||!s_state.explicit_contract ||
+    if(!(IH01A_EPR_28V5A_AUTO_ENTER || s_epr_user_requested)||
+       s_epr_enter_once||s_epr_mode||!s_state.explicit_contract ||
        !PD_SourceIsEPRCapable() ||
        (uint32_t)(HAL_GetTick()-s_contract_ms)<250u)return;
     s_epr_enter_once=1u; /* only one request for this attachment */
@@ -251,17 +274,28 @@ void PD_Input_EPR_Poll(void)
         PD_Diag_Record(PD_DIAG_EPR_ENTER,0u,0u);
 #endif
 }
+/* Authorized manual EPR attempt: can be invoked by CLI or PD settings.
+ * It never bypasses the FULL stack's EPR cable/source checks.
+ */
+uint8_t PD_Input_ManualEPR(void)
+{
+#if IH01A_EPR_28V5A_HARDWARE_APPROVED
+    if(!s_state.attached||!s_state.explicit_contract||s_epr_mode||
+       !PD_SourceIsEPRCapable())return 0u;
+    s_epr_enter_once=0u;
+    s_epr_user_requested=1u;
+    s_contract_ms=HAL_GetTick()-250u;
+    PD_Diag_Record(PD_DIAG_MANUAL,2u,0u);
+    return 1u;
+#else
+    return 0u;
+#endif
+}
 uint8_t PD_Input_Manual(void)
 {
     if(!s_state.attached)return 0u;
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
-    if(!s_epr_mode && s_state.explicit_contract && PD_SourceIsEPRCapable())
-    {
-        s_epr_enter_once=0u;
-        s_contract_ms=HAL_GetTick()-250u;
-        PD_Diag_Record(PD_DIAG_MANUAL,2u,0u);
-        return 1u;
-    }
+    if(PD_Input_ManualEPR())return 1u;
 #endif
     if(USBPD_DPM_RequestGetSourceCapability(0u)!=USBPD_OK)return 0u;
     s_manual=1u;
