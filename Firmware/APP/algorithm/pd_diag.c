@@ -42,6 +42,10 @@ void PD_TxTrace(uint32_t type,uint32_t hdr,uint32_t size)
     }
     PD_Diag_Record(PD_DIAG_PD_TX,type,((hdr&0xFFFFUL)<<16)|(size&0xFFFFUL));
 }
+void PD_TxData(uint32_t do1,uint32_t do2)
+{
+    PD_Diag_Record(PD_DIAG_PD_TXDO,do1,do2);
+}
 void PD_RxTrace(uint32_t type,uint32_t hdr)
 {
     static uint32_t seen;
@@ -108,10 +112,15 @@ void PD_Diag_Service(void)
     case PD_DIAG_PD_TXREJ:label="PD_TXREJ";break;
     case PD_DIAG_PD_TXDONE:label="PD_TXDONE";break;
     case PD_DIAG_PD_RX:label="PD_RX";break;
+    case PD_DIAG_PD_TXDO:label="PD_TXDO";break;
     default:label="UNKNOWN";break;
     }
-    printf("[PD %lu] %s a=%lu b=0x%08lX\r\n",
-           (unsigned long)e.ms,label,(unsigned long)e.a,(unsigned long)e.b);
+    if(e.event==PD_DIAG_PD_TXDO)
+        printf("[PD %lu] %s do1=0x%08lX do2=0x%08lX\r\n",
+               (unsigned long)e.ms,label,(unsigned long)e.a,(unsigned long)e.b);
+    else
+        printf("[PD %lu] %s a=%lu b=0x%08lX\r\n",
+               (unsigned long)e.ms,label,(unsigned long)e.a,(unsigned long)e.b);
     /* Decode the 112..119 EPR notification ids for readability. */
     if(e.event==PD_DIAG_EPR_EVENT)
     {
