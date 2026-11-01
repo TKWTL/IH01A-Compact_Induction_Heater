@@ -27,6 +27,9 @@
 /* 0=not reached, 1=HW, 2=Core, 3=User, 4=OS ready;
  * >=0xE0: init failure. Inspect in Keil even if DMA TX cannot progress. */
 volatile uint32_t g_usbpd_full_stage;
+/* 来自 usbpd_dpm_core.c: InitCore 内部失败子步骤与状态码 */
+extern volatile uint32_t g_pd_init_substep;
+extern volatile uint32_t g_pd_init_status;
 /* USER CODE END 0 */
 
 /* USER CODE BEGIN 1 */
@@ -47,10 +50,15 @@ void MX_USBPD_Init(void)
   g_usbpd_full_stage=1u;
 
   /* Initialize the Device Policy Manager */
+  printf("[PD_INIT] LIB_ID=0x%08X check=%lu\r\n",
+         (unsigned)_LIB_ID, (unsigned long)USBPD_PE_CheckLIB(_LIB_ID));
+  DebugUART_Service();
   if (USBPD_OK != USBPD_DPM_InitCore())
   {
     g_usbpd_full_stage=0xE1u;
     printf("[PD_INIT] FULL core / library check FAILED\r\n");
+    printf("[PD_INIT] substep=%lu status=0x%08X\r\n",
+           (unsigned long)g_pd_init_substep, (unsigned)g_pd_init_status);
     DebugUART_Service();
     while(1);
   }

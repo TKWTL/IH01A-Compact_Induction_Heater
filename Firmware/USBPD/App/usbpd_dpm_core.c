@@ -135,17 +135,28 @@ UTIL_TIMER_Object_t TimerPE0, TimerPE1;
 #endif /* _RTOS */
 
 /* Private define ------------------------------------------------------------*/
+/* IH01A 诊断: InitCore 内部失败落在哪个子步骤(0=无, 1=CAD_Init, 2=PE_Init, 3=CheckLIB) */
+volatile uint32_t g_pd_init_substep;
+volatile uint32_t g_pd_init_status;
+
 /* Private macro -------------------------------------------------------------*/
 #define CHECK_PE_FUNCTION_CALL(_function_)  do{                                     \
                                                 _retr = _function_;                  \
-                                               if(USBPD_OK != _retr) {goto error;}   \
+                                                if(USBPD_OK != _retr) {              \
+                                                  g_pd_init_substep=2u;              \
+                                                  g_pd_init_status=(uint32_t)_retr;  \
+                                                  goto error;}                       \
                                               } while(0);
 
-#define CHECK_CAD_FUNCTION_CALL(_function_) if(USBPD_CAD_OK != _function_)      \
-  {                                   \
-    _retr = USBPD_ERROR;              \
-    goto error;                       \
-  }
+#define CHECK_CAD_FUNCTION_CALL(_function_) do{                                     \
+                                                uint32_t _cad_st=(uint32_t)(_function_); \
+                                                if(USBPD_CAD_OK != _cad_st) {       \
+                                                  g_pd_init_substep=1u;             \
+                                                  g_pd_init_status=_cad_st;         \
+                                                  _retr = USBPD_ERROR;              \
+                                                  goto error;                       \
+                                                }                                   \
+                                              } while(0);
 
 #if defined(_DEBUG_TRACE)
 #define DPM_CORE_DEBUG_TRACE(_PORTNUM_, __MESSAGE__)  \
@@ -319,6 +330,8 @@ USBPD_StatusTypeDef USBPD_DPM_InitCore(void)
   /* Check the lib selected */
   if (USBPD_TRUE != USBPD_PE_CheckLIB(LIB_ID))
   {
+    g_pd_init_substep=3u;
+    g_pd_init_status=(uint32_t)LIB_ID;
     _retr = USBPD_ERROR;
     goto error;
   }
