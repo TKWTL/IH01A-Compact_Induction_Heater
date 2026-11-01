@@ -47,4 +47,11 @@
  *      notification (i.e. from PE callback context).
  */
 #define IH01A_EPR_STALL_FALLBACK   1
+
+/* Register the EPR entry only from PE callback context: re-issue the current
+ * SPR Request first, then call USBPD_PE_Request_EPRModeEnter() from the
+ * POWER_EXPLICIT_CONTRACT notification. Calling it from the idle main loop
+ * leaves the library's EPR machine pending for ever (bench-proved: BUSY on
+ * every later request, no PD_TX at all). */
+#define IH01A_EPR_REENTER_ON_CONTRACT 1
 #endif

@@ -15,7 +15,7 @@ static uint32_t s_caps[7], s_epr_caps[13];
 static uint8_t s_count, s_manual, s_epr_count;
 static uint8_t s_epr_mode, s_epr_enter_once, s_epr_exit_queued;
 static uint8_t s_epr_copy_valid, s_epr_user_requested;
-static uint8_t s_epr_any_event, s_epr_stall_logged;
+static uint8_t s_epr_any_event, s_epr_stall_logged, s_epr_probe;
 /* Set by the stall fallback, consumed from USBPD_DPM_Notification(). */
 volatile uint8_t g_epr_ctx_pending;
 static uint32_t s_selected_rdo, s_copy_pdo, s_attach_ms, s_contract_ms;
@@ -317,33 +317,36 @@ void PD_Input_EPR_Poll(void)
         PD_Diag_Record(PD_DIAG_EPR_MODE,0u,0xBAD1u);
     }
     /* The PE accepted the EPR_Mode request but produced no notification at
-     * all: report it once, so a silent stall is visible in the log instead
-     * of looking like "nothing happened". */
-    if(s_epr_enter_ms&&s_epr_enter_once&&!s_epr_mode&&!s_epr_any_event&&
-       !s_epr_stall_logged&&
-       (uint32_t)(HAL_GetTick()-s_epr_enter_ms)>1000u)
+     * all: report it once, then probe the stack in increasing order. */
+    if(s_epr_enter_ms&&s_epr_enter_once&&!s_epr_mode&&!s_epr_any_event)
     {
-        s_epr_stall_logged=1u;
-        PD_Diag_Record(PD_DIAG_EPR_EVENT,0u,0xD00Du);
-#if IH01A_EPR_STALL_FALLBACK
-        /* Fallback A: ask the PE to emit EPR_Mode as a plain data message.
-         * The EPR_Mode data object is (EPR Mode Action << 24) | (PDP W << 16)
-         * as used by the working reference sink. */
+        uint32_t waited=(uint32_t)(HAL_GetTick()-s_epr_enter_ms);
+        if(waited>1000u&&!s_epr_stall_logged)
         {
-            uint32_t mdo=(1UL<<24)|((uint32_t)IH01A_EPR_SINK_PDP_W<<16);
-            USBPD_StatusTypeDef rc;
-            rc=USBPD_PE_Request_DataMessage(USBPD_PORT_0,USBPD_DATAMSG_EPR_MODE,&mdo);
-            PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A1u,(uint32_t)rc);
-            if(rc!=USBPD_OK)
-            {
-                /* Fallback B: re-open a Request context, then register the EPR
-                 * entry from the contract notification (PE callback context). */
-                uint32_t back=s_spr_rdo?s_spr_rdo:s_selected_rdo;
-                USBPD_StatusTypeDef rb=USBPD_PE_Send_Request(USBPD_PORT_0,back,
-                                                             USBPD_CORE_PDO_TYPE_FIXED);
-                PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A2u,(uint32_t)rb);
-                if(rb==USBPD_OK)g_epr_ctx_pending=1u;
-            }
+            s_epr_stall_logged=1u;
+            PD_Diag_Record(PD_DIAG_EPR_EVENT,0u,0xD00Du);
+        }
+#if IH01A_EPR_STALL_FALLBACK
+        if(waited>700u&&s_epr_probe<1u)
+        {
+            /* Probe 1: provoke one incoming message so the PE runs a message
+             * cycle while an EPR machine is registered. */
+            USBPD_StatusTypeDef r;
+            s_epr_probe=1u;
+            r=USBPD_PE_Request_CtrlMessage(USBPD_PORT_0,USBPD_CONTROLMSG_GET_SRC_CAP,
+                                           USBPD_SOPTYPE_SOP);
+            PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A4u,(uint32_t)r);
+        }
+        else if(waited>1300u&&s_epr_probe<2u)
+        {
+            /* Probe 2: emit EPR_Mode directly as a data message.
+             * DO = (EPR Mode Action << 24) | (Sink PDP W << 16). */
+            uint32_t mdo;
+            USBPD_StatusTypeDef r;
+            s_epr_probe=2u;
+            mdo=(1UL<<24)|((uint32_t)IH01A_EPR_SINK_PDP_W<<16);
+            r=USBPD_PE_Request_DataMessage(USBPD_PORT_0,USBPD_DATAMSG_EPR_MODE,&mdo);
+            PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A1u,(uint32_t)r);
         }
 #endif
     }
@@ -361,12 +364,35 @@ void PD_Input_EPR_Poll(void)
     s_epr_enter_ms=HAL_GetTick();
     s_epr_any_event=0u;
     s_epr_stall_logged=0u;
+    s_epr_probe=0u;
+#if IH01A_EPR_REENTER_ON_CONTRACT
+    /* Register the EPR entry from PE callback context instead of the idle
+     * main loop: the API validates that the last message was a Request, and
+     * the EPR machine is only executed from PE_STATE_GENERIC while the PE is
+     * processing a message. A same-value Request re-opens that context. */
+    {
+        uint32_t back=s_spr_rdo?s_spr_rdo:s_selected_rdo;
+        USBPD_StatusTypeDef rb=USBPD_PE_Send_Request(USBPD_PORT_0,back,
+                                                     USBPD_CORE_PDO_TYPE_FIXED);
+        PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A2u,(uint32_t)rb);
+        if(rb==USBPD_OK)
+        {
+            g_epr_ctx_pending=1u;   /* consumed in USBPD_DPM_Notification() */
+        }
+        else
+        {
+            USBPD_StatusTypeDef rc=(USBPD_StatusTypeDef)USBPD_PE_Request_EPRModeEnter(USBPD_PORT_0);
+            PD_Diag_Record(PD_DIAG_EPR_ENTER,(uint32_t)rc,s_state.position);
+        }
+    }
+#else
     {
         /* Raw USBPD_StatusTypeDef: 0=OK 1=NOTSUPPORTED 2=ERROR 3=BUSY.
          * A boolean hid the difference between "submitted" and "refused". */
         USBPD_StatusTypeDef rc=(USBPD_StatusTypeDef)USBPD_PE_Request_EPRModeEnter(USBPD_PORT_0);
         PD_Diag_Record(PD_DIAG_EPR_ENTER,(uint32_t)rc,s_state.position);
     }
+#endif
 #endif
 }
 /* Authorized manual EPR attempt: can be invoked by CLI or PD settings.

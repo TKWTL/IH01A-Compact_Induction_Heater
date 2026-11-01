@@ -324,3 +324,18 @@ return 0                                 ; USBPD_OK
 判读：**只要出现 `PD_TX a=10`，就说明 EPR_Mode 真的上总线了**；之后看源端是否回 `EPR_Mode`（源端 ACK 会带来 `EPR_EVT a=113`）。
 
 Rebuild：0 Error / 0 Warning，`Code=79,556 RO=4,096 RW=468 ZI=21,196`。
+
+**板端结果：两条旁路都返回 `USBPD_BUSY(3)`**（`EPR_ACT a=673 b=3`、`a=674 b=3`）。原因正是反汇编里那个 `byte[r3+0xA] = 0xA8`：第一次 `EPR_ENTER a=0` 已经把"EPR 机器挂起"写进 PE 句柄，而机器永远不跑，于是此后**任何**新请求（数据报文、重发 Request）都被判为 BUSY —— 库把自己锁死了。
+
+### 2026-11-02 改为"只在 PE 回调上下文登记"（`IH01A_EPR_REENTER_ON_CONTRACT`）
+
+API 的第一个判断就是"最近一条报文必须是 Request"，说明它的设计用法是：**刚发完 Request、PE 正在处理报文时**调用。所以把主循环里的那次调用去掉，改成：
+
+1. `pd epr` → 用 `USBPD_PE_Send_Request()` 重发当前 SPR Request（同 20 V/5 A，制造 Request 上下文）→ `EPR_ACT a=674`（0x2A2）；
+2. 源端 Accept → PS_RDY → `POWER_EXPLICIT_CONTRACT` 通知 → **在这个回调里**调用 `USBPD_PE_Request_EPRModeEnter()` → `EPR_ACT a=675`（0x2A3）；
+3. 若 700 ms 仍无 EPR 事件：发一条 `Get_Source_Capability`（控制报文 0x07）主动制造一次 RX/报文周期 → `EPR_ACT a=676`（0x2A4）；
+4. 若 1300 ms 仍无：直接 `USBPD_PE_Request_DataMessage(DATAMSG_EPR_MODE, (1<<24)|(140<<16))` → `EPR_ACT a=673`（0x2A1）。
+
+判读：出现 `PD_TX a=10` 即代表 EPR_Mode 真的上了总线；出现 `EPR_EVT a=113/116/119` 代表源端已应答。
+
+Rebuild：0 Error / 0 Warning，`Code=79,616 RO=4,096 RW=468 ZI=21,196`。
