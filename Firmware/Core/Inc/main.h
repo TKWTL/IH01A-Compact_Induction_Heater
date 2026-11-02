@@ -64,6 +64,9 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
+/* Fatal/NMI/HardFault/reset paths: disable FD2204 through PC6 before reset.
+ * Does not depend on HAL, scheduler, SysTick or ADC state. */
+void IH_EmergencyReset(void) __attribute__((noreturn));
 
 /* USER CODE END EFP */
 

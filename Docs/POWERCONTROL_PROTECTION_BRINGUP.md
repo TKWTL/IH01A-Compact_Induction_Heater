@@ -89,3 +89,38 @@ HAL COMP 注释说明：合成窗口输出在测量电压处于上下阈值之�
   NTC_SYS 90°C 的等效 ADC 电压，确认中断产生后 MOE 立即关闭，
   ADC 继续更新、故障锁存且不能自动重启。
 - 最后才将电流标定、功率级驱动和 TIM1 真实输出纳入验收。
+
+
+## 2026-11-02：PC6 使能门控、测得 IBUS 零点与系统复位
+
+- FD2204 驱动器的 EN 经 PC6 控制，`PC6=LOW` 是首要关断手段。
+  `ConvController_TripISR()` **先拉低 PC6 再清 TIM1.MOE**；
+  退出功率运行不一定需要关闭 TIM1 相移 PWM（目前保留额外清
+  MOE 作为防御，不依赖它停机）。
+- 未来启动接口 `ConvController_TryEnableOutput()` 只在已验证的
+  COMP 窗口合成输出为 HIGH、COMP1 原始比较 HIGH/COMP2 LOW、
+  PA6 实际为 HIGH、TIM1 Break 未锁存且保护正常时，才可按顺序
+  使能 TIM1 MOE，最后拉高 PC6。**当前编译期
+  `IH_POWER_STAGE_COMMISSIONED=0`，并且 ISR 目标固定为零，
+  调用该接口不会打开加热。**
+- G071 HAL 的 `HAL_COMP_GetOutputLevel(hcomp1)` 只读 COMP1
+  `CSR.VALUE` 原始比较，不是窗口的合成 COMP1_OUT 信号。
+  因此必须以两路原始比较的 XOR 关系和 PA6 合成输出验证。
+- 本机 IBUS 零点测得 **0.564V**，12-bit 原码约
+  `round(0.564×4095/2.5)=924`。以 0.2134V/A 计算，
+  正向 7A 为 `0.564+7×0.2134=2.0578V`，
+  原码约 **3371**，在 0..4095 量程内；
+  之前以 1900 码举例的饱和担忧**不代表本机实际情况**。
+  运行时仍必须以自动零点校准结果为准，并检查信号方向和噪声。
+- `HardFault_Handler`、`NMI_Handler`、`Error_Handler`、
+  `assert_failed` 和菜单 `System_Reset` 全部交由
+  `IH_EmergencyReset()`：屏蔽中断 → 强制 GPIOC 时钟使能 →
+  PC6 输出低 → 内存屏障 → 立刻执行软件复位。即使在
+  GPIO 初始化之前也尝试拉低 PC6。故障期间不等待串口发送。
+  此措施依赖 MCU/GPIO 仍可访问；**外部 PC6 下拉与独立硬件
+  失效保护仍是必要条件**，不能把软件复位等同于硬件安全功能。
+- 12A COMP 窗口为临时测试设定，完整的频率依赖限流推导已写于
+  `conv_protection.c` 注释。需明确：正弦电流**半周积分得到的是
+  谐振电容峰峰值变化**，在稳态对称交流下电容峰值是其一半。
+  因此后续若用谐振电容不超过 1kV 的目标配置 COMP，
+  必须结合实际周期、37.6nF、电流谐波和安全裕量标定。

@@ -53,7 +53,24 @@ void ConvProtection_Init(void)
     s_ct_min=s_ib_min=4095u;
     s_ct_max=s_ib_max=0u;
     s_dac1=s_dac2=0u;
-    /* 12A * 0.1V/A = 1.2V => round(1.2*4095/2.5)=1966 counts. */
+    /* TEST-ONLY current window: ±12A at 0.1V/A => 1966 DAC counts.
+     *
+     * PROPOSED FUTURE PROTECTION: limit resonant-capacitor voltage to
+     * |V_C,peak| <= 1000V by adapting the allowed sinusoidal CT_OCP
+     * peak current to TIM1 period (ARR), not by holding 12A forever.
+     * For i_C(t)=Ipk*sin(2*pi*f*t), with steady symmetric AC and C fixed:
+     * Q_half = integral[0 .. T/2] i_C dt = 2*Ipk/(2*pi*f)
+     * and delta_V_C(half-cycle)=Q_half/C = Ipk/(pi*f*C).
+     * IMPORTANT: that delta is the PEAK-TO-PEAK voltage swing, so
+     * |V_C,peak| = Ipk/(2*pi*f*C) (not delta_V_C itself).
+     * Consequently the approximate bound is Ipk <= 2*pi*f*C*1000V,
+     * f_TIM1 = 128MHz/(ARR+1) for PSC=0 (if PWM and current have this
+     * fundamental frequency). For 37.6nF C, 300kHz permits ~70.9A
+     * from this ideal model, 150kHz ~35.4A. Non-sinusoidal current,
+     * frequency transitions, capacitor tolerances, voltage DC offset,
+     * sensor delay and resonant overvoltage invalidate that simple
+     * estimate; retain independent fast HW trip and margin.
+     * This revision intentionally DOES NOT implement the dynamic rule. */
     s_low=s_high=1966u;
     s_profile_ready=1u;
     s_notified=0u;
@@ -228,6 +245,35 @@ uint8_t ConvProtection_ZeroReady(void)
 uint32_t ConvProtection_FaultMask(void)
 {
     return s_faults|s_fast_faults;
+}
+uint8_t ConvProtection_WithinWindow(uint8_t above_low,uint8_t above_high)
+{
+    /* At positive comparator inputs shared from CT_OCP:
+     * COMP1 compares signal > lower DAC, COMP2 compares signal > upper DAC.
+     * Window synthesized on COMP1_OUT is (COMP1 xor COMP2).
+     * HAL_COMP_GetOutputLevel() reads a comparator's individual CSR.VALUE
+     * and therefore MUST NOT be used alone as the window output level. */
+    return (uint8_t)((above_low!=0u) && (above_high==0u));
+}
+uint8_t ConvProtection_WindowSafe(void)
+{
+#ifndef CONV_PROTECTION_HOST_TEST
+    if(!s_comp_armed || !ConvProtection_ZeroReady() ||
+       ConvProtection_FaultMask()!=0u)return 0u;
+    if(!(COMP1->CSR&COMP_CSR_EN) || !(COMP2->CSR&COMP_CSR_EN))
+        return 0u;
+    /* PA6 is configured as AF7 COMP1_OUT; IDR reads the physical
+     * synthesized window output (HIGH=inside window). Confirm independently
+     * against the two raw comparator values and TIM1 Break latch. */
+    if(!ConvProtection_WithinWindow((COMP1->CSR&COMP_CSR_VALUE)!=0u,
+                                     (COMP2->CSR&COMP_CSR_VALUE)!=0u))
+        return 0u;
+    if((GPIOA->IDR&LL_GPIO_PIN_6)==0u || (TIM1->SR&TIM_SR_BIF)!=0u)
+        return 0u;
+    return 1u;
+#else
+    return 0u; /* host has no COMP/GPIO hardware */
+#endif
 }
 void ConvProtection_GetSnapshot(ConvProtectionSnapshot *out)
 {

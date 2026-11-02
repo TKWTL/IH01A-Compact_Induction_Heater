@@ -3,9 +3,13 @@
  */
 #include "conv_controller.h"
 #include "conv_adc.h"
+#include "conv_protection.h"
+#include "heater_control.h"
 #include "main.h"
 #include "tim.h"
 #define IH_RAMFUNC __attribute__((section(".ih_ramfunc"), used, noinline))
+/* Explicit commissioning gate; no UI command may override this. */
+#define IH_POWER_STAGE_COMMISSIONED 0u
 static volatile ConvState s_state;
 static volatile uint32_t s_errors;
 
@@ -27,10 +31,48 @@ uint32_t ConvController_ErrorCount(void) { return s_errors; }
 
 IH_RAMFUNC void ConvController_TripISR(void)
 {
-    /* Hardware-independent immediate stop; ADC/DMA stays alive for
-     * zero/fault telemetry. Must remain callable from the DMA ISR. */
-    LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port, PWM_EN_Pin);
+    /* FD2204 EN is the FINAL physical output gate. Shut it off FIRST.
+     * TIM1 shift PWM could safely keep running with PC6 low; clearing
+     * MOE here is an additional defensive measure, not the primary gate. */
+    LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
+    __DSB();
     TIM1->BDTR &= ~TIM_BDTR_MOE;
+}
+uint8_t ConvController_OutputEnabled(void)
+{
+    return (uint8_t)((PWM_EN_GPIO_Port->ODR&PWM_EN_Pin)!=0u);
+}
+uint8_t ConvController_TryEnableOutput(void)
+{
+#if IH_POWER_STAGE_COMMISSIONED
+    /* Future gated start sequence, not reached in the current firmware.
+     * The logical comparator "HIGH" must be the synthesized *window*
+     * output, not HAL_COMP_GetOutputLevel(COMP1) alone. */
+    if(s_state!=CONV_STATE_ADC_MONITOR ||
+       !ConvProtection_WindowSafe() ||
+       Heater_GetIsrTargetMw()==0u ||
+       (TIM1->SR&TIM_SR_BIF)!=0u)
+        return 0u;
+    TIM1->BDTR |= TIM_BDTR_MOE;
+    __DSB();
+    if(!ConvProtection_WindowSafe())
+    {
+        ConvController_TripISR();
+        return 0u;
+    }
+    /* PC6 HIGH enables FD2204 only after every upstream check. */
+    LL_GPIO_SetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
+    __DSB();
+    if(!ConvProtection_WindowSafe())
+    {
+        ConvController_TripISR();
+        return 0u;
+    }
+    return 1u;
+#else
+    /* The current build never asserts PC6 or enables TIM1 outputs. */
+    return 0u;
+#endif
 }
 IH_RAMFUNC void ConvController_FaultISR(void)
 {

@@ -75,8 +75,8 @@ static uint8_t s_stat_ready;
  * NVIC_SystemReset never returns; no OLED DMA completion is assumed. */
 void System_Reset(void)
 {
-    NVIC_SystemReset();
-    for(;;) { }
+    /* The user-initiated reset follows the same safe PC6-off sequence. */
+    IH_EmergencyReset();
 }
 
 static void System_ResetSelected(ui_t *ui)

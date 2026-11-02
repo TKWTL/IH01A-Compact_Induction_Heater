@@ -10,6 +10,12 @@ int main(void)
     TempService_Snapshot tmp={0};
     ConvProtection_Init();
     assert(!ConvProtection_ZeroReady());
+    /* HAL raw CSR.VALUE for COMP1 alone cannot establish a safe window. */
+    assert(ConvProtection_WithinWindow(1u,0u));
+    assert(!ConvProtection_WithinWindow(0u,0u));
+    assert(!ConvProtection_WithinWindow(1u,1u));
+    assert(!ConvProtection_WithinWindow(0u,1u));
+    assert(!ConvProtection_WindowSafe());
     f[CONV_ADC_CT_RMS]=1500u;
     f[CONV_ADC_IBUS]=1900u;
     f[CONV_ADC_VBUS]=2500u;

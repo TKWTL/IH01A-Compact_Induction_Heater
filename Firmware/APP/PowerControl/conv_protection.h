@@ -54,6 +54,11 @@ void ConvProtection_SetIbusLimitMa(uint32_t current_ma);
 /* Handle ADC1 AWD1/2/3 flags before the regular HAL ADC IRQ dispatcher. */
 void ConvProtection_AnalogWatchdogISR(void);
 uint32_t ConvProtection_FaultMask(void);
+/* COMP1 + COMP2 raw state, PA6 synthesized window output and TIM1 Break.
+ * All must agree on "inside window" before any future PC6 HIGH. */
+uint8_t ConvProtection_WindowSafe(void);
+/* Pure logic for host tests: lower comparator must be HIGH and upper LOW. */
+uint8_t ConvProtection_WithinWindow(uint8_t above_low,uint8_t above_high);
 /* COMP1/2 window uses 0.1V/A centered on measured VBIAS, ±12A.
  * DAC1 CH1 is lower, CH2 upper. Hardware starts only after valid zero
  * calibration and voltage bounds; TIM1 MOE stays prohibited. */

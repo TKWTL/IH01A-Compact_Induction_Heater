@@ -248,7 +248,24 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+/* This function must work even when called before MX_GPIO_Init(), from a
+ * hard fault, or with all interrupts masked. Do not use HAL delays, logs,
+ * malloc, peripheral locks or any scheduler dependency here. */
+void IH_EmergencyReset(void)
+{
+    __disable_irq();
+    /* Safe default for FD2204 enable: PC6 LOW is always the first action.
+     * GPIOC clock and output mode are forced even if CubeMX GPIO init failed.
+     * BSRR reset is atomic and does not alter other GPIOC output states. */
+    LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOC);
+    LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
+    LL_GPIO_SetPinMode(PWM_EN_GPIO_Port,PWM_EN_Pin,LL_GPIO_MODE_OUTPUT);
+    __DSB();
+    /* Do not depend on TIM1 registers: the gate-driver EN pin is the final
+     * physical shutoff, even if the timer clock or state is corrupted.
+     * Trigger a system reset immediately, retry if it somehow returns. */
+    for(;;)NVIC_SystemReset();
+}
 /* USER CODE END 4 */
 
 /**
@@ -258,11 +275,8 @@ void SystemClock_Config(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
-  __disable_irq();
-  while (1)
-  {
-  }
+  /* Hardware/clock/ADC failures must never leave the FD2204 gate enabled. */
+  IH_EmergencyReset();
   /* USER CODE END Error_Handler_Debug */
 }
 #ifdef USE_FULL_ASSERT
@@ -276,8 +290,9 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  (void)file;
+  (void)line;
+  IH_EmergencyReset();
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
