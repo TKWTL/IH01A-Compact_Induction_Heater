@@ -50,6 +50,8 @@ static uint8_t s_active_valid,s_candidate_valid;
 static uint8_t s_req_enabled=1u;   /* retained across unplug; not in Flash */
 static uint8_t s_max_fixed_v=31u;  /* permits 28V EPR by default */
 static uint8_t s_policy_dirty,s_policy_tries;
+static uint32_t s_policy_dirty_ms;   /* when the policy change was requested */
+static uint8_t s_policy_stall_logged;
 static uint32_t s_candidate_ms;   /* when the pending RDO candidate was built */
 static uint32_t s_policy_try_ms;
 /* Setters affect requested power, not physical CC. Never call a PE send
@@ -71,6 +73,8 @@ static void PD_PolicyChanged(void)
     s_policy_dirty=1u;
     s_policy_tries=0u;
     s_policy_try_ms=0u;
+    s_policy_dirty_ms=HAL_GetTick();
+    s_policy_stall_logged=0u;
     s_epr_user_requested=0u;
     g_epr_ctx_pending=0u;
     if(!s_req_enabled || s_max_fixed_v<28u)
@@ -521,6 +525,29 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
 void PD_Input_EPR_Poll(void)
 {
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
+    /* Watchdog first: it must run even when 'attached' is false, because that
+     * is one of the conditions it has to report. C140 bench result: 'pd off'
+     * printed and then nothing at all (no EPR-exit record, no capability
+     * refresh) while the MCU kept running (OLED alive, no reset), i.e. a
+     * precondition below never became true. Dump the whole state once:
+     *   b[0] attached, b[1] explicit contract, b[2] EPR mode,
+     *   b[3] pending candidate, b[4] EPR exit queued,
+     *   b[8..11] policy tries, b[12] request enabled, b[16..23] maxFixed V. */
+    if(s_policy_dirty && !s_policy_stall_logged &&
+       (uint32_t)(HAL_GetTick()-s_policy_dirty_ms)>2000u)
+    {
+        s_policy_stall_logged=1u;
+        PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B1u,
+                       ((uint32_t)s_state.attached)|
+                       ((uint32_t)s_state.explicit_contract<<1)|
+                       ((uint32_t)s_epr_mode<<2)|
+                       ((uint32_t)s_candidate_valid<<3)|
+                       ((uint32_t)s_epr_exit_queued<<4)|
+                       ((uint32_t)s_policy_tries<<8)|
+                       ((uint32_t)s_req_enabled<<12)|
+                       ((uint32_t)s_max_fixed_v<<16));
+        PD_Diag_Flush();
+    }
     if(!s_state.attached)return;
     /* A pending RDO candidate must not stay pending for ever: the policy engine
      * may accept the Request and then never produce the explicit-contract
