@@ -19,6 +19,13 @@ int main(void)
     assert(s.zero_status==CONV_ZERO_READY);
     assert(s.ct_zero_raw==1500u && s.ibus_zero_raw==1900u);
     assert(s.zero_samples==CONV_ZERO_AVG_FRAMES);
+    ConvProtection_SetIbusLimitMa(5000u);
+    ConvProtection_GetSnapshot(&s);
+    assert(s.awd2_enabled && s.ibus_limit_ma==5000u);
+    assert(s.awd2_low_code==160u && s.awd2_high_code==3648u);
+    ConvProtection_SetIbusLimitMa(0u);
+    ConvProtection_GetSnapshot(&s);
+    assert(!s.awd2_enabled);
     ConvProtection_SetIbusTripDeltaRaw(150u);
     f[CONV_ADC_IBUS]=2100u; /* 200 counts above calibrated 1900 */
     ConvProtection_FrameISR(f);
@@ -30,10 +37,6 @@ int main(void)
     assert(low==82u && high==4014u); /* 300kHz still ±12A */
     ConvProtection_CalcDacWindow(2048u,853u,1966u,1966u,&low,&high);
     assert(low==82u && high==4014u); /* independent of ARR */
-    ConvProtection_SetIbusLimitMa(5000u);
-    ConvProtection_GetSnapshot(&s);
-    assert(s.awd2_enabled && s.ibus_limit_ma==5000u);
-    assert(s.awd2_high_code>=3632u && s.awd2_high_code<=3664u);
     ConvProtection_SetDacProfile(100u,120u,1u);
     adc.frames=1u;
     adc.filtered[CONV_ADC_VBIAS]=2000u;

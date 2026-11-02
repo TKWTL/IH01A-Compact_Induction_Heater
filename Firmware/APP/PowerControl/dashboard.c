@@ -17,7 +17,7 @@
 #define POWER_DASHBOARD_ROW_BYTES 28u
 static ui_item_t s_rows[CONV_ADC_COUNT];
 static char s_labels[CONV_ADC_COUNT][POWER_DASHBOARD_ROW_BYTES];
-#define PROTECTION_ROWS 4u
+#define PROTECTION_ROWS 5u
 static ui_item_t s_prot_items[PROTECTION_ROWS];
 static char s_prot_text[PROTECTION_ROWS][POWER_DASHBOARD_ROW_BYTES];
 static const char *const s_names[CONV_ADC_COUNT] = {
@@ -86,6 +86,11 @@ void PowerDashboard_Poll(void)
                    (unsigned)protection.dac2_code,
                    protection.dac_profile_ready?'C':'-');
     (void)snprintf(s_prot_text[3],sizeof(s_prot_text[3]),
+                   "AWD2: %u-%u %c",
+                   (unsigned)protection.awd2_low_code,
+                   (unsigned)protection.awd2_high_code,
+                   protection.awd2_enabled?'Y':'N');
+    (void)snprintf(s_prot_text[4],sizeof(s_prot_text[4]),
                    "PROT: 0x%08lX",(unsigned long)protection.fault_mask);
 
     if(state!=CONV_STATE_ADC_MONITOR || snapshot.frames==0u)

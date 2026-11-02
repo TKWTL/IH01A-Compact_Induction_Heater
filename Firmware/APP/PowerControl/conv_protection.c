@@ -1,10 +1,11 @@
 /* IH01A protection bootstrap. Legacy G474 Protection_Init2 was empty;
  * its HRTIM FLT1 and ADC watchdog code are not binary-compatible with G071.
  *
- * G071 CubeMX: COMP1 is connected to TIM1 BRK; COMP2 is not. DAC1 CH1/CH2
- * are selected as the COMP negative inputs, but the actual + input routing,
- * fault polarity, analog gain and bias are NOT hardware-validated yet.
- * Only compute DAC proposal codes; NEVER enable COMPs, DACs, or TIM1 here.
+ * CubeMX config: window comparator pair, COMP1 synthesized output to TIM1
+ * BRK (active low), DAC1 CH1/CH2 as low/high thresholds.
+ * The analog window is initialized AFTER zero capture and with PWM disabled.
+ * TIM1 output enable is never granted by this module; real break response
+ * and analog gain must still be validated with an oscilloscope.
  */
 #include "conv_protection.h"
 #ifndef CONV_PROTECTION_HOST_TEST
@@ -28,7 +29,7 @@ static volatile uint8_t s_zero_status;
 static volatile uint16_t s_zero_samples,s_ct_zero,s_ibus_zero;
 static volatile uint16_t s_ibus_trip_delta_raw;
 static uint32_t s_ibus_limit_ma;
-static uint16_t s_awd2_high;
+static uint16_t s_awd2_low,s_awd2_high;
 static uint8_t s_comp_armed;
 static uint8_t s_awd2_enabled;
 static uint32_t s_ct_sum,s_ibus_sum;
@@ -44,6 +45,7 @@ void ConvProtection_Init(void)
     s_zero_samples=s_ct_zero=s_ibus_zero=0u;
     s_ibus_trip_delta_raw=0u;
     s_ibus_limit_ma=0u;
+    s_awd2_low=0u;
     s_awd2_high=4095u;
     s_comp_armed=0u;
     s_awd2_enabled=0u;
@@ -97,42 +99,46 @@ void ConvProtection_AnalogWatchdogISR(void)
     ConvController_TripISR();
 #endif
 }
-static uint16_t ibus_max_adc(uint16_t zero,uint32_t ma)
+static void ibus_window_codes(uint16_t zero,uint32_t ma,
+                              uint16_t *lower,uint16_t *upper)
 {
-    /* 0.2134 V/A => ADC delta = I_mA * 2134 * 4095 / 25,000,000.
-     * 64-bit multiply avoids overflow for arbitrary caller input. */
+    /* 0.2134 V/A; compute absolute current envelope around measured zero.
+     * AWD2 checks only 8 MSBs: low rounds UP and high DOWN to avoid gaps
+     * near nominal threshold; always retain 0..4095 legal bounds. */
     uint64_t raw=(uint64_t)ma*2134u*4095u+12500000u;
     uint32_t delta=(uint32_t)(raw/25000000u);
-    uint32_t maximum=(uint32_t)zero+delta;
-    return maximum>4095u?4095u:(uint16_t)maximum;
+    uint32_t hi=(uint32_t)zero+delta;
+    uint32_t lo=(delta>zero)?0u:(uint32_t)zero-delta;
+    if(hi>4095u)hi=4095u;
+    if(lower)*lower=(uint16_t)(((lo+15u)/16u)*16u);
+    if(upper)*upper=(uint16_t)((hi/16u)*16u);
 }
 void ConvProtection_SetIbusLimitMa(uint32_t current_ma)
 {
 #ifndef CONV_PROTECTION_HOST_TEST
-    uint16_t target=4095u;
-    if(ConvProtection_ZeroReady() && current_ma)
-        target=ibus_max_adc(s_ibus_zero,current_ma);
-    /* AWD2 compares ADC[11:4] only. Use upper trip for unidirectional IBUS.
-     * Rail monitoring catches clipping if 7A is outside ADC measurable range. */
-    target=(uint16_t)((target>>4)<<4);
-    {
-        uint8_t armed=(uint8_t)(ConvProtection_ZeroReady() && current_ma &&
-                              !s_fast_faults && !s_faults);
-        if(current_ma==s_ibus_limit_ma && target==s_awd2_high &&
-           s_awd2_enabled==armed)return;
-        s_awd2_enabled=armed;
-    }
+    uint16_t lower=0u,upper=4080u;
+    uint8_t armed=(uint8_t)(ConvProtection_ZeroReady() && current_ma &&
+                           !s_fast_faults && !s_faults);
+    if(armed)ibus_window_codes(s_ibus_zero,current_ma,&lower,&upper);
+    if(current_ma==s_ibus_limit_ma && lower==s_awd2_low &&
+       upper==s_awd2_high && s_awd2_enabled==armed)return;
+    s_awd2_enabled=armed;
     s_ibus_limit_ma=current_ma;
-    s_awd2_high=target;
+    s_awd2_low=lower;
+    s_awd2_high=upper;
     ADC1->IER &= ~ADC_IER_AWD2IE;
     MODIFY_REG(ADC1->AWD2TR,ADC_AWD2TR_HT2|ADC_AWD2TR_LT2,
-               ((uint32_t)target<<ADC_AWD2TR_HT2_Pos));
+               ((uint32_t)upper<<ADC_AWD2TR_HT2_Pos) |
+               ((uint32_t)lower<<ADC_AWD2TR_LT2_Pos));
     ADC1->ISR=ADC_ISR_AWD2;
     if(s_awd2_enabled)ADC1->IER |= ADC_IER_AWD2IE;
 #else
     s_ibus_limit_ma=current_ma;
-    s_awd2_high=(uint16_t)(ibus_max_adc(s_ibus_zero,current_ma)&~15u);
-    s_awd2_enabled=(uint8_t)(ConvProtection_ZeroReady() && current_ma);
+    s_awd2_low=0u;s_awd2_high=4080u;
+    s_awd2_enabled=(uint8_t)(ConvProtection_ZeroReady() && current_ma &&
+                            !s_fast_faults && !s_faults);
+    if(s_awd2_enabled)
+        ibus_window_codes(s_ibus_zero,current_ma,&s_awd2_low,&s_awd2_high);
 #endif
 }
 
@@ -149,7 +155,9 @@ PROT_RAMFUNC void ConvProtection_FrameISR(const volatile uint16_t *frame)
         ConvController_TripISR();
 #endif
     }
-    if(frame[CONV_ADC_IBUS]>=CONV_PROT_IBUS_RAIL_RAW)
+    if(frame[CONV_ADC_IBUS]>=CONV_PROT_IBUS_RAIL_RAW ||
+       (s_zero_status==CONV_ZERO_READY && s_ibus_zero>=32u &&
+        frame[CONV_ADC_IBUS]<=5u))
     {
         s_fast_faults|=CONV_PROT_IBUS_RAIL;
 #ifndef CONV_PROTECTION_HOST_TEST
@@ -232,6 +240,7 @@ void ConvProtection_GetSnapshot(ConvProtectionSnapshot *out)
     out->dac_profile_ready=s_profile_ready;
     out->comp_armed=s_comp_armed;
     out->awd2_enabled=s_awd2_enabled;
+    out->awd2_low_code=s_awd2_low;
     out->awd2_high_code=s_awd2_high;
     out->ibus_limit_ma=s_ibus_limit_ma;
     out->fault_mask=ConvProtection_FaultMask();
@@ -285,7 +294,8 @@ void ConvProtection_Service(uint32_t now,const ConvADC_Snapshot *adc,
     {
         /* For ±12A at 0.1V/A, both DAC codes must be inside 0..4095.
          * An out-of-range VBIAS would invalidate the two-sided trip window. */
-        if(s_profile_ready && ConvProtection_ZeroReady())
+        if(s_profile_ready && ConvProtection_ZeroReady() &&
+           !ConvProtection_FaultMask())
         {
             uint16_t bias=adc->filtered[CONV_ADC_VBIAS];
             uint16_t lower,upper;
@@ -324,6 +334,7 @@ void ConvProtection_Service(uint32_t now,const ConvADC_Snapshot *adc,
     s_faults|=fresh;
     s_fault_at=now;
 #ifndef CONV_PROTECTION_HOST_TEST
+    ConvController_TripISR(); /* foreground faults also gate PWM immediately */
     Heater_LatchFault(s_faults);
     pm_api_refresh_idle();
     if(!s_notified)

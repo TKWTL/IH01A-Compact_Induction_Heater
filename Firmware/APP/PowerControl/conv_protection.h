@@ -35,7 +35,7 @@ typedef struct {
     uint16_t ct_zero_raw,ibus_zero_raw,zero_samples;
     uint16_t dac1_code,dac2_code;
     uint8_t dac_profile_ready,comp_armed,awd2_enabled;
-    uint16_t awd2_high_code;
+    uint16_t awd2_low_code,awd2_high_code;
     uint32_t ibus_limit_ma;
     uint32_t fault_mask;
 } ConvProtectionSnapshot;
