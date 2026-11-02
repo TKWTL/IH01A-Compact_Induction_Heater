@@ -18,6 +18,8 @@ static uint8_t s_epr_copy_valid, s_epr_user_requested;
 static uint8_t s_epr_any_event, s_epr_stall_logged, s_epr_probe;
 extern volatile uint32_t g_pd_last_keepalive_ms;  /* set by pd_diag on the stack's own keepalive */
 static uint32_t s_epr_ka_ms;     /* our own 28V KeepAlive pacing */
+static uint8_t  s_epr_ka_fail;   /* consecutive rejected keepalive requests */
+static uint8_t  s_epr_ka_off;    /* give up: keep the stack's own 500 ms frame */
 static uint8_t s_epr_capretry;    /* Get_Source_Cap retried when caps lack EPR */
 static uint8_t s_epr_local_pos;   /* 1 = EPR PDOs are numbered 1..6 */
 /* 0 = request the 1-based index inside EPR_Source_Capabilities (default),
@@ -428,15 +430,38 @@ void PD_Input_EPR_Poll(void)
      * policy engine's own KeepAlive sits at 500 ms, i.e. exactly on the
      * ceiling). Our frame goes out when the 375 ms slot expires, unless some
      * KeepAlive (ours or the stack's) was sent less than 250 ms ago so the
-     * spec's 250 ms minimum gap is never violated. The Source ACKs every
-     * KeepAlive, duplicates included. */
-    if(s_epr_mode && s_state.selected_mv>=28000u &&
+     * spec's 250 ms minimum gap is never violated.
+     * Analyser result 2026-11-02: the minimum gap stayed 500 ms, i.e. the
+     * policy engine never transmitted our request (same AMS/context problem as
+     * the EPR entry). The result code is now reported and two consecutive
+     * refusals switch the pacer off - the stack's own 500 ms frame is
+     * spec-compliant, so nothing is lost. */
+    if(!s_epr_ka_off && s_epr_mode && s_state.selected_mv>=28000u &&
        (uint32_t)(HAL_GetTick()-s_epr_ka_ms)>=375u &&
        (uint32_t)(HAL_GetTick()-g_pd_last_keepalive_ms)>=250u)
     {
+        USBPD_StatusTypeDef r;
         s_epr_ka_ms=HAL_GetTick();
-        (void)USBPD_PE_Send_ExtendeControlMessage(USBPD_PORT_0,
-                                                  USBPD_EXTENDED_CONTROL_EPR_KEEPALIVE);
+        r=USBPD_PE_Send_ExtendeControlMessage(USBPD_PORT_0,
+                                              USBPD_EXTENDED_CONTROL_EPR_KEEPALIVE);
+        if(r==USBPD_OK)
+        {
+            /* Distinguish "queued and really transmitted" from "queued but the
+             * AMS never ran": log the first accepted request and let the
+             * analyser show whether a frame actually appeared. */
+            static uint8_t ka_ok_logged;
+            s_epr_ka_fail=0u;
+            if(!ka_ok_logged)
+            {
+                ka_ok_logged=1u;
+                PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2ABu,0u);
+            }
+        }
+        else
+        {
+            PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2AAu,(uint32_t)r);
+            if(++s_epr_ka_fail>=2u)s_epr_ka_off=1u;
+        }
     }
     if(s_epr_exit_queued)
     {

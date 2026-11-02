@@ -95,9 +95,19 @@ python Tools/pulseview_pd_decoder/test_decoder.py
 
 ## 5. 未完成事项（按优先级）
 
-1. **375 ms KeepAlive 抓包确认**：本轮改动让应用侧按 375 ms 补发。要确认两件事：
-   (a) 实际间隔是否 ≈375 ms；(b) 栈自身的 500 ms KeepAlive 是否仍会与我们的交错
-   （若出现 ~125 ms 的间隔，需要进一步抑制栈的那一帧——目前无公开 API）。
+1. **375 ms KeepAlive —— 已验证不可行，保持 500 ms**。板端逻辑分析仪（4 MSa/s）实测：
+   最小间隔仍是 **500 ms**，没有出现任何 375 ms 间隔、也没有交错。结论：应用通过
+   `USBPD_PE_Send_ExtendeControlMessage(EPR_KEEPALIVE)` 发出的请求**没有被 PE 真正发送**
+   —— 与 EPR 入口同一类问题（从主循环登记的 AMS 不会被 PE 执行）。
+   代码现在的行为：请求结果会记录一次（`EPR_ACT a=682`/0x2AA 失败码、`a=683`/0x2AB
+   "已接受但请用分析仪确认是否真的上网"）；连续两次失败后自动停用该 pacer，
+   保留栈自身的 500 ms 帧（**500 ms 在 PD3.1 的 250–500 ms 内，合规**）。
+   若将来确实需要 375 ms，可行路线只有三条，按风险从低到高：
+   (a) 找到 PE 回调上下文（例如某条通知回调里）来登记这个 AMS；
+   (b) 改 vendored 库里 `_Generic_AMS_Send_EPRKeepAlive_SNK` 的 timing 表（在 .lib 里，
+       需要 ST 源码或自行打补丁）；
+   (c) 在 PHY 层自行注入完整帧（需要自己做 CRC 与 PRL 状态同步，风险高，
+       可能破坏已验证 6 h 的稳定性）。
 2. **硬件闸门**（软件已就绪，但不做这些不许带载）：独立 OVP、28 V/5 A + 瞬态输入
    通路复核、240 W（50 V/5 A）e-mark 线、首次 28 V 必须空载 + 限流源。
    加热 PWM 目前保持关闭。
