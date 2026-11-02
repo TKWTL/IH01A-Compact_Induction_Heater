@@ -54,11 +54,6 @@ void MX_USBPD_Init(void)
   g_usbpd_full_stage=1u;
 
   /* Initialize the Device Policy Manager */
-  printf("[PD_INIT] LIB_ID=0x%08X check=%lu reqmem=%lu heap=%lu\r\n",
-         (unsigned)_LIB_ID, (unsigned long)USBPD_PE_CheckLIB(_LIB_ID),
-         (unsigned long)USBPD_PE_GetMemoryConsumption(),
-         (unsigned long)((uint32_t)&__heap_limit - (uint32_t)&__heap_base));
-  DebugUART_Service();
   if (USBPD_OK != USBPD_DPM_InitCore())
   {
     g_usbpd_full_stage=0xE1u;
@@ -91,16 +86,6 @@ void MX_USBPD_Init(void)
     while(1);
   }
   g_usbpd_full_stage=4u;
-  printf("[PD_INIT] FULL v5.4.1 initialized\r\n");
-  /* Prove the runtime PE feature bits that gate EPR on the wire, not just
-   * the compile-time USBPDCORE_EPR macro. */
-  printf("[PD_INIT] PE cfg pd3=0x%04X unchunk=%lu scrCapaExt=%lu eprSnk=%lu\r\n",
-         (unsigned)DPM_Settings[USBPD_PORT_0].PE_PD3_Support.PD3_Support,
-         (unsigned long)DPM_Settings[USBPD_PORT_0].PE_PD3_Support.d.PE_UnchunkSupport,
-         (unsigned long)DPM_Settings[USBPD_PORT_0].PE_PD3_Support.d.Is_SrcCapaExt_Supported,
-         (unsigned long)DPM_Settings[USBPD_PORT_0].PE_PD3_Support.d.Is_EPR_Supported_SNK);
-  DebugUART_Service();
-
   /* USER CODE BEGIN EnableIRQ */
   /* Enable IRQ which has been disabled by FreeRTOS services */
   __enable_irq();

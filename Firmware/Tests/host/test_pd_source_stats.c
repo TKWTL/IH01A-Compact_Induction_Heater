@@ -90,6 +90,15 @@ int main(void)
 
     PD_SourceStats_Clear(); /* detach/hard reset path */
     check_row(0, "No PD Source");
+    /* The CLI logger and Statistics share the same raw PDO decoder. */
+    {
+        char buf[80];
+        uint32_t raw=(400u<<10)|700u; /* Source 20V/7A */
+        PD_SourceStats_FormatPDO(4u,raw,buf,sizeof(buf));
+        assert(strcmp(buf,"5. Fixed 20.0V 7.0A")==0);
+        PD_SourceStats_FormatPDO(7u,(560u<<10)|500u,buf,sizeof(buf));
+        assert(strcmp(buf,"8. EPR Fixed 28.0V 5.0A")==0);
+    }
     puts("pd_source_stats: PASS");
     return 0;
 }

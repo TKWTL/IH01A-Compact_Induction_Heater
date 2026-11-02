@@ -95,6 +95,7 @@ void PD_Input_SetRequestEnabled(uint8_t enabled)
     enabled=enabled?1u:0u;
     if(s_req_enabled==enabled)return;
     s_req_enabled=enabled;
+    PD_Diag_Record(PD_DIAG_MANUAL,4u,(uint32_t)enabled);
     PD_PolicyChanged();
 }
 uint8_t PD_Input_GetRequestEnabled(void){return s_req_enabled;}
@@ -109,6 +110,7 @@ uint8_t PD_Input_SetMaxFixedVoltage(uint8_t voltage_v)
     {
         uint8_t lowering=(uint8_t)(voltage_v<s_max_fixed_v);
         s_max_fixed_v=voltage_v;
+        PD_Diag_Record(PD_DIAG_MANUAL,3u,(uint32_t)voltage_v);
         /* Lowering a cap which still admits the confirmed Fixed PDO
          * needs no AMS; changing the dormant cap while OFF does not
          * change the requested 5V either. */
@@ -117,7 +119,6 @@ uint8_t PD_Input_SetMaxFixedVoltage(uint8_t voltage_v)
             /* Report the deferral instead of pretending to negotiate: the
              * requested level is 5 V until 'pd on'. Keep it observable. */
             if(voltage_v<28u)s_epr_enter_once=1u;
-            PD_Diag_Record(PD_DIAG_MANUAL,3u,(uint32_t)voltage_v);
             return 2u;
         }
         if(lowering && s_active_valid &&
@@ -390,7 +391,7 @@ static USBPD_StatusTypeDef PD_SendPolicyRequestDirect(void)
     s_candidate.voltage_mv=mv;s_candidate.current_ma=ma;
     s_candidate.position=pos;s_candidate.epr=(uint8_t)(mv>=28000u);
     s_candidate_valid=1u;s_active_valid=0u;s_candidate_ms=HAL_GetTick();
-    PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B5u,((uint32_t)mv<<16)|(uint32_t)pos);
+    PD_Diag_Record(PD_DIAG_EPR_RDO,mv,nrdo);
     r=USBPD_PE_Send_Request(USBPD_PORT_0,nrdo,USBPD_CORE_PDO_TYPE_FIXED);
     PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B6u,
                    ((uint32_t)r<<16)|(uint32_t)pos);

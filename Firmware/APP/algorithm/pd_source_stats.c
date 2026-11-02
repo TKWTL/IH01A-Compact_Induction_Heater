@@ -108,22 +108,16 @@ uint8_t PD_SourceStats_Count(void)
  * Variable/Battery: min/max in 50mV; battery power in 250mW.
  * PPS: voltage in 100mV/count; current in 50mA/count.
  * Unknown APDO subtypes are identified but NOT misdecoded as PPS. */
-void PD_SourceStats_FormatRow(uint8_t index, char *out, size_t capacity)
+/* Format an immutable raw source PDO, shared by the statistics UI and
+ * the deferred UART logger. Never parse PDOs in interrupt context. */
+void PD_SourceStats_FormatPDO(uint8_t index, uint32_t pdo, char *out, size_t capacity)
 {
-    uint32_t pdo, type, v, i, vmin, vmax, power;
+    uint32_t type, v, i, vmin, vmax, power;
     uint8_t epr;
     if(out == 0 || capacity == 0u) return;
     out[0] = '\0';
-    if(s_count == 0u && s_epr_count == 0u)
-    {
-        if(index == 0u) (void)snprintf(out, capacity, "No PD Source");
-        return;
-    }
-    if(index >= PD_SourceStats_Count() || index >= PD_SOURCE_MAX_PDOS) return;
-    if(index >= s_count && index < PD_SOURCE_MAX_SPR_PDOS) return;
+    if(index >= PD_SOURCE_MAX_PDOS || pdo == 0u)return;
     epr = (uint8_t)(index >= PD_SOURCE_MAX_SPR_PDOS);
-    pdo = s_pdos[index];
-    if(pdo == 0u) return; /* empty reserved slot */
     type = pdo >> 30u;
     if(type == 0u)
     {
@@ -187,8 +181,23 @@ void PD_SourceStats_FormatRow(uint8_t index, char *out, size_t capacity)
     }
     else
     {
-        (void)snprintf(out, capacity, "%u. %s 0x%08lX",
-                       (unsigned)(index + 1u), epr ? "EPR" : "APDO",
-                       (unsigned long)pdo);
+        (void)snprintf(out, capacity, "%u. %s APDO subtype %u",
+                       (unsigned)(index + 1u), epr ? "EPR" : "SPR",
+                       (unsigned)((pdo >> 28u) & 3u));
     }
+}
+
+
+void PD_SourceStats_FormatRow(uint8_t index, char *out, size_t capacity)
+{
+    if(out == 0 || capacity == 0u)return;
+    out[0] = '\0';
+    if(s_count == 0u && s_epr_count == 0u)
+    {
+        if(index == 0u)(void)snprintf(out,capacity,"No PD Source");
+        return;
+    }
+    if(index >= PD_SourceStats_Count() || index >= PD_SOURCE_MAX_PDOS)return;
+    if(index >= s_count && index < PD_SOURCE_MAX_SPR_PDOS)return;
+    PD_SourceStats_FormatPDO(index,s_pdos[index],out,capacity);
 }

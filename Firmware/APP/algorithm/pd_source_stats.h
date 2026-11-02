@@ -17,5 +17,8 @@ void PD_SourceStats_Clear(void);
 uint32_t PD_SourceStats_Revision(void);
 uint8_t PD_SourceStats_Count(void);
 void PD_SourceStats_FormatRow(uint8_t index, char *out, size_t capacity);
+/* Raw, zero-based object position formatter shared by UI and UART. */
+void PD_SourceStats_FormatPDO(uint8_t index, uint32_t pdo,
+                              char *out, size_t capacity);
 
 #endif

@@ -14,11 +14,14 @@ enum {
     PD_DIAG_PD_TXREJ,       /* a=PD header MessageType, b=USBPD status   */
     PD_DIAG_PD_TXDONE,      /* a=0 sent, 1 discarded, 2 aborted          */
     PD_DIAG_PD_RX,          /* a=PD header MessageType, b=raw header word */
-    PD_DIAG_PD_TXDO         /* a=DO1, b=DO2 of the transmitted frame      */
+    PD_DIAG_PD_TXDO,        /* historic full tracing (production disabled) */
+    PD_DIAG_SOURCE_PDO      /* a=1..13 absolute PDO position, b=raw PDO    */
 };
 void PD_Diag_Record(uint8_t code,uint32_t a,uint32_t b);
 void PD_Diag_Service(void);
 void PD_Diag_Flush(void);
+/* Records received capabilities without printing in PE callback context. */
+void PD_Diag_SourceCaps(const uint8_t *data, uint32_t bytes, uint8_t epr);
 /* Called from the ST PHY TX hook: one record per distinct message type. */
 void PD_TxTrace(uint32_t type,uint32_t hdr,uint32_t size,uint32_t do1,uint32_t do2);
 void PD_RxTrace(uint32_t type,uint32_t hdr,uint32_t do1);
