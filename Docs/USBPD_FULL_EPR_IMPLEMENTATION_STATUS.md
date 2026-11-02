@@ -362,3 +362,13 @@ CONTRACT a=1 …                        ← PS_RDY → 28 V/5 A 成立
 **其余必要设置**：`Is_EPR_Supported_SNK=1`、`PE_UnchunkSupport=1`、`Is_SrcCapaExt_Supported=1`；`SNK_PDP_EPR=140 W`；EPR 入口必须从 PE 回调上下文登记——先用 `USBPD_PE_Request_CtrlMessage(GET_SRC_CAP)` 制造一次 `Source_Capabilities → Request → PS_RDY` 周期，再在 `POWER_EXPLICIT_CONTRACT` 通知里调用 `USBPD_PE_Request_EPRModeEnter()`（从空闲主循环调用会让库把机器永久挂起）。
 
 **诊断层**（这次能定位的关键）：`PD_TX`(类型+头)、`PD_TXDO`(前两个数据对象)、`PD_RX`(类型+头)、`TXDONE`(发送结果)、`EPR_EVT/EPR_ACT/GETINFO/SETINFO`。**周期性重复的帧（KeepAlive）只记录一次**，否则单个 EPR 会话会产生 ~242 B/s 的串口刷屏。
+
+### 2026-11-02 默认自动申请 EPR（便于抓全流程）
+
+- `IH01A_EPR_28V5A_AUTO_ENTER = 1`：SPR 显式合同建立 **250 ms** 后自动尝试 EPR；`PD_SourceIsEPRCapable()` 不成立（源端 PDO1 的 EPR Capable 位=0）时完全不尝试，直接留在 20 V。
+- 失败即退回 SPR：`EPRMODE_FAILED/INVALID` → `PD_EPR_RestoreSPR()` + 退出 EPR；2.5 s 收不到 EPR 能力 → 发 `EPRModeExit` 退回；两种情况都**不会自动重试**（`s_epr_enter_once`，每次接入一次）。
+- 自动模式下的一次冷启动序列（供逻辑分析仪对照）：`Source_Caps → Request(20V/5A) → Accept → PS_RDY → Get_Source_Cap → Source_Caps → Request → Accept → PS_RDY → EPR_Mode(Enter) → ACK → SUCCESS → EPR_Get_Source_Cap → EPR_Source_Caps → EPR_Request → Accept → PS_RDY → 28 V`，之后每 ~485 ms KeepAlive/ACK。
+- CLI：`pd auto` 切换自动/手动（下次接入生效）；`pd epr` 手动触发（绝对位置）；`pd epr1` 用 1 基约定做对照（本机会被硬复位）。
+- **已知副作用**：若源端谎报 EPR 能力且每次都硬复位，自动模式会形成"上电→申请 EPR→硬复位→上电"的循环；需要时先 `pd auto` 关掉再插入。
+
+稳定运行记录：2026-11-02 连续 **6 小时**无断联，KeepAlive 周期 500 ms（规范 250–500 ms）。

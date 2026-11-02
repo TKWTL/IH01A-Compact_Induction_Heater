@@ -21,6 +21,11 @@ static uint8_t s_epr_local_pos;   /* 1 = EPR PDOs are numbered 1..6 */
  * 1 = request the absolute position (index + 7). Selectable at runtime from
  * the CLI so both conventions can be tried without reflashing. */
 static uint8_t s_epr_opos_absolute = IH01A_EPR_OPOS_ABSOLUTE_DEFAULT;
+/* Auto-enter EPR after the SPR contract; toggled by the 'pd auto' CLI so the
+ * same build can produce both sequences for capture. */
+static uint8_t s_epr_auto = IH01A_EPR_28V5A_AUTO_ENTER;
+void PD_Input_SetEPRAuto(uint8_t on){s_epr_auto=on?1u:0u;}
+uint8_t PD_Input_GetEPRAuto(void){return s_epr_auto;}
 void PD_Input_SetEPRObjectPosition(uint8_t absolute){s_epr_opos_absolute=absolute?1u:0u;}
 #if IH01A_EPR_DELAY_GETCAP
 static uint32_t s_epr_getcap_due_ms;
@@ -421,7 +426,7 @@ void PD_Input_EPR_Poll(void)
         (void)USBPD_PE_Request_EPRModeExit(USBPD_PORT_0);
         return;
     }
-    if(!(IH01A_EPR_28V5A_AUTO_ENTER || s_epr_user_requested)||
+    if(!(s_epr_auto || s_epr_user_requested)||
        s_epr_enter_once||s_epr_mode||!s_state.explicit_contract ||
        !PD_SourceIsEPRCapable() ||
        (uint32_t)(HAL_GetTick()-s_contract_ms)<250u)return;

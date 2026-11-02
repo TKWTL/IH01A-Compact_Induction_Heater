@@ -22,6 +22,8 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo, uint32_t *type);
 uint8_t PD_Input_Manual(void);
 uint8_t PD_Input_ManualEPR(void);
 void PD_Input_SetEPRObjectPosition(uint8_t absolute);   /* 0 = 1-based local, 1 = absolute 8..13 */
+void PD_Input_SetEPRAuto(uint8_t on);
+uint8_t PD_Input_GetEPRAuto(void);
 void PD_Input_GetSnapshot(PD_InputSnapshot *out);
 uint32_t PD_Input_VbusMillivolts(void);
 #endif

@@ -12,7 +12,7 @@ static void cli_dispatch(void)
     PD_InputSnapshot pd;
     DebugUART_Stats stats;
     if(!strcmp(s_line,"help"))
-        printf("[CLI] help, ping, pd, pd epr, uart\r\n");
+        printf("[CLI] help, ping, pd, pd epr, pd epr1, pd auto, uart\r\n");
     else if(!strcmp(s_line,"ping"))
         printf("[CLI] pong\r\n");
     else if(!strcmp(s_line,"pd"))
@@ -23,21 +23,30 @@ static void cli_dispatch(void)
         printf("[CLI] bus=%lu mV select=%lu mV current=%lu mA PDO=%u\r\n",
                (unsigned long)pd.bus_mv,(unsigned long)pd.selected_mv,
                (unsigned long)pd.requested_ma,pd.position);
-        printf("[CLI] EPR enabled=%u mode=%u (28V/5A gated)\r\n",
+        printf("[CLI] EPR enabled=%u mode=%u auto=%u\r\n",
                (unsigned)IH01A_EPR_28V5A_HARDWARE_APPROVED,
-               (unsigned)PD_Input_EPR_Active());
+               (unsigned)PD_Input_EPR_Active(),
+               (unsigned)PD_Input_GetEPRAuto());
     }
-    else if(!strcmp(s_line,"pd epr") || !strcmp(s_line,"pd epr8"))
+    else if(!strcmp(s_line,"pd epr") || !strcmp(s_line,"pd epr1"))
     {
-        /* 'pd epr'  : object position = 1-based index inside EPR caps
-         * 'pd epr8' : object position = absolute 8..13 */
-        uint8_t absolute = strcmp(s_line,"pd epr8")==0 ? 1u : 0u;
+        /* 'pd epr'  : absolute object position 8..13 (the verified default)
+         * 'pd epr1' : 1-based index inside EPR_Source_Capabilities (fails on
+         *             this Source with a Hard Reset; kept for comparison) */
+        uint8_t absolute = strcmp(s_line,"pd epr1")==0 ? 0u : 1u;
         PD_Input_SetEPRObjectPosition(absolute);
         if(PD_Input_ManualEPR())
-            printf("[CLI] EPR enter queued (opos=%s); verify 240W cable\r\n",
+            printf("[CLI] EPR enter queued (opos=%s)\r\n",
                    absolute ? "absolute" : "local");
         else
             printf("[CLI] EPR unavailable: need SPR contract, EPR source and approval\r\n");
+    }
+    else if(!strcmp(s_line,"pd auto"))
+    {
+        uint8_t on = (uint8_t)!PD_Input_GetEPRAuto();
+        PD_Input_SetEPRAuto(on);
+        printf("[CLI] EPR auto-enter %s (takes effect on the next attach)\r\n",
+               on ? "ON" : "OFF");
     }
     else if(!strcmp(s_line,"uart"))
     {
