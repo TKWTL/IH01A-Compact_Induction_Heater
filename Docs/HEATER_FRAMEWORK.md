@@ -10,3 +10,5 @@
 - 若硬件 Break 已触发或保护锁存，PWM 不自动复位；应检查 TIM1 SR.BIF。测试时先在 PC6 LOW 状态用示波器观察 PA8（TIM1_CH1）与 PA10（TIM1_CH3）。TIM1_CH2 DMA 仍暂不使用。
 
 - 主界面底行 `P:Y/N` 表示 TIM1 逻辑 PWM 输出实际状态，`E:Y/N` 表示 FD2204 的 PC6 使能状态；`E:N` 才是本阶段正确的安全观测状态。
+
+- 初次逻辑 PWM 启动时，COMP/DAC 建立可能留下 BIF 标志。只有零点完成、COMP 已使能、软件保护无故障且 PC6 为低时，才**一次性**清除启动前的 BIF 并尝试使能 TIM1 MOE。若活动 COMP Break 仍存在，硬件会再次置位 BIF 并抑制输出；本轮不自动重试，避免反复重新使能故障后的 PWM。

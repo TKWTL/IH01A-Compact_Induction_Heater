@@ -11,8 +11,10 @@ ConvState ConvController_GetState(void);
 uint32_t ConvController_ErrorCount(void);
 void ConvController_FaultISR(void);
 void ConvController_TripISR(void); /* PC6 low FIRST, optional TIM1 MOE clear */
-/* Future PWM start entry: requires measured window HIGH, two COMP inputs,
- * cleared TIM1 Break and an independently commissioned power stage.
+/* Future FD2204 power-stage enable: requires initialized comparators,
+ * no latched TIM1 Break, and a commissioned output-control loop.
+ * Instantaneous COMP low is handled by the hardware TIM1 Break input,
+ * not by polling the window voltage level in software.
  * Current build remains locked OFF (IH_POWER_STAGE_COMMISSIONED=0). */
 uint8_t ConvController_TryEnableOutput(void);
 uint8_t ConvController_OutputEnabled(void);

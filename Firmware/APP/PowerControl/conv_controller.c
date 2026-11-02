@@ -16,12 +16,14 @@ static volatile uint32_t s_errors;
 static uint16_t s_phase_deg;
 static uint16_t s_phase_arr;
 static uint8_t s_logic_pwm_started;
+static uint8_t s_logic_pwm_start_attempted;
 
 void ConvController_Init(void)
 {
     s_state=CONV_STATE_STOP;
     s_errors=0u;
     s_logic_pwm_started=0u;
+    s_logic_pwm_start_attempted=0u;
     s_phase_deg=0u;
     s_phase_arr=0u;
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port, PWM_EN_Pin);
@@ -95,8 +97,15 @@ uint8_t ConvController_StartLogicPwm(void)
        ConvProtection_FaultMask()!=0u ||
        !ConvProtection_CompArmed())
         return 0u;
-    if((TIM1->SR&TIM_SR_BIF)!=0u)return 0u;
     if(s_logic_pwm_started)return ConvController_LogicPwmRunning();
+    /* COMP initialization can assert Break while its DAC references
+     * settle. With PC6 already LOW, permit exactly ONE startup attempt:
+     * clear the pre-existing BIF and let active Break hardware immediately
+     * reassert it if the window is still out-of-range. No automatic retry
+     * after a real/comparator-induced Break during timer operation. */
+    if(s_logic_pwm_start_attempted)return 0u;
+    s_logic_pwm_start_attempted=1u;
+    TIM1->SR=(uint32_t)~TIM_SR_BIF;
     /* CH4's PWM1 compare is an INTERNAL constituent of combined CH3 output.
      * No CH4 pin is required. Both PWM reference sources are already
      * configured by MX_TIM1_Init() including OC3 Combined PWM2. */
@@ -122,25 +131,26 @@ uint8_t ConvController_OutputEnabled(void)
 uint8_t ConvController_TryEnableOutput(void)
 {
 #if IH_POWER_STAGE_COMMISSIONED
-    /* Future gated start sequence, not reached in the current firmware.
-     * The logical comparator "HIGH" must be the synthesized *window*
-     * output, not HAL_COMP_GetOutputLevel(COMP1) alone. */
+    /* Future power-stage start; remain disabled until validated.
+     * No software sampling of the momentary COMP window output. Real
+     * overcurrent protection is asynchronous TIM1 BRK hardware. */
     if(s_state!=CONV_STATE_ADC_MONITOR ||
-       !ConvProtection_WindowSafe() ||
+       !ConvProtection_CompArmed() ||
        Heater_GetIsrTargetMw()==0u ||
        (TIM1->SR&TIM_SR_BIF)!=0u)
         return 0u;
     TIM1->BDTR |= TIM_BDTR_MOE;
     __DSB();
-    if(!ConvProtection_WindowSafe())
+    if((TIM1->SR&TIM_SR_BIF)!=0u)
     {
         ConvController_TripISR();
         return 0u;
     }
-    /* PC6 HIGH enables FD2204 only after every upstream check. */
+    /* PC6 HIGH enables FD2204 only after all upstream gates. */
     LL_GPIO_SetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
     __DSB();
-    if(!ConvProtection_WindowSafe())
+    if((TIM1->SR&TIM_SR_BIF)!=0u ||
+       ConvProtection_FaultMask()!=0u)
     {
         ConvController_TripISR();
         return 0u;
