@@ -168,8 +168,8 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   APP_Tasks_Init();
-  /* Safe read-only TIM6->ADC1->DMA control ISR; TIM1/PWM_EN remain OFF. */
-  ConvController_Init();
+  /* ADC/TIM6 and zero capture begin once in TempService_Poll(), within
+   * the foreground PD scheduler. TIM1/PWM_EN remain permanently OFF. */
   g_uart_boot_stage=4u;
   while (1)
   {

@@ -8,6 +8,7 @@ static HeaterObservation sensor(uint32_t budget)
     HeaterObservation o={0};
     o.input=HEATER_INPUT_PD;o.budget_mw=budget;
     o.pot_valid=o.sys_valid=1u;
+    o.zero_calibrated=1u;
     o.pot_deci_c=250;o.sys_deci_c=300;
     o.temperature_updated_ms=100u;
     return o;
@@ -24,6 +25,15 @@ int main(void)
     assert(dc.budget_mw==0u);
     dc=Heater_BudgetClassify(28000u,PD_INPUT_PD,1u,28000u,5000u);
     assert(dc.input==HEATER_INPUT_PD && dc.budget_mw==140000u);
+    Heater_Init();
+    assert(Heater_GetProposedTargetMw()==0u);
+    Heater_LatchFault(0x01u);
+    Heater_GetSnapshot(&s);
+    assert(s.state==HEATER_FAULT && s.fault_mask==1u);
+    Heater_Stop(); /* fault must remain latched */
+    Heater_ScheduleMinutes(1u,100u);
+    Heater_GetSnapshot(&s);
+    assert(s.state==HEATER_FAULT);
     Heater_Init();
     assert(Heater_GetProposedTargetMw()==0u);
     Heater_ScheduleMinutes(1u,100u);

@@ -92,6 +92,7 @@ void Heater_SetOffMinutes(uint16_t minutes,uint32_t now_ms)
 }
 void Heater_ScheduleMinutes(uint16_t minutes,uint32_t now_ms)
 {
+    if(s.state==HEATER_FAULT)return; /* booking must not clear fault latch */
     if(minutes>HEATER_MAX_MINUTES)minutes=HEATER_MAX_MINUTES;
     /* Scheduling and a current run are mutually exclusive. */
     if(!minutes)
@@ -121,8 +122,22 @@ void Heater_StartConfirmed(uint32_t now_ms)
     if(s_stop_timer_armed)
         s_stop_deadline_ms=now_ms+(uint32_t)s.off_minutes*60000u;
 }
+void Heater_LatchFault(uint32_t reason_mask)
+{
+    if(!reason_mask)return;
+    s.fault_mask|=reason_mask;
+    s.state=HEATER_FAULT;
+    s.on_minutes=0u;
+    s_stop_timer_armed=0u;
+    clear_output();
+}
 void Heater_Stop(void)
 {
+    if(s.state==HEATER_FAULT)
+    {
+        clear_output();
+        return;
+    }
     s.state=HEATER_OFF;
     s.on_minutes=0u;
     s_stop_timer_armed=0u;
@@ -175,6 +190,14 @@ void Heater_Poll(uint32_t now_ms,const HeaterObservation *obs)
        obs->pot_deci_c>=HEATER_POT_TRIP_DECI)
     {
         s.state=HEATER_FAULT;
+        clear_output();
+        return;
+    }
+    /* The ADC zero averages must finish with the bridge disabled before
+     * any nonzero proposed target is published. This is still NOT an
+     * authorization to drive TIM1. */
+    if(!obs->zero_calibrated)
+    {
         clear_output();
         return;
     }

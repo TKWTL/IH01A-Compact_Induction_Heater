@@ -10,4 +10,5 @@ void ConvController_Init(void);
 ConvState ConvController_GetState(void);
 uint32_t ConvController_ErrorCount(void);
 void ConvController_FaultISR(void);
+void ConvController_TripISR(void); /* fast output disable without stopping ADC */
 #endif

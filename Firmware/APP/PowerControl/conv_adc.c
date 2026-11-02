@@ -2,6 +2,7 @@
  * Q4 IIR in RAM ISR; integer calibrated voltage/temperature in UI context.
  */
 #include "conv_adc.h"
+#include "conv_protection.h"
 #include "adc.h"
 #include "tim.h"
 #include "stm32g0xx_ll_adc.h"
@@ -40,6 +41,9 @@ IH_RAMFUNC const volatile uint16_t *ConvADC_DmaFrame(uint8_t second)
 IH_RAMFUNC void ConvADC_ProcessFrameISR(const volatile uint16_t *frame)
 {
     unsigned i;
+    /* Zero calibration and raw rail trip. No HAL/printf in the DMA ISR.
+     * Invariant: PWM_EN remains LOW throughout the capture window. */
+    ConvProtection_FrameISR(frame);
     for(i=0u;i<CONV_ADC_COUNT;++i)
     {
         int32_t sample = ((int32_t)frame[i] & 4095) << 4;

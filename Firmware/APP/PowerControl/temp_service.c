@@ -5,16 +5,28 @@
 #include "temp_service.h"
 #include "conv_adc.h"
 #include "conv_controller.h"
+#include "conv_protection.h"
 #include "algorithm/ntc_lut.h"
 #include "main.h"
 static TempService_Snapshot s_temp;
 static uint32_t s_last_poll, s_last_frame;
 static uint8_t s_started;
+static uint8_t s_hardware_started;
 void TempService_Poll(void)
 {
     ConvADC_Snapshot adc;
     uint32_t now=HAL_GetTick();
     int32_t mcu;
+    if(!s_hardware_started)
+    {
+        /* Exactly once, in foreground after the PD scheduler begins.
+         * Do not start ADC from a MiaoUI page or the DMA ISR. */
+        s_hardware_started=1u;
+        ConvProtection_Init();
+        ConvController_Init(); /* starts ADC calibration/DMA, then TIM6 */
+        s_started=0u;
+        return;
+    }
     if(s_started && (uint32_t)(now-s_last_poll)<TEMP_SERVICE_PERIOD_MS)
         return;
     s_started=1u;

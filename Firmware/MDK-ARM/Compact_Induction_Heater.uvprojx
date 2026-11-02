@@ -3861,6 +3861,11 @@
               <FilePath>../APP/PowerControl/conv_controller.c</FilePath>
             </File>
             <File>
+              <FileName>conv_protection.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/PowerControl/conv_protection.c</FilePath>
+            </File>
+            <File>
               <FileName>dashboard.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/PowerControl/dashboard.c</FilePath>

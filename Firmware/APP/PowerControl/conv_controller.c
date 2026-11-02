@@ -25,13 +25,19 @@ void ConvController_Init(void)
 ConvState ConvController_GetState(void) { return s_state; }
 uint32_t ConvController_ErrorCount(void) { return s_errors; }
 
+IH_RAMFUNC void ConvController_TripISR(void)
+{
+    /* Hardware-independent immediate stop; ADC/DMA stays alive for
+     * zero/fault telemetry. Must remain callable from the DMA ISR. */
+    LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port, PWM_EN_Pin);
+    TIM1->BDTR &= ~TIM_BDTR_MOE;
+}
 IH_RAMFUNC void ConvController_FaultISR(void)
 {
     ++s_errors;
     s_state=CONV_STATE_FAULT;
     TIM6->CR1 &= ~TIM_CR1_CEN;
-    LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port, PWM_EN_Pin);
-    TIM1->BDTR &= ~TIM_BDTR_MOE;
+    ConvController_TripISR();
 }
 
 /* Sole DMA1 CH2/3 handler: HT/TC each reports a full 8-channel frame.

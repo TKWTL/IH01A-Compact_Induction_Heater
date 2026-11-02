@@ -20,6 +20,8 @@
 #include "algorithm/pd_input.h"
 #include "framework/beep.h"
 #include "temp_service.h"
+#include "conv_adc.h"
+#include "conv_protection.h"
 #include "PowerControl/heater_control.h"
 #include "PowerControl/heater_budget.h"
 
@@ -53,6 +55,7 @@ THRD_DECLARE(thread_ui)
         {
             IH_Statistics_Poll();
             ui_loop(&s_ui);
+            ConvProtection_DrawFaultOverlay();
         }
     }
     THRD_END;
@@ -124,6 +127,7 @@ THRD_DECLARE(thread_heater)
     static PD_InputContract contract;
     static HeaterObservation observation;
     static TempService_Snapshot temperature;
+    static ConvADC_Snapshot adc;
     THRD_BEGIN;
     while(1)
     {
@@ -137,6 +141,11 @@ THRD_DECLARE(thread_heater)
                 contract.voltage_mv,contract.current_ma);
         }
         TempService_GetSnapshot(&temperature);
+        ConvADC_CopySnapshot(&adc);
+        /* Protection ISR latched its bit mask before this foreground pass.
+         * Process faults and notifications here, never inside the ADC IRQ. */
+        ConvProtection_Service(TIME_Millis(),&adc,&temperature);
+        observation.zero_calibrated=ConvProtection_ZeroReady();
         observation.pot_valid=(temperature.valid&TEMP_VALID_POT)!=0u;
         observation.sys_valid=(temperature.valid&TEMP_VALID_SYS)!=0u;
         observation.pot_deci_c=temperature.pot_deci_c;

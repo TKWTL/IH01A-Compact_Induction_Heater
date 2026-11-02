@@ -43,3 +43,6 @@ build_run beep -I APP \
 build_run heater -I APP \
  APP/PowerControl/heater_control.c APP/PowerControl/heater_budget.c \
  Tests/host/test_heater_control.c
+
+build_run conv_protection -DCONV_PROTECTION_HOST_TEST -I APP/PowerControl \
+ APP/PowerControl/conv_protection.c Tests/host/test_conv_protection.c

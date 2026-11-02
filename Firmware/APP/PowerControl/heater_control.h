@@ -22,6 +22,7 @@ typedef struct {
     int16_t pot_deci_c;
     int16_t sys_deci_c;
     uint8_t pot_valid,sys_valid;
+    uint8_t zero_calibrated; /* mandatory even for proposed power */
     uint32_t temperature_updated_ms;
 } HeaterObservation;
 typedef struct {
@@ -32,6 +33,7 @@ typedef struct {
     uint32_t budget_mw;
     uint32_t requested_power_mw; /* supervisory controller proposal only */
     uint32_t isr_target_mw;      /* hard-gated to zero during bring-up */
+    uint32_t fault_mask;         /* retained until reset / explicit recovery */
     uint16_t target_temp_deci_c;
     uint16_t target_power_w;
     int16_t pot_deci_c,sys_deci_c;
@@ -49,6 +51,7 @@ void Heater_SetOffMinutes(uint16_t minutes,uint32_t now_ms);
 void Heater_ScheduleMinutes(uint16_t minutes,uint32_t now_ms);
 void Heater_StartConfirmed(uint32_t now_ms);
 void Heater_Stop(void);
+void Heater_LatchFault(uint32_t reason_mask);
 void Heater_Poll(uint32_t now_ms,const HeaterObservation *obs);
 void Heater_GetSnapshot(HeaterSnapshot *out);
 /* Atomic 32-bit proposal mailbox readable by the future electrical ISR.
