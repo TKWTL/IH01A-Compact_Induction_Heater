@@ -13,6 +13,6 @@
 
 ## 安全与待验收
 
-- `PWM_EN` 及 TIM1.MOE 仍由原 `ConvController_Init()` 禁用。建议功率绝不直连 TIM1；硬件联锁、缺锅判断、功率回授、温度保护等测试完成后才能审查启用。
+- `PWM_EN` 及 TIM1.MOE 仍由原 `ConvController_Init()` 禁用。建议功率通过对齐的 32 位单字 `Heater_GetProposedTargetMw()` 发布给未来 ISR；允许实际驱动的 `Heater_GetIsrTargetMw()` 仍固定为零。二者严格分离，前者绝不直接开启 TIM1；硬件联锁、缺锅判断、功率回授、温度保护等测试完成后才能审查启用。
 - 当前温度有效性判定：POT+SYS 双通道均有效，最近更新≤500ms，SYS<85°C、POT<130°C（仅软件试验阈值，**非已验证的安全工作温度**）。异常时锁存 `HEATER_FAULT`，不发送功率控制目标。需物理核实热滞后、温控 PID 系数与临界值。
 - Keil Rebuild 以及实机中断/计时/PWM关闭状态未在本环境执行。测试脚本新增 heater 单元测试。

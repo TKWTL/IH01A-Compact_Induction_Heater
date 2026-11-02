@@ -19,6 +19,9 @@ static uint32_t s_start_deadline_ms,s_stop_deadline_ms;
 static int32_t s_integrator_mw,s_derivative_q4;
 static int16_t s_previous_pot;
 static uint8_t s_stop_timer_armed,s_power_manual,s_derivative_ready;
+/* Cortex-M0+ naturally aligned single 32-bit store/load. Read-only from
+ * any interrupt; no ISR should edit heater policy or these shared fields. */
+static volatile uint32_t s_proposed_target_mw;
 
 static uint32_t remaining_s(uint32_t now,uint32_t deadline)
 {
@@ -28,6 +31,7 @@ static uint32_t remaining_s(uint32_t now,uint32_t deadline)
 static void clear_output(void)
 {
     s.requested_power_mw=0u;
+    s_proposed_target_mw=0u;
     s.isr_target_mw=0u;
     s_integrator_mw=0;
     s_derivative_q4=0;
@@ -216,12 +220,18 @@ void Heater_Poll(uint32_t now_ms,const HeaterObservation *obs)
         if(raw>cap)raw=cap;
         s.requested_power_mw=(uint32_t)raw;
     }
-    /* Crucial: no caller currently authorizes TIM1/MOE. */
+    /* Publish a coherent single-word proposal for the future ISR without
+     * allowing it to energize hardware. Commissioning gate stays at zero. */
+    s_proposed_target_mw=s.requested_power_mw;
     s.isr_target_mw=0u;
 }
 void Heater_GetSnapshot(HeaterSnapshot *out)
 {
     if(out)*out=s;
+}
+uint32_t Heater_GetProposedTargetMw(void)
+{
+    return s_proposed_target_mw;
 }
 uint32_t Heater_GetIsrTargetMw(void)
 {

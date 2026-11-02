@@ -51,6 +51,9 @@ void Heater_StartConfirmed(uint32_t now_ms);
 void Heater_Stop(void);
 void Heater_Poll(uint32_t now_ms,const HeaterObservation *obs);
 void Heater_GetSnapshot(HeaterSnapshot *out);
-/* Reserved ISR-facing API. Zero until hardware safety validation. */
+/* Atomic 32-bit proposal mailbox readable by the future electrical ISR.
+ * A positive proposal is NOT permission to energize the half bridge. */
+uint32_t Heater_GetProposedTargetMw(void);
+/* Reserved ISR-facing enable-gated API. Zero until HW safety validation. */
 uint32_t Heater_GetIsrTargetMw(void);
 #endif
