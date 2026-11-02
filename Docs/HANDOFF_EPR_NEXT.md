@@ -117,6 +117,8 @@ python Tools/pulseview_pd_decoder/test_decoder.py
    目标按策略选：`!req_enabled` → 最高合法 Fixed **SPR PDO**（`pd off` → 5 V/3 A）；
    `req_enabled && cap>=28` → 缓存的 28 V EPR PDO（`pd on` 回 28 V）。
    **板端已验证（C140，2026-11-02）——这条链路现在是对的，别再改回去**：
+   （下面用的是当时"全量诊断"构建的日志；现在日志瘦身后，同样的过程只剩
+   `API request OFF (5V)` + `RDO #1 5.00V 3.00A EPR`，判读见 §8。）
    ```
    [CLI] Fixed request OFF (5V); negotiating
    EPR_ACT a=693 b=0x13880001     ← 目标 5000 mV / 位置 1
@@ -220,23 +222,36 @@ python Tools/pulseview_pd_decoder/test_decoder.py
 
 ## 8. 诊断码字典（串口）
 
+> **2026-11-02 起日志已"瘦身"（`09c9c2f`/`082c509`）**：`PD_Diag_Record()` 现在在
+> 头文件里就是宏，只放行 `SOURCE_PDO` / `RDO` / `EPR_RDO` / `RESET` /
+> `MANUAL(a=3,4)`；`pd_diag.c` 里的队列过滤同样只保留这五类。
+> 因此下面带 `EPR_*`、`PD_TX`、`GETINFO` 等前缀的行**在当前默认构建里不会再出现**，
+> 只有 `[PD …] PDO …`、`[PD …] RDO #n …`、`[PD …] HARD_RESET …`、
+> `[PD …] API request ON/OFF`、`[PD …] API max Fixed …` 五类。
+> 需要重新取证时，把 `pd_diag.h` 的过滤宏改成直通，
+> 并在 `PD_Diag_Service()` 里恢复对应 `printf` 分支即可（代码在 git 历史
+> `33ee6e4` 及之前）。下表保留给"打开诊断以后"判读用。
+
 | 日志 | 含义 |
 |---|---|
-| `EPR_ENTER a=<status>` | `USBPD_PE_Request_EPRModeEnter()` 原始返回（0 OK / 1 不支持 / 2 ERROR / 3 BUSY） |
-| `EPR_EVT a=<112..119>` | EPR 通知原始事件号，下一行是名字（ACK/SUCCEEDED/FAILED/…）；`a=0 b=0xD00D` = 投递后 1 s 内 PE 完全静默 |
-| `EPR_ACT a=…` | 0x2A1 直接发 EPR_Mode 数据报文 / 0x2A2 重发 Request / 0x2A3 通知上下文登记 / 0x2A4 探针 GetSrcCap / 0x2A5 SinkTxOK 证据（`(CCx<<16)|vstate`）/ 0x2A6 延迟取 EPR 能力 / 0x2A9 缺 EPR 位时重取能力；**仅启用诊断探针时** 0x2AA=KeepAlive API 拒绝、0x2AB=API 接受但不代表发帧 |
-| `EPR_ACT a=688` | 0x2B0 决策去调 `USBPD_PE_Request_EPRModeExit()`（仅在 `IH01A_EPR_EXIT_API_FALLBACK=1` 时出现） |
-| `EPR_ACT a=685` | 0x2AD 上面那个 PE API 的原始返回 |
-| `EPR_ACT a=689` | 0x2B1 策略变更后 2 s 的状态快照（一次性）：b 的 bit0 attached / bit1 显式合同 / bit2 EPR 模式 / bit3 待定 RDO / bit4 退出排队 / bit8..11 重试数 / bit12 请求使能 / bit16..23 maxFixed |
-| `EPR_ACT a=690` | 0x2B2 EPR 内降档旧方案（重取 SPR 能力次数/状态）——已废弃，仅旧固件会打 |
-| `EPR_ACT a=691` | 0x2B3 三次重取都没拿到能力集（旧方案，已废弃） |
-| `EPR_ACT a=693` | 0x2B5 EPR 模式内直接发 Request 的目标 PDO（`mv<<16 | position`） |
-| `EPR_ACT a=694` | 0x2B6 上面那次 `USBPD_PE_Send_Request()` 的原始返回（`status<<16 | position`） |
-| `EPR_ACT a=695` | 0x2B7 连投 3 次仍未成功，停止并通过 0 W 预算保护（`selected_mv<<16 | position`） |
-| `PD_TX a=<类型> b=<头<<16|长度>` | 每种报文首次出现（重复帧只记一次）；`a=0x10`=扩展，`a=9`=EPR_Request，`a=10`=EPR_Mode |
-| `PD_TXDO do1/do2` | 该帧前两个数据对象（核对 RDO/CopyPDO 用） |
-| `PD_RX a=<类型> b=<头>` | 收到的报文类型 |
-| `GETINFO/SETINFO a=<DataId> b=<字节数>` | PE 向 DPM 取/送数据（`30`=SNK_PDP_EPR，`25`=SNK_PDO_EPR，`29`=REQ_COPYPDO，`26`=RCV_SRC_PDO_EPR） |
+| `PDO <pos> <mv/mA>` | 收到的 Source PDO（每位置只报变化一次，SPR 1..7 / EPR 8..13） |
+| `RDO #<pos> <V> <A> [EPR]` | 实际发出的 RDO（`EPR` 后缀 = EPR_Request）；`pd off` 成功时是 `#1 5.00V 3.00A EPR`，`pd on` 是 `#8 28.00V 5.00A EPR` |
+| `HARD_RESET <name>` | `START_ACK/START_REQ/MSG_SENT/WAIT_0V/WAIT_5V/COMPLETE/FAILED`；出现 `WAIT_0V → FAILED` 每秒重复 = 源端 Hard Reset 后 VBUS 不掉到 vSafe0V，只能断电 |
+| `API request ON/OFF (5V)` | `PD_Input_SetRequestEnabled()` 被调用 |
+| `API max Fixed <V>V` | `PD_Input_SetMaxFixedVoltage()` 被调用（OFF 状态下只保存，`pd on` 后生效） |
+| `EPR_ENTER a=<status>` | *（需打开诊断）* `USBPD_PE_Request_EPRModeEnter()` 原始返回（0 OK / 1 不支持 / 2 ERROR / 3 BUSY） |
+| `EPR_EVT a=<112..119>` | *（需打开诊断）* EPR 通知原始事件号，下一行是名字（ACK/SUCCEEDED/FAILED/…）；`a=0 b=0xD00D` = 投递后 1 s 内 PE 完全静默 |
+| `EPR_ACT a=…` | *（需打开诊断）* 0x2A1 直接发 EPR_Mode 数据报文 / 0x2A2 重发 Request / 0x2A3 通知上下文登记 / 0x2A4 探针 GetSrcCap / 0x2A5 SinkTxOK 证据（`(CCx<<16)|vstate`）/ 0x2A6 延迟取 EPR 能力 / 0x2A9 缺 EPR 位时重取能力；**仅启用诊断探针时** 0x2AA=KeepAlive API 拒绝、0x2AB=API 接受但不代表发帧 |
+| `EPR_ACT a=688` | *（需打开诊断）* 0x2B0 决策去调 `USBPD_PE_Request_EPRModeExit()`（仅在 `IH01A_EPR_EXIT_API_FALLBACK=1` 时出现） |
+| `EPR_ACT a=685` | *（需打开诊断）* 0x2AD 上面那个 PE API 的原始返回 |
+| `EPR_ACT a=689` | *（需打开诊断）* 0x2B1 策略变更后 2 s 的状态快照（一次性）：b 的 bit0 attached / bit1 显式合同 / bit2 EPR 模式 / bit3 待定 RDO / bit4 退出排队 / bit8..11 重试数 / bit12 请求使能 / bit16..23 maxFixed |
+| `EPR_ACT a=690/691` | *（需打开诊断）* 0x2B2/0x2B3 EPR 内降档旧方案（重取 SPR 能力）——已废弃 |
+| `EPR_ACT a=694` | *（需打开诊断）* 0x2B6 `PD_SendPolicyRequestDirect()` 里 `USBPD_PE_Send_Request()` 的原始返回（`status<<16 \| position`）；0=OK |
+| `EPR_ACT a=695` | *（需打开诊断）* 0x2B7 连投 3 次仍未成功，停止并通过 0 W 预算保护（`selected_mv<<16 \| position`） |
+| `PD_TX a=<类型> b=<头<<16\|长度>` | *（需打开诊断）* 每种报文首次出现（重复帧只记一次）；`a=0x10`=扩展，`a=9`=EPR_Request，`a=10`=EPR_Mode |
+| `PD_TXDO do1/do2` | *（需打开诊断）* 该帧前两个数据对象（核对 RDO/CopyPDO 用） |
+| `PD_RX a=<类型> b=<头>` | *（需打开诊断）* 收到的报文类型 |
+| `GETINFO/SETINFO a=<DataId> b=<字节数>` | *（需打开诊断）* PE 向 DPM 取/送数据（`30`=SNK_PDP_EPR，`25`=SNK_PDO_EPR，`29`=REQ_COPYPDO，`26`=RCV_SRC_PDO_EPR） |
 
 ## 9. 参考文档
 
