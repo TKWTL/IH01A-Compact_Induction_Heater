@@ -1,6 +1,8 @@
-/* Low-frequency temperature service, modeled after Collar-Radio
- * application-level periodic ADC processing. Does NOT start ADC or DMA:
- * the existing 20kHz 8-rank ISR continues to sample/filter only.
+/* Low-frequency temperature service with one-time ADC bootstrap.
+ * On the first foreground call, initialize protection and calibrate/start
+ * ADC1 DMA / TIM6 once. Subsequent 100ms passes only convert the filtered
+ * NTC/MCU readings; raw ADC protection and zero capture run in the DMA IRQ.
+ * The 20kHz ISR never performs HAL, NTC lookup or floating-point work.
  */
 #include "temp_service.h"
 #include "conv_adc.h"

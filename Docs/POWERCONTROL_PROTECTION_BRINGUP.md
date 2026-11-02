@@ -68,3 +68,12 @@ high_delta,...)` 纯整数转换，其中 `low_delta/high_delta` 是
 最后才评估 DAC+COMP 与真正的高频电流保护。
 
 目前 `Heater_GetIsrTargetMw()` 始终返回 0、不会使能加热。
+
+验证约束：Host 测试已加入 `Firmware/Tests/host/run.sh`，本阶段未在工具环境执行
+完整的 Keil 链接与板级测量。STM32G071 的 `ADC1_COMP` 中断向量
+尚未接入固件，因此本阶段的快速检查是既有 DMA HT/TC ISR，**不是**
+ADC 硬件模拟看门狗中断，也不是已经激活的比较器硬件关断。
+
+以后若启用 ADC 模拟看门狗，应在 `ConvADC_Start()` 之前设置阈值、
+通道选择及 ADC1_COMP IRQ，绝不能照搬 G474 代码在 ADC 正转换时
+停启 DMA，否则有采样与时序竞争风险。

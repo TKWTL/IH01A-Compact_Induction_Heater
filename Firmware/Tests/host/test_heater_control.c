@@ -27,6 +27,16 @@ int main(void)
     assert(dc.input==HEATER_INPUT_PD && dc.budget_mw==140000u);
     Heater_Init();
     assert(Heater_GetProposedTargetMw()==0u);
+    /* Requests during zero capture must not publish power to the ISR. */
+    Heater_StartConfirmed(0u);
+    o.zero_calibrated=0u;
+    o.temperature_updated_ms=100u;
+    Heater_Poll(100u,&o);
+    Heater_GetSnapshot(&s);
+    assert(s.requested_power_mw==0u && Heater_GetProposedTargetMw()==0u);
+    assert(s.state==HEATER_RUN_REQUESTED);
+    Heater_Stop();
+    o.zero_calibrated=1u;
     Heater_LatchFault(0x01u);
     Heater_GetSnapshot(&s);
     assert(s.state==HEATER_FAULT && s.fault_mask==1u);
