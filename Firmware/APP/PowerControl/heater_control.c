@@ -1,6 +1,7 @@
 /* Persistent cooking policy, independent of the OLED and PM UI state.
  * 100 ms foreground supervisor; no heap, float, or control math in ISR.
- * All requested PWM/ISRs remain HARD-DISABLED during bring-up.
+ * TIM1 bench logic PWM may run with FD2204 PC6 held LOW.
+ * Hardware heating remains disabled until separately commissioned.
  */
 #include "PowerControl/heater_control.h"
 #include <string.h>
@@ -18,7 +19,7 @@ static HeaterSnapshot s;
 static uint32_t s_start_deadline_ms,s_stop_deadline_ms;
 static int32_t s_integrator_mw,s_derivative_q4;
 static int16_t s_previous_pot;
-static uint8_t s_stop_timer_armed,s_power_manual,s_derivative_ready;
+static uint8_t s_stop_timer_armed,s_derivative_ready;
 /* Cortex-M0+ naturally aligned single 32-bit store/load. Read-only from
  * any interrupt; no ISR should edit heater policy or these shared fields. */
 static volatile uint32_t s_proposed_target_mw;
@@ -40,13 +41,12 @@ static void clear_output(void)
 void Heater_Init(void)
 {
     memset(&s,0,sizeof(s));
-    s.mode=HEATER_MODE_TEMP;
+    s.mode=HEATER_MODE_POWER; /* default manual phase bench mode */
     s.state=HEATER_OFF;
     s_proposed_target_mw=0u;
     s.target_temp_deci_c=800u;
-    s.target_power_w=60u;
+    s.target_phase_deg=0u; /* two logic waveforms initially in phase */
     s_stop_timer_armed=0u;
-    s_power_manual=0u;
     s_start_deadline_ms=s_stop_deadline_ms=0u;
 }
 void Heater_SetMode(HeaterMode mode)
@@ -54,13 +54,7 @@ void Heater_SetMode(HeaterMode mode)
     if(mode!=HEATER_MODE_TEMP && mode!=HEATER_MODE_POWER)return;
     if(mode==s.mode)return;
     s.mode=mode;
-    if(mode==HEATER_MODE_POWER)
-    {
-        /* Default power mode to the current nominal input ceiling,
-         * matching DPC27A; L/R may immediately reduce the target. */
-        s_power_manual=0u;
-        s.target_power_w=(uint16_t)(s.budget_mw/1000u);
-    }
+    /* Phase angle persists across mode switches; no watt inference. */
     clear_output();
 }
 void Heater_SetTargetTemp(uint16_t deci_c)
@@ -69,14 +63,13 @@ void Heater_SetTargetTemp(uint16_t deci_c)
     if(deci_c>HEATER_TEMP_MAX_DECI)deci_c=HEATER_TEMP_MAX_DECI;
     s.target_temp_deci_c=deci_c;
 }
-void Heater_SetTargetPowerW(uint16_t watts)
+void Heater_SetPhaseDegrees(uint16_t degrees)
 {
-    uint32_t ceiling=s.budget_mw/1000u;
-    if(ceiling>270u)ceiling=270u;
-    if(watts>270u)watts=270u;
-    if(ceiling && watts>ceiling)watts=(uint16_t)ceiling;
-    s.target_power_w=watts;
-    s_power_manual=1u;
+    if(degrees>180u)degrees=180u;
+    degrees=(uint16_t)(((uint32_t)degrees+5u)/10u*10u);
+    if(degrees>180u)degrees=180u;
+    s.target_phase_deg=degrees;
+    /* Only a configuration request; NEVER raises PC6. */
 }
 void Heater_SetOffMinutes(uint16_t minutes,uint32_t now_ms)
 {
@@ -154,8 +147,6 @@ void Heater_Poll(uint32_t now_ms,const HeaterObservation *obs)
     s.input=obs->input;
     s.bus_mv=obs->bus_mv;
     s.budget_mw=obs->budget_mw;
-    if(s.mode==HEATER_MODE_POWER && !s_power_manual)
-        s.target_power_w=(uint16_t)(obs->budget_mw/1000u);
     s.pot_deci_c=obs->pot_deci_c;
     s.sys_deci_c=obs->sys_deci_c;
     s.pot_valid=obs->pot_valid;
@@ -204,8 +195,9 @@ void Heater_Poll(uint32_t now_ms,const HeaterObservation *obs)
     cap=(int32_t)obs->budget_mw;
     if(s.mode==HEATER_MODE_POWER)
     {
-        uint32_t target=(uint32_t)s.target_power_w*1000u;
-        s.requested_power_mw=(target>obs->budget_mw)?obs->budget_mw:target;
+        /* Bench angle setting is NOT a watt request: 180deg != 180W.
+         * It is sent to the TIM1 logic PWM with PC6 held LOW. */
+        s.requested_power_mw=0u;
         s_integrator_mw=0;
     }
     else

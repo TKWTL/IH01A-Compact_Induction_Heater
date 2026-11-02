@@ -4,6 +4,9 @@
  */
 #include "PowerControl/heater_ui.h"
 #include "PowerControl/heater_control.h"
+#include "PowerControl/conv_controller.h"
+#include "PowerControl/conv_phase.h"
+#include "tim.h"
 #include "display/dispDriver.h"
 #include "framework/pm_api.h"
 #include "main.h"
@@ -51,9 +54,11 @@ static void edit_value(uint8_t field,UI_ACTION action,uint32_t now)
         }
         else
         {
-            int32_t v=(int32_t)s.target_power_w+(up?10:-10);
+            int32_t v=(int32_t)s.target_phase_deg+(up?10:-10);
             if(v<0)v=0;
-            Heater_SetTargetPowerW((uint16_t)v);
+            if(v>180)v=180;
+            Heater_SetPhaseDegrees((uint16_t)v);
+            ConvController_SetPhaseDegrees((uint16_t)v); /* immediate scope */
         }
         break;
     case EDIT_OFF:
@@ -126,15 +131,19 @@ void Heater_UI_Page(ui_t *ui)
         (void)snprintf(line,sizeof(line),"POT/SYS: --");
     Disp_DrawStr(0u,23u,line);
     if(s.mode==HEATER_MODE_TEMP)
-        (void)snprintf(line,sizeof(line),"SET %uC  P%lu/%luW",
+        (void)snprintf(line,sizeof(line),"SET %uC P%luW",
             (unsigned)(s.target_temp_deci_c/10u),
-            (unsigned long)(s.requested_power_mw/1000u),
-            (unsigned long)(s.budget_mw/1000u));
+            (unsigned long)(s.requested_power_mw/1000u));
     else
-        (void)snprintf(line,sizeof(line),"SET %uW P%lu/%luW",
-            (unsigned)s.target_power_w,
-            (unsigned long)(s.requested_power_mw/1000u),
-            (unsigned long)(s.budget_mw/1000u));
+    {
+        ConvPhaseConfig phase;
+        if(ConvPhase_Calculate((uint16_t)TIM1->ARR,s.target_phase_deg,&phase))
+            (void)snprintf(line,sizeof(line),"%3u deg C3:%u C4:%u",
+                (unsigned)s.target_phase_deg,
+                (unsigned)phase.ccr3,(unsigned)phase.ccr4);
+        else
+            (void)snprintf(line,sizeof(line),"PHASE --");
+    }
     Disp_DrawStr(0u,35u,line);
     /* Show live countdown when armed, not only the configuration values.
      * Timers remain active even if this menu item is closed. */
@@ -151,8 +160,11 @@ void Heater_UI_Page(ui_t *ui)
         (void)snprintf(line,sizeof(line),"ON %um OFF %um",
             (unsigned)s.on_minutes,(unsigned)s.off_minutes);
     Disp_DrawStr(0u,47u,line);
-    (void)snprintf(line,sizeof(line),"%s >%s",
-        state_name(s.state),field_name(s_edit_field));
+    (void)snprintf(line,sizeof(line),"%s PWM:%c EN:%c >%s",
+        state_name(s.state),
+        ConvController_LogicPwmRunning()?'Y':'N',
+        ConvController_OutputEnabled()?'Y':'N',
+        field_name(s_edit_field));
     Disp_DrawStr(0u,59u,line);
     Disp_SendBuffer();
 }

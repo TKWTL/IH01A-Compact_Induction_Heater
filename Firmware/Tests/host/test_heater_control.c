@@ -27,6 +27,15 @@ int main(void)
     assert(dc.input==HEATER_INPUT_PD && dc.budget_mw==140000u);
     Heater_Init();
     assert(Heater_GetProposedTargetMw()==0u);
+    Heater_GetSnapshot(&s);
+    assert(s.mode==HEATER_MODE_POWER && s.target_phase_deg==0u);
+    Heater_SetPhaseDegrees(90u);
+    Heater_GetSnapshot(&s);
+    assert(s.target_phase_deg==90u);
+    Heater_SetPhaseDegrees(193u);
+    Heater_GetSnapshot(&s);
+    assert(s.target_phase_deg==180u);
+    Heater_SetPhaseDegrees(0u);
     /* Requests during zero capture must not publish power to the ISR. */
     Heater_StartConfirmed(0u);
     o.zero_calibrated=0u;
@@ -61,27 +70,25 @@ int main(void)
     assert(s.state==HEATER_RUN_REQUESTED && s.off_remaining_s>0u);
     assert(s.requested_power_mw<=o.budget_mw && s.isr_target_mw==0u);
     Heater_SetMode(HEATER_MODE_POWER);
-    Heater_GetSnapshot(&s);
-    assert(s.target_power_w==140u); /* initially V*I or contract ceiling */
-    Heater_SetTargetPowerW(120u);
+    Heater_SetPhaseDegrees(120u);
     Heater_Poll(60300u,&o);
     Heater_GetSnapshot(&s);
-    assert(s.requested_power_mw==120000u);
-    assert(Heater_GetProposedTargetMw()==120000u);
+    assert(s.target_phase_deg==120u && s.requested_power_mw==0u);
+    assert(Heater_GetProposedTargetMw()==0u);
     assert(Heater_GetIsrTargetMw()==0u);
     o.budget_mw=80000u;
     Heater_Poll(60400u,&o);
     Heater_GetSnapshot(&s);
-    assert(s.requested_power_mw==80000u);
+    assert(s.target_phase_deg==120u); /* no watts-to-phase mapping */
     Heater_SetMode(HEATER_MODE_TEMP);
     Heater_SetMode(HEATER_MODE_POWER);
     Heater_Poll(60500u,&o);
     Heater_GetSnapshot(&s);
-    assert(s.target_power_w==80u);
+    assert(s.target_phase_deg==120u);
     o.budget_mw=140000u;
     Heater_Poll(60600u,&o);
     Heater_GetSnapshot(&s);
-    assert(s.target_power_w==140u); /* auto tracks on new mode entry */
+    assert(s.target_phase_deg==120u);
     o.temperature_updated_ms=180100u;
     Heater_Poll(180100u,&o);
     Heater_GetSnapshot(&s);

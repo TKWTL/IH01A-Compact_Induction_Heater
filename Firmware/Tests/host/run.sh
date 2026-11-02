@@ -46,3 +46,6 @@ build_run heater -I APP \
 
 build_run conv_protection -DCONV_PROTECTION_HOST_TEST -I APP/PowerControl \
  APP/PowerControl/conv_protection.c Tests/host/test_conv_protection.c
+
+build_run phase -I APP APP/PowerControl/conv_phase.c \
+ Tests/host/test_conv_phase.c

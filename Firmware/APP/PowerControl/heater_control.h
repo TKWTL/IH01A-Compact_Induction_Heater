@@ -35,7 +35,7 @@ typedef struct {
     uint32_t isr_target_mw;      /* hard-gated to zero during bring-up */
     uint32_t fault_mask;         /* retained until reset / explicit recovery */
     uint16_t target_temp_deci_c;
-    uint16_t target_power_w;
+    uint16_t target_phase_deg; /* manual 0..180deg, not watts */
     int16_t pot_deci_c,sys_deci_c;
     uint8_t pot_valid,sys_valid;
     uint16_t off_minutes;  /* configuration for next/current run */
@@ -46,7 +46,7 @@ typedef struct {
 void Heater_Init(void);
 void Heater_SetMode(HeaterMode mode);
 void Heater_SetTargetTemp(uint16_t deci_c);
-void Heater_SetTargetPowerW(uint16_t watts);
+void Heater_SetPhaseDegrees(uint16_t degrees);
 void Heater_SetOffMinutes(uint16_t minutes,uint32_t now_ms);
 void Heater_ScheduleMinutes(uint16_t minutes,uint32_t now_ms);
 void Heater_StartConfirmed(uint32_t now_ms);

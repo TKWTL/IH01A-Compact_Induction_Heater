@@ -255,6 +255,17 @@ uint8_t ConvProtection_WithinWindow(uint8_t above_low,uint8_t above_high)
      * and therefore MUST NOT be used alone as the window output level. */
     return (uint8_t)((above_low!=0u) && (above_high==0u));
 }
+uint8_t ConvProtection_CompArmed(void)
+{
+#ifndef CONV_PROTECTION_HOST_TEST
+    return (uint8_t)(s_comp_armed &&
+                     (COMP1->CSR&COMP_CSR_EN)!=0u &&
+                     (COMP2->CSR&COMP_CSR_EN)!=0u &&
+                     ConvProtection_FaultMask()==0u);
+#else
+    return 0u;
+#endif
+}
 uint8_t ConvProtection_WindowSafe(void)
 {
 #ifndef CONV_PROTECTION_HOST_TEST

@@ -1,7 +1,7 @@
 /* STM32G071 cooperative application shell.
  * The ST non-RTOS USBPD_DPM_Run() loop does not return. Each pass calls
  * APP_Tasks_RunOnce() through USBPD_DPM_UserExecute() after CAD/PE.
- * One OLED page per pass maximum; heater PWM remains OFF.
+ * One OLED page per pass; TIM1 bench PWM allowed, FD2204 PC6 stays OFF.
  */
 #include "app_tasks.h"
 #include "main.h"
@@ -21,6 +21,7 @@
 #include "framework/beep.h"
 #include "temp_service.h"
 #include "conv_adc.h"
+#include "conv_controller.h"
 #include "conv_protection.h"
 #include "PowerControl/heater_control.h"
 #include "PowerControl/heater_budget.h"
@@ -157,6 +158,14 @@ THRD_DECLARE(thread_heater)
         observation.sys_deci_c=temperature.sys_deci_c;
         observation.temperature_updated_ms=temperature.updated_ms;
         Heater_Poll(TIME_Millis(),&observation);
+        /* Scope PWM independent of Main and heater scheduling.
+         * DAC/COMP + zero must be initialized; PC6 remains LOW. */
+        {
+            HeaterSnapshot hs;
+            Heater_GetSnapshot(&hs);
+            ConvController_SetPhaseDegrees(hs.target_phase_deg);
+            (void)ConvController_StartLogicPwm();
+        }
         THRD_DELAY(100u);
     }
     THRD_END;

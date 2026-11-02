@@ -57,6 +57,8 @@ uint32_t ConvProtection_FaultMask(void);
 /* COMP1 + COMP2 raw state, PA6 synthesized window output and TIM1 Break.
  * All must agree on "inside window" before any future PC6 HIGH. */
 uint8_t ConvProtection_WindowSafe(void);
+/* Comparator peripherals initialized, no instantaneous level polling. */
+uint8_t ConvProtection_CompArmed(void);
 /* Pure logic for host tests: lower comparator must be HIGH and upper LOW. */
 uint8_t ConvProtection_WithinWindow(uint8_t above_low,uint8_t above_high);
 /* COMP1/2 window uses 0.1V/A centered on measured VBIAS, ±12A.
