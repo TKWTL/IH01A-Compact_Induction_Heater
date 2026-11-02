@@ -22,7 +22,8 @@ enum {
     CONV_PROT_NTC_SYS=1u<<4,
     CONV_PROT_VBUS_LOW=1u<<5,
     CONV_PROT_ADC_STALE=1u<<6,
-    CONV_PROT_ZERO_SWITCHING=1u<<7
+    CONV_PROT_ZERO_SWITCHING=1u<<7,
+    CONV_PROT_IBUS_LIMIT=1u<<8
 };
 typedef struct {
     ConvZeroStatus zero_status;
@@ -37,6 +38,9 @@ void ConvProtection_Service(uint32_t now_ms,const ConvADC_Snapshot *adc,
                             const TempService_Snapshot *temp);
 void ConvProtection_GetSnapshot(ConvProtectionSnapshot *out);
 uint8_t ConvProtection_ZeroReady(void);
+/* One raw 12-bit ADC count threshold around the auto-calibrated IBUS zero.
+ * 0 disables this protection until the analog A/count scaling is measured. */
+void ConvProtection_SetIbusTripDeltaRaw(uint16_t delta_raw);
 uint32_t ConvProtection_FaultMask(void);
 /* DAC codes are PROPOSALS only until analog transfer and COMP polarity are
  * verified. The driver does not arm DAC/COMP or modify TIM1 break routing. */

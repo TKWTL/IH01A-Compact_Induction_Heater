@@ -19,6 +19,11 @@ int main(void)
     assert(s.zero_status==CONV_ZERO_READY);
     assert(s.ct_zero_raw==1500u && s.ibus_zero_raw==1900u);
     assert(s.zero_samples==CONV_ZERO_AVG_FRAMES);
+    ConvProtection_SetIbusTripDeltaRaw(150u);
+    f[CONV_ADC_IBUS]=2100u; /* 200 counts above calibrated 1900 */
+    ConvProtection_FrameISR(f);
+    assert(ConvProtection_FaultMask()&CONV_PROT_IBUS_LIMIT);
+    f[CONV_ADC_IBUS]=1900u;
     ConvProtection_CalcDacWindow(2000u,853u,100u,120u,&low,&high);
     assert(low==1900u && high==2120u);
     ConvProtection_SetDacProfile(100u,120u,1u);

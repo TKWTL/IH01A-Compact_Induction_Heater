@@ -46,6 +46,10 @@ TIM1 BRK/BRK2；DAC1 CH1/CH2 分别选为两个 COMP 的负输入。
 已经到达满量程。当前 `CONV_PROT_VBUS_RAIL_RAW=4070` 是**接近饱和**
 检测（约 39.8V），不能检测超过满量程后具体是多少伏。
 IBUS 的 4090 原码阈值只表示 ADC 接近上轨，并非经过安培标定的过流阈值。
+`ConvProtection_SetIbusTripDeltaRaw(delta)` 可在校准完成后使能
+基于 `abs(raw_IBUS - ibus_zero_raw) > delta` 的 DMA ISR 快速关断。
+目前 `delta=0`（关闭）；必须先测定 A/LSB、电流检测极性、采样噪声
+和预期电流上限，才能在产品中配置真实阈值。
 
 ## ARR、VBIAS、DAC1 提案
 

@@ -23,6 +23,7 @@
 static volatile uint32_t s_fast_faults;
 static volatile uint8_t s_zero_status;
 static volatile uint16_t s_zero_samples,s_ct_zero,s_ibus_zero;
+static volatile uint16_t s_ibus_trip_delta_raw;
 static uint32_t s_ct_sum,s_ibus_sum;
 static uint16_t s_settle,s_ct_min,s_ct_max,s_ib_min,s_ib_max;
 static uint16_t s_dac1,s_dac2,s_low,s_high;
@@ -34,6 +35,7 @@ void ConvProtection_Init(void)
     s_fast_faults=0u;
     s_zero_status=CONV_ZERO_WAIT;
     s_zero_samples=s_ct_zero=s_ibus_zero=0u;
+    s_ibus_trip_delta_raw=0u;
     s_settle=0u;s_ct_sum=s_ibus_sum=0u;
     s_ct_min=s_ib_min=4095u;
     s_ct_max=s_ib_max=0u;
@@ -86,8 +88,22 @@ PROT_RAMFUNC void ConvProtection_FrameISR(const volatile uint16_t *frame)
         ConvController_TripISR();
 #endif
     }
-    if(s_zero_status==CONV_ZERO_READY ||
-       s_zero_status==CONV_ZERO_FAILED)return;
+    if(s_zero_status==CONV_ZERO_READY)
+    {
+        uint16_t current=frame[CONV_ADC_IBUS];
+        uint16_t delta=(current>s_ibus_zero) ?
+                       (uint16_t)(current-s_ibus_zero) :
+                       (uint16_t)(s_ibus_zero-current);
+        if(s_ibus_trip_delta_raw && delta>s_ibus_trip_delta_raw)
+        {
+            s_fast_faults|=CONV_PROT_IBUS_LIMIT;
+#ifndef CONV_PROTECTION_HOST_TEST
+            ConvController_TripISR();
+#endif
+        }
+        return;
+    }
+    if(s_zero_status==CONV_ZERO_FAILED)return;
 #ifndef CONV_PROTECTION_HOST_TEST
     /* Hard interlock: a zero window is invalid if the bridge was ever
      * enabled during settling or averaging. This check is independent
@@ -124,6 +140,10 @@ PROT_RAMFUNC void ConvProtection_FrameISR(const volatile uint16_t *frame)
     s_ibus_zero=(uint16_t)((s_ibus_sum+CONV_ZERO_AVG_FRAMES/2u)/
                             CONV_ZERO_AVG_FRAMES);
     s_zero_status=CONV_ZERO_READY;
+}
+void ConvProtection_SetIbusTripDeltaRaw(uint16_t delta_raw)
+{
+    s_ibus_trip_delta_raw=delta_raw;
 }
 uint8_t ConvProtection_ZeroReady(void)
 {
