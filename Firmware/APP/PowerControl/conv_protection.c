@@ -116,6 +116,16 @@ void ConvProtection_AnalogWatchdogISR(void)
     ConvController_TripISR();
 #endif
 }
+PROT_RAMFUNC void ConvProtection_BreakISR(void)
+{
+#ifndef CONV_PROTECTION_HOST_TEST
+    /* Do not clear BIF: it remains evidence of the first hardware trip.
+     * Disable only the break interrupt to avoid a latched IRQ storm. */
+    ConvController_TripISR();
+    s_fast_faults|=CONV_PROT_TIM1_BREAK;
+    TIM1->DIER &= ~TIM_DIER_BIE;
+#endif
+}
 static void ibus_window_codes(uint16_t zero,uint32_t ma,
                               uint16_t *lower,uint16_t *upper)
 {
@@ -172,6 +182,18 @@ PROT_RAMFUNC void ConvProtection_FrameISR(const volatile uint16_t *frame)
         ConvController_TripISR();
 #endif
     }
+    /* Input undervoltage/overvoltage during *energized 12V bench*:
+     * 12-bit reference = 40V bus full-scale after x16 divider.
+     * ~10.25..13.67V hysteresis-free emergency guard independent of
+     * the 100ms PD policy check. These are conservative raw limits. */
+#ifndef CONV_PROTECTION_HOST_TEST
+    if((PWM_EN_GPIO_Port->ODR&PWM_EN_Pin)!=0u &&
+       (frame[CONV_ADC_VBUS]<1050u || frame[CONV_ADC_VBUS]>1400u))
+    {
+        s_fast_faults|=CONV_PROT_BENCH_VBUS;
+        ConvController_TripISR();
+    }
+#endif
     if(frame[CONV_ADC_IBUS]>=CONV_PROT_IBUS_RAIL_RAW ||
        (s_zero_status==CONV_ZERO_READY && s_ibus_zero>=32u &&
         frame[CONV_ADC_IBUS]<=5u))

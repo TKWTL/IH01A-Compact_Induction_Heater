@@ -1,6 +1,7 @@
 #ifndef IH01A_CONV_CONTROLLER_H
 #define IH01A_CONV_CONTROLLER_H
 #include <stdint.h>
+#include "PowerControl/heater_control.h"
 typedef enum {
     CONV_STATE_STOP=0,
     CONV_STATE_ADC_MONITOR,
@@ -24,4 +25,9 @@ void ConvController_SetPhaseDegrees(uint16_t phase_deg);
 uint16_t ConvController_GetPhaseDegrees(void);
 uint8_t ConvController_StartLogicPwm(void);
 uint8_t ConvController_LogicPwmRunning(void);
+/* 12V low-power bench experiment: gated PC6, <=20deg, <=10s per RUN.
+ * Normal power stage commissioning gate remains disabled. */
+void ConvController_BenchPowerOff(void);
+void ConvController_BenchRunPoll(uint32_t now_ms,
+                                 const HeaterObservation *observation);
 #endif

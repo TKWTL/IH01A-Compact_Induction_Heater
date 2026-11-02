@@ -165,6 +165,9 @@ THRD_DECLARE(thread_heater)
             Heater_GetSnapshot(&hs);
             ConvController_SetPhaseDegrees(hs.target_phase_deg);
             (void)ConvController_StartLogicPwm();
+            /* Explicit RUN, validated 12V/3A source, 10..20deg, <=10s.
+             * Stop always pulls PC6 LOW, never auto-restart on later PD. */
+            ConvController_BenchRunPoll(TIME_Millis(),&observation);
         }
         THRD_DELAY(100u);
     }

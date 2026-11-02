@@ -7,17 +7,24 @@
 #include "conv_zcd.h"
 #include "conv_protection.h"
 #include "heater_control.h"
+#include "algorithm/pd_input.h"
 #include "main.h"
 #include "tim.h"
 #define IH_RAMFUNC __attribute__((section(".ih_ramfunc"), used, noinline))
 /* Explicit commissioning gate; no UI command may override this. */
 #define IH_POWER_STAGE_COMMISSIONED 0u
+/* Explicit narrow gate, ONLY for 12V low-power, manual 10..20deg and 10s.
+ * Normal heater/power controller remains uncommissioned. */
+#define IH_LOW_POWER_BENCH_ENABLE 1u
+#define IH_BENCH_MAX_ANGLE_DEG 20u
+#define IH_BENCH_MAX_RUNTIME_MS 10000u
 static volatile ConvState s_state;
 static volatile uint32_t s_errors;
 static uint16_t s_phase_deg;
 static uint16_t s_phase_arr;
 static uint8_t s_logic_pwm_started;
 static uint8_t s_logic_pwm_start_attempted;
+static uint32_t s_bench_started_ms;
 
 void ConvController_Init(void)
 {
@@ -27,6 +34,7 @@ void ConvController_Init(void)
     s_logic_pwm_start_attempted=0u;
     s_phase_deg=0u;
     s_phase_arr=0u;
+    s_bench_started_ms=0u;
     ConvZcd_Init();
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port, PWM_EN_Pin);
     TIM1->BDTR &= ~TIM_BDTR_MOE;
@@ -51,11 +59,23 @@ IH_RAMFUNC void ConvController_TripISR(void)
     __DSB();
     TIM1->BDTR &= ~TIM_BDTR_MOE;
 }
+void ConvController_BenchPowerOff(void)
+{
+    /* Keep TIM1 CH1/CH3 logic PWM running for oscilloscope capture. */
+    LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
+    __DSB();
+}
 void ConvController_SetPhaseDegrees(uint16_t angle_deg)
 {
     ConvPhaseConfig phase;
     uint16_t arr=(uint16_t)TIM1->ARR;
     if(!ConvPhase_Calculate(arr,angle_deg,&phase))return;
+    if(ConvController_OutputEnabled() &&
+       (phase.angle_deg==0u || phase.angle_deg>IH_BENCH_MAX_ANGLE_DEG))
+    {
+        ConvController_BenchPowerOff();
+        Heater_Stop(); /* no automatic restart if angle returns to 10deg */
+    }
     if(s_phase_arr==arr && s_phase_deg==phase.angle_deg)return;
     /* Enable compare preload BEFORE writing CH3/CH4. UDIS prevents
      * an intervening update event from loading a mixed phase pair.
@@ -92,7 +112,12 @@ uint8_t ConvController_StartLogicPwm(void)
 #if !IH_POWER_STAGE_COMMISSIONED
     /* Bench build invariant: no path, including a timer restart attempt,
      * is permitted to leave FD2204 EN asserted. */
-    LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
+    /* Keep the power gate asserted only while an explicitly authorized
+     * bench run is active. Outside bench mode the old hard gate applies. */
+#if IH_LOW_POWER_BENCH_ENABLE
+    if(!ConvController_OutputEnabled())
+#endif
+        LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
 #endif
     if(s_state!=CONV_STATE_ADC_MONITOR ||
        !ConvProtection_ZeroReady() ||
@@ -108,6 +133,11 @@ uint8_t ConvController_StartLogicPwm(void)
     if(s_logic_pwm_start_attempted)return 0u;
     s_logic_pwm_start_attempted=1u;
     TIM1->SR=(uint32_t)~TIM_SR_BIF;
+    /* Break is asynchronous in hardware. Its IRQ additionally pulls
+     * FD2204 EN low, not just TIM1.MOE, at the first fault event. */
+    HAL_NVIC_SetPriority(TIM1_BRK_UP_TRG_COM_IRQn,0u,0u);
+    HAL_NVIC_EnableIRQ(TIM1_BRK_UP_TRG_COM_IRQn);
+    TIM1->DIER |= TIM_DIER_BIE;
     /* CH4's PWM1 compare is an INTERNAL constituent of combined CH3 output.
      * No CH4 pin is required. Both PWM reference sources are already
      * configured by MX_TIM1_Init() including OC3 Combined PWM2. */
@@ -126,6 +156,69 @@ uint8_t ConvController_StartLogicPwm(void)
     }
     s_logic_pwm_started=1u;
     return 1u;
+}
+void ConvController_BenchRunPoll(uint32_t now_ms,
+                                 const HeaterObservation *observation)
+{
+#if IH_LOW_POWER_BENCH_ENABLE
+    HeaterSnapshot h;
+    PD_InputContract contract;
+    uint8_t valid_pd;
+    uint8_t allow;
+    Heater_GetSnapshot(&h);
+    valid_pd=PD_Input_GetActiveContract(&contract);
+    allow=(uint8_t)(observation!=0 &&
+         h.state==HEATER_RUN_REQUESTED &&
+         h.mode==HEATER_MODE_POWER &&
+         h.target_phase_deg>=10u &&
+         h.target_phase_deg<=IH_BENCH_MAX_ANGLE_DEG &&
+         ConvController_GetPhaseDegrees()==h.target_phase_deg &&
+         valid_pd && contract.voltage_mv==12000u &&
+         contract.current_ma>0u && contract.current_ma<=3000u &&
+         observation->input==HEATER_INPUT_PD &&
+         observation->bus_mv>=10800u && observation->bus_mv<=13200u &&
+         observation->zero_calibrated &&
+         observation->pot_valid && observation->sys_valid &&
+         observation->pot_deci_c<700 && observation->sys_deci_c<600 &&
+         (uint32_t)(now_ms-observation->temperature_updated_ms)<=250u &&
+         ConvController_LogicPwmRunning() &&
+         ConvProtection_CompArmed() &&
+         ConvProtection_FaultMask()==0u &&
+         (TIM1->SR&TIM_SR_BIF)==0u);
+    if(ConvController_OutputEnabled())
+    {
+        if(!allow ||
+           (uint32_t)(now_ms-s_bench_started_ms)>=IH_BENCH_MAX_RUNTIME_MS)
+        {
+            ConvController_BenchPowerOff();
+            Heater_Stop(); /* never auto re-arm after a 10s or fault stop */
+        }
+        return;
+    }
+    if(h.state!=HEATER_RUN_REQUESTED)return;
+    if(!allow)
+    {
+        Heater_Stop(); /* no deferred power-on once missing PD becomes valid */
+        return;
+    }
+    /* ONE explicit user RUN event is allowed to assert the gate. Logic
+     * PWM runs separately. Require hardware break and fault-free contract
+     * even at the last instant before enabling FD2204. */
+    LL_GPIO_SetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
+    __DSB();
+    if((TIM1->SR&TIM_SR_BIF)!=0u ||
+       ConvProtection_FaultMask()!=0u)
+    {
+        ConvController_BenchPowerOff();
+        Heater_Stop();
+        return;
+    }
+    s_bench_started_ms=now_ms;
+#else
+    (void)now_ms;
+    (void)observation;
+    ConvController_BenchPowerOff();
+#endif
 }
 uint8_t ConvController_OutputEnabled(void)
 {

@@ -28,7 +28,9 @@ enum {
     CONV_PROT_AWD_IBUS=1u<<10,
     CONV_PROT_AWD_SYS=1u<<11,
     CONV_PROT_COMP_SETUP=1u<<12,
-    CONV_PROT_DAC_RANGE=1u<<13
+    CONV_PROT_DAC_RANGE=1u<<13,
+    CONV_PROT_TIM1_BREAK=1u<<14,
+    CONV_PROT_BENCH_VBUS=1u<<15
 };
 typedef struct {
     ConvZeroStatus zero_status;
@@ -53,6 +55,8 @@ void ConvProtection_SetIbusTripDeltaRaw(uint16_t delta_raw);
 void ConvProtection_SetIbusLimitMa(uint32_t current_ma);
 /* Handle ADC1 AWD1/2/3 flags before the regular HAL ADC IRQ dispatcher. */
 void ConvProtection_AnalogWatchdogISR(void);
+/* Called on TIM1 BRK IRQ before HAL, disables PC6 and latches fault. */
+void ConvProtection_BreakISR(void);
 uint32_t ConvProtection_FaultMask(void);
 /* COMP1 + COMP2 raw state, PA6 synthesized window output and TIM1 Break.
  * All must agree on "inside window" before any future PC6 HIGH. */

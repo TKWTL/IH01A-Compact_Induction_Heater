@@ -87,7 +87,11 @@ static void edit_value(uint8_t field,UI_ACTION action,uint32_t now)
             Heater_StartConfirmed(now);
         }
         else
+        {
+            /* User stop must drop FD2204 EN immediately, not 100ms later. */
+            ConvController_BenchPowerOff();
             Heater_Stop();
+        }
         break;
     default:break;
     }

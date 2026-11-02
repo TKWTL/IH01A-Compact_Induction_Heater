@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "conv_protection.h"
+#include "conv_controller.h"
 #include "usbpd_hw_if.h"  /* USBPD_PORT0_IRQHandler */
 #include "usbpd.h"
 /* USER CODE END Includes */
@@ -60,6 +61,16 @@ __WEAK void DMA1_Channel2_3_IRQHandler(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* STM32G071 TIM1 combined Break/Update/Trigger/Commutation vector.
+ * The TIM1 Break input already asynchronously disables MOE in hardware.
+ * This ISR additionally disables FD2204 through PC6 on the same event.
+ * We deliberately do NOT enable TIM1 UIE, so the 200kHz update rate
+ * causes no interrupts; only a Break invokes this handler. */
+void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
+{
+    if((TIM1->SR&TIM_SR_BIF)!=0u)
+        ConvProtection_BreakISR();
+}
 /* Fatal-path console. The normal console formats into a RAM ring and lets the
  * main loop start the DMA, so it silently stops working when the superloop
  * stops - exactly the case these dumps exist for. Here USART1 is driven
