@@ -45,6 +45,69 @@ static uint32_t s_epr_mode_since_ms, s_epr_enter_ms;
 static uint32_t s_spr_rdo,s_spr_mv,s_spr_ma;
 static uint8_t s_spr_pos;
 static PD_InputSnapshot s_state;
+static PD_InputContract s_active, s_candidate;
+static uint8_t s_active_valid,s_candidate_valid;
+static uint8_t s_req_enabled=1u;   /* retained across unplug; not in Flash */
+static uint8_t s_max_fixed_v=31u;  /* permits 28V EPR by default */
+static uint8_t s_policy_dirty,s_policy_tries;
+static uint32_t s_policy_try_ms;
+/* Setters affect requested power, not physical CC. Never call a PE send
+ * directly from an arbitrary caller (see EPR AMS context incident). */
+static uint32_t PD_PolicyMaxMv(void)
+{
+    return s_req_enabled ? (uint32_t)s_max_fixed_v*1000u : 5000u;
+}
+static void PD_ActiveInvalidate(void)
+{
+    s_active_valid=0u;
+    s_candidate_valid=0u;
+    memset(&s_active,0,sizeof(s_active));
+    memset(&s_candidate,0,sizeof(s_candidate));
+}
+static void PD_PolicyChanged(void)
+{
+    PD_ActiveInvalidate();
+    s_policy_dirty=1u;
+    s_policy_tries=0u;
+    s_policy_try_ms=0u;
+    s_epr_user_requested=0u;
+    g_epr_ctx_pending=0u;
+    if(!s_req_enabled || s_max_fixed_v<28u)
+    {
+        s_epr_enter_once=1u;
+        if(s_epr_mode)s_epr_exit_queued=1u;
+    }
+    else if(!s_epr_mode)s_epr_enter_once=0u;
+}
+void PD_Input_SetRequestEnabled(uint8_t enabled)
+{
+    enabled=enabled?1u:0u;
+    if(s_req_enabled==enabled)return;
+    s_req_enabled=enabled;
+    PD_PolicyChanged();
+}
+uint8_t PD_Input_GetRequestEnabled(void){return s_req_enabled;}
+uint8_t PD_Input_SetMaxFixedVoltage(uint8_t voltage_v)
+{
+    if(voltage_v<5u||voltage_v>31u)return 0u;
+    if(s_max_fixed_v!=voltage_v)
+    {
+        s_max_fixed_v=voltage_v;
+        PD_PolicyChanged();
+    }
+    return 1u;
+}
+uint8_t PD_Input_GetMaxFixedVoltage(void){return s_max_fixed_v;}
+uint8_t PD_Input_GetActiveContract(PD_InputContract *out)
+{
+    if(!out)return 0u;
+    memset(out,0,sizeof(*out));
+    if(!s_active_valid||!s_req_enabled&&s_active.voltage_mv!=5000u||
+       s_policy_dirty||s_epr_exit_queued||!s_state.attached||
+       !s_state.explicit_contract||s_candidate_valid)return 0u;
+    *out=s_active;
+    return 1u;
+}
 
 uint32_t PD_Input_VbusMillivolts(void)
 {
@@ -68,6 +131,8 @@ static uint8_t PD_SourceIsEPRCapable(void)
 void PD_Input_Init(void)
 {
     memset(&s_state,0,sizeof(s_state));
+    PD_ActiveInvalidate();
+    s_policy_dirty=s_policy_tries=0u;s_policy_try_ms=0u;
     memset(s_caps,0,sizeof(s_caps));
     memset(s_epr_caps,0,sizeof(s_epr_caps));
     s_count=s_manual=s_epr_count=s_epr_mode=s_epr_enter_once=0u;
@@ -90,6 +155,9 @@ void PD_Input_Reset(void)
 {
     /* A PD hard reset is NOT a detach: do not automatically attempt EPR again. */
     s_state.explicit_contract=0u;
+    PD_ActiveInvalidate();
+    s_policy_tries=0u;
+    s_policy_try_ms=0u;
     /* Hard Reset invalidates the RDO. The next SPR capabilities must be
      * evaluated afresh for the highest legal Fixed PDO. Do not re-enter EPR
      * on this attachment: s_epr_enter_once is intentionally kept at 1. */
@@ -119,6 +187,14 @@ void PD_Input_Caps(const uint8_t *data,uint32_t bytes)
     {s_count=0u;return;}
     memcpy(s_caps,data,bytes);
     s_count=(uint8_t)(bytes/4u);
+    if(s_policy_dirty)
+    {
+        /* A new capability message will cause Evaluate to use the
+         * requested max Fixed limit. Clear dirty only now, not when the
+         * foreground GetSrcCap API merely returns QUEUED. */
+        s_policy_dirty=0u;
+        s_policy_tries=0u;
+    }
     PD_Diag_Record(PD_DIAG_CAPS,s_count,s_caps[0]);
 }
 /* ST reports EPR PDOs SEPARATELY from the seven SPR positions: the EPR
@@ -170,8 +246,29 @@ void PD_Input_EPRCaps(const uint8_t *data,uint32_t bytes)
 }
 void PD_Input_Contract(uint8_t ready)
 {
-    if(ready && !s_state.explicit_contract)s_contract_ms=HAL_GetTick();
-    s_state.explicit_contract=ready?1u:0u;
+    if(ready)
+    {
+        if(!s_state.explicit_contract)s_contract_ms=HAL_GetTick();
+        s_state.explicit_contract=1u;
+        /* Only the PE's explicit-contract/ready notification can promote
+         * an RDO candidate to power-loop authority. */
+        if(s_candidate_valid && !s_epr_exit_queued && !s_policy_dirty)
+        {
+            s_active=s_candidate;
+            s_active_valid=1u;
+            s_candidate_valid=0u;
+        }
+    }
+    else
+    {
+        s_state.explicit_contract=0u;
+        PD_ActiveInvalidate();
+    }
+}
+void PD_Input_RequestRejected(void)
+{
+    /* Do not report a newly requested but rejected voltage as active. */
+    s_candidate_valid=0u;
 }
 /* USBPD_CORE_DATATYPE_REQ_COPYPDO expects the entire two-object EPR
  * Request payload: object 0 is the RDO, object 1 is the copied Source
@@ -224,6 +321,8 @@ void PD_Input_EPR_Notify(uint32_t event)
     {
     case USBPD_NOTIFY_EPRMODE_SUCCEEDED:
         s_epr_mode=1u;
+        PD_ActiveInvalidate(); /* SPR contract is not an EPR power budget */
+        if(!s_req_enabled || s_max_fixed_v<28u)s_epr_exit_queued=1u;
         s_epr_mode_since_ms=HAL_GetTick();
         s_epr_count=0u;
         s_epr_copy_valid=0u;
@@ -245,6 +344,8 @@ void PD_Input_EPR_Notify(uint32_t event)
     case USBPD_NOTIFY_EPRMODE_INVALID:
     case USBPD_NOTIFY_EPRMODE_EXIT:
         s_epr_mode=0u;
+        PD_ActiveInvalidate(); /* Cannot assume a completed SPR contract. */
+        if(s_policy_dirty)s_policy_tries=0u;
         s_epr_mode_since_ms=0u;
         s_epr_count=0u;
         s_epr_copy_valid=0u;
@@ -262,7 +363,9 @@ void PD_Input_EPR_Notify(uint32_t event)
 static uint32_t PD_EncodeFixedRDO(uint8_t pos,uint32_t ma,uint8_t epr)
 {
     USBPD_SNKRDO_TypeDef request = {0};
-    if(pos==0u||pos>13u||ma<10u||ma>5000u)return 0u;
+    /* Fixed RDO current is a 10-bit number in 10mA units, not limited to 5A.
+     * EPR requests remain constrained to their advertised 5A fixed PDO. */
+    if(pos==0u||pos>13u||ma<10u||ma>10230u)return 0u;
     request.FixedVariableRDO.ObjectPosition=pos;
     request.FixedVariableRDO.MaxOperatingCurrent10mAunits=ma/10u;
     request.FixedVariableRDO.OperatingCurrentIn10mAunits=ma/10u;
@@ -302,7 +405,8 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
         if(!s_epr_exit_queued && s_epr_count>=8u &&
            PD_Input_BestEPRFixed((const uint8_t *)s_epr_caps,
            (uint32_t)s_epr_count*4u,&pos,&mv,&ma,&p) &&
-           mv==28000u && ma>=IH01A_EPR_REQUEST_MA)
+           mv==28000u && mv<=PD_PolicyMaxMv() && s_req_enabled &&
+           ma>=IH01A_EPR_REQUEST_MA)
         {
             uint32_t nrdo;
             /* Two conventions are in the field: the object position is either
@@ -329,6 +433,9 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
             s_state.position=pos;
             s_state.selected_mv=mv;
             s_state.requested_ma=ma;
+            s_candidate.voltage_mv=mv;s_candidate.current_ma=ma;
+            s_candidate.position=pos;s_candidate.epr=1u;
+            s_candidate_valid=1u;s_active_valid=0u;
             PD_Diag_Record(PD_DIAG_EPR_RDO,mv,nrdo);
             PD_Diag_Record(PD_DIAG_EPR_COPYPDO,pos,p);
             *rdo=nrdo;
@@ -352,7 +459,8 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
 #endif
     if(s_state.attempted&&!s_manual)
     {
-        if(s_state.position>0u && s_state.position<=s_count)
+        if(s_state.position>0u && s_state.position<=s_count &&
+           s_state.selected_mv<=PD_PolicyMaxMv())
         {
             p=s_caps[s_state.position-1u];
             if((p>>30u)==0u && ((p>>10u)&1023u)*50u==s_state.selected_mv &&
@@ -366,11 +474,11 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
         /* The previous SPR PDO disappeared. Re-select the best *current*
          * Fixed SPR PDO rather than unnecessarily reverting to 5 V. This
          * does not trigger an additional EPR entry attempt. */
-        if(!PD_Input_BestFixed((const uint8_t *)s_caps,
-               (uint32_t)s_count*4u,&pos,&mv,&ma))return 0u;
+        if(!PD_Input_BestFixedLimited((const uint8_t *)s_caps,
+               (uint32_t)s_count*4u,PD_PolicyMaxMv(),&pos,&mv,&ma))return 0u;
     }
-    else if(!PD_Input_BestFixed((const uint8_t *)s_caps,
-              (uint32_t)s_count*4u,&pos,&mv,&ma))return 0u;
+    else if(!PD_Input_BestFixedLimited((const uint8_t *)s_caps,
+              (uint32_t)s_count*4u,PD_PolicyMaxMv(),&pos,&mv,&ma))return 0u;
     epr=(uint8_t)(IH01A_EPR_28V5A_HARDWARE_APPROVED && PD_SourceIsEPRCapable());
     s_selected_rdo=PD_EncodeFixedRDO(pos,ma,epr);
     if(!s_selected_rdo)return 0u;
@@ -378,6 +486,9 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
     s_state.position=pos;
     s_state.selected_mv=mv;
     s_state.requested_ma=ma;
+    s_candidate.voltage_mv=mv;s_candidate.current_ma=ma;
+    s_candidate.position=pos;s_candidate.epr=0u;
+    s_candidate_valid=1u;s_active_valid=0u;
     s_manual=0u;
     PD_Diag_Record(PD_DIAG_RDO,mv,s_selected_rdo);
     *rdo=s_selected_rdo;
@@ -388,6 +499,19 @@ void PD_Input_EPR_Poll(void)
 {
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
     if(!s_state.attached)return;
+    /* Active policy changes are negotiated by the existing GetSrcCap ->
+     * Evaluate -> Request -> contract PE path, never by forging a VBUS level.
+     * Bounded retries tolerate a busy PE; on unresolved failure GetActive
+     * Contract remains invalid, so the heater cannot draw stale power. */
+    if(s_policy_dirty && !s_epr_mode && s_state.explicit_contract &&
+       s_policy_tries<3u && (s_policy_tries==0u ||
+       (uint32_t)(HAL_GetTick()-s_policy_try_ms)>=1000u))
+    {
+        USBPD_StatusTypeDef r=USBPD_DPM_RequestGetSourceCapability(USBPD_PORT_0);
+        s_policy_try_ms=HAL_GetTick();
+        ++s_policy_tries;
+        PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2ACu,(uint32_t)r);
+    }
     if(s_epr_mode && !s_epr_copy_valid &&
        (uint32_t)(HAL_GetTick()-s_epr_mode_since_ms)>2500u)
     {
@@ -471,15 +595,20 @@ void PD_Input_EPR_Poll(void)
 #endif /* IH01A_EPR_APP_KEEPALIVE_PROBE */
     if(s_epr_exit_queued)
     {
-        s_epr_exit_queued=0u; /* only one exit attempt */
-        (void)USBPD_PE_Request_EPRModeExit(USBPD_PORT_0);
+        USBPD_StatusTypeDef r;
+        /* Existing PE API; do not infer EPR exit from its return code.
+         * An exit notification is required before requesting 5V SPR. */
+        s_epr_exit_queued=0u;
+        r=USBPD_PE_Request_EPRModeExit(USBPD_PORT_0);
+        PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2ADu,(uint32_t)r);
         return;
     }
     /* The Source sometimes advertises the PDO1 EPR-capable bit only on a
      * later capability set (capture: one attach had eprCap=1 then 0, another
      * the opposite). Ask for one fresh capability set before giving up on
      * auto EPR for this attachment. */
-    if((s_epr_auto || s_epr_user_requested) && !s_epr_enter_once && !s_epr_mode &&
+    if(s_req_enabled && PD_PolicyMaxMv()>=28000u &&
+       (s_epr_auto || s_epr_user_requested) && !s_epr_enter_once && !s_epr_mode &&
        s_state.explicit_contract && !PD_SourceIsEPRCapable() && !s_epr_capretry &&
        (uint32_t)(HAL_GetTick()-s_contract_ms)>250u)
     {
@@ -489,7 +618,8 @@ void PD_Input_EPR_Poll(void)
         PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A9u,0u);
         return;
     }
-    if(!(s_epr_auto || s_epr_user_requested)||
+    if(!s_req_enabled || PD_PolicyMaxMv()<28000u ||
+       !(s_epr_auto || s_epr_user_requested)||
        s_epr_enter_once||s_epr_mode||!s_state.explicit_contract ||
        !PD_SourceIsEPRCapable() ||
        (uint32_t)(HAL_GetTick()-s_contract_ms)<250u)return;
@@ -545,7 +675,8 @@ void PD_Input_EPR_Poll(void)
 uint8_t PD_Input_ManualEPR(void)
 {
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
-    if(!s_state.attached||!s_state.explicit_contract||s_epr_mode||
+    if(!s_req_enabled || PD_PolicyMaxMv()<28000u ||
+       !s_state.attached||!s_state.explicit_contract||s_epr_mode||
        !PD_SourceIsEPRCapable())return 0u;
     s_epr_enter_once=0u;
     s_epr_user_requested=1u;

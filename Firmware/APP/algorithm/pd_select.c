@@ -5,8 +5,9 @@
 #include "algorithm/pd_select.h"
 #include <string.h>
 
-uint8_t PD_Input_BestFixed(const uint8_t *data,uint32_t len,
-                           uint8_t *pos,uint32_t *mv,uint32_t *ma)
+uint8_t PD_Input_BestFixedLimited(const uint8_t *data,uint32_t len,
+                                  uint32_t max_mv,uint8_t *pos,
+                                  uint32_t *mv,uint32_t *ma)
 {
     uint32_t i,best_v=0u,best_c=0u;
     uint8_t best_pos=0u;
@@ -19,7 +20,7 @@ uint8_t PD_Input_BestFixed(const uint8_t *data,uint32_t len,
         v=((p>>10u)&1023u)*50u;
         c=(p&1023u)*10u;
         if(v<4500u||v>=PD_INPUT_MAX_MV||
-           v>PD_INPUT_SPR_MAX_MV||c==0u)continue;
+           v>PD_INPUT_SPR_MAX_MV||v>max_mv||c==0u)continue;
         if(v>best_v||(v==best_v&&c>best_c))
             best_v=v,best_c=c,best_pos=(uint8_t)(i+1u);
     }
@@ -27,6 +28,12 @@ uint8_t PD_Input_BestFixed(const uint8_t *data,uint32_t len,
     if(best_c>PD_INPUT_MAX_MA)best_c=PD_INPUT_MAX_MA;
     *pos=best_pos;*mv=best_v;*ma=best_c;
     return 1u;
+}
+uint8_t PD_Input_BestFixed(const uint8_t *data,uint32_t len,
+                           uint8_t *pos,uint32_t *mv,uint32_t *ma)
+{
+    return PD_Input_BestFixedLimited(data,len,PD_INPUT_SPR_MAX_MV,
+                                     pos,mv,ma);
 }
 /* EPR Source Capabilities is a combined list: SPR positions 1..7,
  * followed by EPR positions 8..13. Never treat the beginning of the

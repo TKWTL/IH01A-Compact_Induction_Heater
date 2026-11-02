@@ -11,6 +11,9 @@
 #define PD_INPUT_SPR_MAX_MV 20000u
 #define PD_INPUT_MAX_MA IH01A_PD_SPR_MAX_MA
 #define PD_INPUT_EPR_MAX_MA 5000u /* Only for genuine EPR 5A-qualified contract */
+uint8_t PD_Input_BestFixedLimited(const uint8_t *data,uint32_t bytes,
+                                  uint32_t max_mv,uint8_t *position,
+                                  uint32_t *voltage_mv,uint32_t *current_ma);
 uint8_t PD_Input_BestFixed(const uint8_t *data,uint32_t bytes,
                            uint8_t *position,uint32_t *voltage_mv,
                            uint32_t *current_ma);

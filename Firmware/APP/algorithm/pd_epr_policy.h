@@ -42,7 +42,11 @@
  * side: a 3 A (non e-marked) cable makes the Source advertise a 3 A PDO, and
  * the request is clamped to the PDO current, so 5 A can only happen on a
  * 5 A e-marked cable. */
-#define IH01A_PD_SPR_MAX_MA        5000u
+/* Board power path reviewed for 7 A SPR use. Source Fixed PDO provides the
+ * offered current limit (including SW3538's 20V/7A non-standard PDO).
+ * Clamp at the hardware ceiling; there is NO hardcoded 20V/7A profile and
+ * no additional cable-confirmation application step. */
+#define IH01A_PD_SPR_MAX_MA        7000u
 
 /* USBPD_PE_Request_EPRModeEnter() only registers a generic machine and wakes
  * the PE (see its disassembly: it validates the last Request header, writes

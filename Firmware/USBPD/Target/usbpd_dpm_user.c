@@ -306,6 +306,7 @@ void USBPD_DPM_Notification(uint8_t PortNum, USBPD_NotifyEventValue_TypeDef Even
     case USBPD_NOTIFY_REQUEST_WAIT:
     case USBPD_NOTIFY_REQUEST_ERROR:
       PD_Input_EPR_RequestRejected();
+      PD_Input_RequestRejected();
       /* The previous explicit contract may remain valid. */
       PD_Diag_Record(PD_DIAG_NOTIFY,(uint32_t)EventVal,0u);
       break;
