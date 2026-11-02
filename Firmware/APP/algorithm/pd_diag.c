@@ -2,6 +2,7 @@
  * No printf, UART calls or dynamic allocation in PE callback context.
  * Original USBPD PHY trace hooks remain ABI-compatible and silent.
  */
+#define IH_PD_DIAG_INTERNAL 1
 #include "algorithm/pd_diag.h"
 #include "algorithm/pd_source_stats.h"
 #include "main.h"

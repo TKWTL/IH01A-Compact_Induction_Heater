@@ -18,6 +18,21 @@ enum {
     PD_DIAG_SOURCE_PDO      /* a=1..13 absolute PDO position, b=raw PDO    */
 };
 void PD_Diag_Record(uint8_t code,uint32_t a,uint32_t b);
+/* Drop legacy raw instrumentation at compile time, not merely in the
+ * background logger. This lets armclang remove argument calculations and
+ * PE/PHY debug call sites while keeping the proven protocol path intact.
+ * The pd_diag.c implementation opts out to define the real symbol. */
+#ifndef IH_PD_DIAG_INTERNAL
+#define PD_Diag_Record(code,a,b) do {                                   \
+    const uint8_t _ih_log_code=(uint8_t)(code);                           \
+    if(_ih_log_code==PD_DIAG_SOURCE_PDO ||                              \
+       _ih_log_code==PD_DIAG_RDO || _ih_log_code==PD_DIAG_EPR_RDO ||    \
+       _ih_log_code==PD_DIAG_RESET ||                                   \
+       (_ih_log_code==PD_DIAG_MANUAL &&                                 \
+        ((a)==3u || (a)==4u)))                                          \
+        PD_Diag_Record(_ih_log_code,(a),(b));                           \
+} while(0)
+#endif
 void PD_Diag_Service(void);
 void PD_Diag_Flush(void);
 /* Records received capabilities without printing in PE callback context. */

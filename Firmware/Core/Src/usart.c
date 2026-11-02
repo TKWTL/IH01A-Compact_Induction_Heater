@@ -252,10 +252,10 @@ void DebugUART_Init(uint32_t reset_flags)
         g_uart_probe_result=(uint32_t)HAL_UART_Transmit(&huart1,
                        (uint8_t *)(void *)marker,(uint16_t)(sizeof(marker)-1u),10u);
     }
-    printf("\r\n[BOOT %lu] IH01A USART1 DMA+IDLE 115200 8N1 flags=0x%08lX\r\n",
-           (unsigned long)HAL_GetTick(),(unsigned long)reset_flags);
-    printf("[UART] TX ring=512 RX ring=512 DMA RX staging=128; type help\r\n");
-    DebugUART_Service(); /* kick DMA before the nonreturning PD main loop */
+    /* Keep the six-byte direct U1OK probe as a recovery marker; verbose
+     * boot banners are omitted from the production console. */
+    (void)reset_flags;
+    DebugUART_Service();
 }
 void DebugUART_Service(void)
 {
