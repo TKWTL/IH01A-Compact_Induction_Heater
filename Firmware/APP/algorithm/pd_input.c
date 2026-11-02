@@ -16,6 +16,9 @@ static uint8_t s_count, s_manual, s_epr_count;
 static uint8_t s_epr_mode, s_epr_enter_once, s_epr_exit_queued;
 static uint8_t s_epr_copy_valid, s_epr_user_requested;
 static uint8_t s_epr_any_event, s_epr_stall_logged, s_epr_probe;
+extern volatile uint32_t g_pd_last_keepalive_ms;  /* set by pd_diag on the stack's own keepalive */
+static uint32_t s_epr_ka_ms;     /* our own 28V KeepAlive pacing */
+static uint8_t s_epr_capretry;    /* Get_Source_Cap retried when caps lack EPR */
 static uint8_t s_epr_local_pos;   /* 1 = EPR PDOs are numbered 1..6 */
 /* 0 = request the 1-based index inside EPR_Source_Capabilities (default),
  * 1 = request the absolute position (index + 7). Selectable at runtime from
@@ -420,6 +423,20 @@ void PD_Input_EPR_Poll(void)
         PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A6u,(uint32_t)r);
     }
 #endif
+    /* Belt and braces: the policy engine paces EPR KeepAlive from its own
+     * state machine, and the bare-metal loop can stretch it (1.9 s was
+     * measured in a capture taken while the UART log ran at ~240 B/s).
+     * PD3.1 wants 250-500 ms, so keep our own 375 ms cadence whenever a
+     * 28 V contract is active. Duplicates are harmless: the Source ACKs
+     * every KeepAlive. */
+    if(s_epr_mode && s_state.selected_mv>=28000u &&
+       (uint32_t)(HAL_GetTick()-s_epr_ka_ms)>=375u &&
+       (uint32_t)(HAL_GetTick()-g_pd_last_keepalive_ms)>=500u)
+    {
+        s_epr_ka_ms=HAL_GetTick();
+        (void)USBPD_PE_Send_ExtendeControlMessage(USBPD_PORT_0,
+                                                  USBPD_EXTENDED_CONTROL_EPR_KEEPALIVE);
+    }
     if(s_epr_exit_queued)
     {
         s_epr_exit_queued=0u; /* only one exit attempt */

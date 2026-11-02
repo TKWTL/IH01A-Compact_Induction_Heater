@@ -12,6 +12,10 @@ typedef struct {
 static DiagEvent s_events[PD_DIAG_CAP];
 static volatile uint8_t s_head,s_tail;
 static volatile uint32_t s_dropped;
+/* Timestamp of the last EPR KeepAlive the stack itself transmitted
+ * (extended control, ExtType 3 => DO1 0x00038002). The app uses it to only
+ * fill in when the policy engine's own cadence stretches. */
+volatile uint32_t g_pd_last_keepalive_ms;
 void PD_Diag_Record(uint8_t code,uint32_t a,uint32_t b)
 {
     uint8_t next=(uint8_t)((s_head+1u)&(PD_DIAG_CAP-1u));
@@ -36,6 +40,9 @@ void PD_TxTrace(uint32_t type,uint32_t hdr,uint32_t size,uint32_t do1,uint32_t d
      * message id and NDO stay visible. */
     static uint32_t seen;
     static uint32_t last_sig=0xFFFFFFFFu;
+    /* Stamp the stack's own EPR KeepAlive BEFORE the repeat filter below,
+     * otherwise only the first one would be timestamped. */
+    if(type==0x10u&&do1==0x00038002u)g_pd_last_keepalive_ms=HAL_GetTick();
     if(type==1u)
     {
         if((seen&2UL)!=0u)return;
