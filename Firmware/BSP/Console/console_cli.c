@@ -46,15 +46,23 @@ static void cli_dispatch(void)
     {
         const char *p=s_line+7;
         uint32_t v=0u;
+        uint8_t st;
         if(!*p)v=255u;
         while(*p>='0'&&*p<='9'&&v<=31u)
         {
             v=v*10u+(uint32_t)(*p-'0');
             ++p;
         }
-        if(*p || v>31u || !PD_Input_SetMaxFixedVoltage((uint8_t)v))
+        st=(*p||v>31u)?0u:PD_Input_SetMaxFixedVoltage((uint8_t)v);
+        if(st==0u)
             printf("[CLI] Usage: pd max 5..31\r\n");
-        else printf("[CLI] Max Fixed %luV; negotiating\r\n",(unsigned long)v);
+        else if(st==2u)
+            /* 'pd off' keeps the request at 5 V: say so instead of claiming a
+             * negotiation that will not happen. */
+            printf("[CLI] Max Fixed %luV stored; request is OFF (5V), applies after 'pd on'\r\n",
+                   (unsigned long)v);
+        else
+            printf("[CLI] Max Fixed %luV; negotiating\r\n",(unsigned long)v);
     }
     else if(!strcmp(s_line,"pd epr") || !strcmp(s_line,"pd epr1"))
     {

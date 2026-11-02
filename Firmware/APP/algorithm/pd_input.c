@@ -98,6 +98,10 @@ void PD_Input_SetRequestEnabled(uint8_t enabled)
     PD_PolicyChanged();
 }
 uint8_t PD_Input_GetRequestEnabled(void){return s_req_enabled;}
+/* Returns 0 = invalid argument (nothing stored),
+ *         1 = accepted and a negotiation was requested (or none was needed),
+ *         2 = accepted but only STORED: the request is disabled ('pd off'), so
+ *             the PD level stays 5 V until 'pd on' applies the new cap. */
 uint8_t PD_Input_SetMaxFixedVoltage(uint8_t voltage_v)
 {
     if(voltage_v<5u||voltage_v>31u)return 0u;
@@ -108,7 +112,14 @@ uint8_t PD_Input_SetMaxFixedVoltage(uint8_t voltage_v)
         /* Lowering a cap which still admits the confirmed Fixed PDO
          * needs no AMS; changing the dormant cap while OFF does not
          * change the requested 5V either. */
-        if(!s_req_enabled)return 1u;
+        if(!s_req_enabled)
+        {
+            /* Report the deferral instead of pretending to negotiate: the
+             * requested level is 5 V until 'pd on'. Keep it observable. */
+            if(voltage_v<28u)s_epr_enter_once=1u;
+            PD_Diag_Record(PD_DIAG_MANUAL,3u,(uint32_t)voltage_v);
+            return 2u;
+        }
         if(lowering && s_active_valid &&
            s_active.voltage_mv<=PD_PolicyMaxMv() && !s_policy_dirty)
         {

@@ -26,7 +26,9 @@ void PD_Input_RequestRejected(void);
 void PD_Input_SetRequestEnabled(uint8_t enabled);
 uint8_t PD_Input_GetRequestEnabled(void);
 /* Fixed PDO upper bound, integer volts. Valid 5..31; only 28V EPR Fixed
- * is currently supported above 20V. Returns 0 for invalid input. */
+ * is currently supported above 20V. Returns 0 for invalid input, 1 when a
+ * negotiation was requested (or none was needed), 2 when the cap was only
+ * STORED because the request is disabled ('pd off' keeps 5 V until 'pd on'). */
 uint8_t PD_Input_SetMaxFixedVoltage(uint8_t voltage_v);
 uint8_t PD_Input_GetMaxFixedVoltage(void);
 /* Returns 1 only for an explicitly confirmed, stable contract. On failure,

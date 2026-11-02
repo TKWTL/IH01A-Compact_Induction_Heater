@@ -116,22 +116,36 @@ python Tools/pulseview_pd_decoder/test_decoder.py
    EPR_Request：RDO + 复制的 Source PDO，因为 PE 处于 EPR 模式），
    目标按策略选：`!req_enabled` → 最高合法 Fixed **SPR PDO**（`pd off` → 5 V/3 A）；
    `req_enabled && cap>=28` → 缓存的 28 V EPR PDO（`pd on` 回 28 V）。
-   记录：`EPR_ACT 693`=目标（`mv<<16|pos`）、`EPR_ACT 694`=PE 返回（`status<<16|pos`）、
-   `EPR_ACT 695`=放弃（连投 3 次不成功）。每次策略变更最多 3 次、间隔 200 ms，
-   不再做 GetSrcCap 往返 —— 源端不会再有"无人应答"的窗口。
-   **待板验证**：C140 是否接受"EPR 模式内针对 SPR PDO 的 EPR_Request"
-   （Reject → 需要真正退出 EPR；Hard Reset → 该报文形态不被接受，回到
-   "把 EPR_Mode Exit 挪到 PE 回调上下文"的方案）。
-   两个新取证手段：
-   - `PD_Diag_Flush()` 现在会自己踢一次 `DebugUART_Service()`，所以关键路径的
-     记录在"下一句就卡死"的情况下也能真正出现在串口上；
-   - `HardFault`/`NMI` 现在用**直写 USART1（关 DMA、轮询 TDR）**打印
+   **板端已验证（C140，2026-11-02）——这条链路现在是对的，别再改回去**：
+   ```
+   [CLI] Fixed request OFF (5V); negotiating
+   EPR_ACT a=693 b=0x13880001     ← 目标 5000 mV / 位置 1
+   EPR_ACT a=694 b=0x00000001     ← PE 返回 USBPD_OK，位置 1
+   PD_TX   a=9  (EPR_Request)  do1=0x11C4B12C do2=0x0A81912C   ← 5V RDO + 5V PDO 副本
+   NOTIFY  a=1  (REQUEST_ACCEPTED)
+   CONTRACT a=1
+   ```
+   之后 `pd on` → `EPR_ACT 693 b=0x6D600008`（28000 mV / 位置 8）→ 同形态 EPR_Request
+   `do2=0x0008C1F4` → 28 V 回来。`pd max 15` → `b=0x3A980004`（15 V / 位置 4），
+   `pd max 20` → `b=0x4E200005`（20 V / 位置 5，副本 `0x000641F4`），全部 CONTRACT 成功。
+   **重要结论：全程没有退出 EPR 模式**。5 V 合同期间 ST 栈继续按 500 ms 发
+   EPR KeepAlive（`PD_TX a=16 do1=0x00038002`），C140 每次都 GoodCRC，会话保持，
+   所以"降到 5 V"不需要 EPR_Mode Exit —— PD3.1 允许 EPR 模式下针对 SPR PDO 发
+   EPR_Request（DO2 = 该 SPR PDO 的副本）。
+   `pd max N` 在 `pd off` 状态下只保存不协商（请求仍是 5 V），CLI 现在会明确打印
+   `stored; request is OFF (5V), applies after 'pd on'`，串口另有 `MANUAL a=3 b=<V>`。
+   两个取证手段（保留）：
+   - `PD_Diag_Flush()` 会自己踢一次 `DebugUART_Service()`，所以关键路径的记录在
+     "下一句就卡死"的情况下也能真正出现在串口上；
+   - `HardFault`/`NMI` 用**直写 USART1（关 DMA、轮询 TDR）**打印
      `[FAULT] … sp=… off=0/8/16 pc=… lr=…`：PC 落在 0x0800xxxx 的那一行才是真的
-     异常栈帧，可直接在 .map 里查函数名。没有任何 `[FAULT]` 输出但串口彻底静默 ⇒
-     是死循环（不是异常）。
+     异常栈帧，可直接在 .map 里查函数名。没有 `[FAULT]` 但串口彻底静默 ⇒ 死循环。
    - `HARD_RESET a=<n>` 的 n 是 `USBPD_HR_STATUS_*`：0 START_ACK / 1 START_REQ /
      2 MSG_SENT / 3 WAIT_VBUS_VSAFE0V / 4 WAIT_VBUS_VSAFE5V / 5 COMPLETED / 6 FAILED。
      `NOTIFY a=30`=HARDRESET_RX、`a=31`=HARDRESET_TX、`a=13`=GETSRCCAP_ACCEPTED。
+   - **坑**：一旦出现"能力集无人应答"→ 源端 Hard Reset → Sink 等 vSafe0V 等不到 →
+     `HR_FAILED` 每秒重试，只能人工断电。所以要避免任何"发了 GetSrcCap 却不回
+     Request"的路径（EPR 模式内尤其）。
 
 1. **375 ms KeepAlive —— 已验证不可行，保持 500 ms**。板端逻辑分析仪（4 MSa/s）实测：
    最小间隔仍是 **500 ms**，没有出现任何 375 ms 间隔、也没有交错。结论：应用通过
@@ -269,6 +283,8 @@ python Tools/pulseview_pd_decoder/test_decoder.py
 - `PD_Input_SetMaxFixedVoltage(v)`：单位整数 V，5..31；
   按源端实际 Fixed PDO 查找不超过限制的最高电压；并非写死档位表。
   仅 28V EPR Fixed 当前支持；PPS/AVS 不参与档位请求。
+  返回值：0=非法参数，1=已请求协商（或无需要），2=**只保存未协商**
+  （`pd off` 状态下请求仍是 5 V，`pd on` 后才生效；CLI 会明确打印这一点）。
 - `PD_Input_GetActiveContract(&contract)`：仅在 PE 通知显式合同、
   无策略切换、并且 VBUS 测量与电压目标相差不超过 10% 时返回有效。
   `contract.voltage_mv/current_ma/position/epr` 为已请求成功的
@@ -280,8 +296,8 @@ python Tools/pulseview_pd_decoder/test_decoder.py
   20V/3A、20V/5A、20V/7A 分别按实际 PDO 电流请求，
   声明更高电流时限幅至 7A。28V EPR 请求仍为 5A。
 - API 改变的是异步 PD 策略，不通过 Reset MCU 或关闭 CC Rd 来
-  降压。28V→5V 必须先 EPR Exit 后重新协商 SPR；由于已有
-  AMS 登记/执行的差异，未收到退出及新显式合同前不得报告降压成功。
+  降压。28V→5V **不再需要 EPR Exit**：见 §5.0，EPR 模式下直接发
+  针对 SPR PDO 的 EPR_Request 即可（C140 已验证 5 V/15 V/20 V/28 V 双向）。
 - 串口回归：`pd off`、`pd on`、`pd max 15`、
   `pd max 31`、`pd`，其中 `ACTIVE` 表示已确认合同，
   `select` 仍仅表示拟请求/上次请求，不可用于加热功率上限。
