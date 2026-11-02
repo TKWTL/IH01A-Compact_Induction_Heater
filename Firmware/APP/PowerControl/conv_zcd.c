@@ -63,7 +63,11 @@ void ConvZcd_Poll(uint32_t now_ms)
     uint32_t flags;
     uint16_t captured;
     ConvZcdSnapshot next;
-    if(!s_capture_started || !ConvController_LogicPwmRunning())
+    /* With PC6 LOW there is no powered resonant current; a TP1941
+     * comparator may nevertheless oscillate or pick up noise. Never
+     * present that captured edge as a valid current phase measurement. */
+    if(!s_capture_started || !ConvController_LogicPwmRunning() ||
+       !ConvController_OutputEnabled())
     {
         s_result.valid=0u;
         return;

@@ -43,6 +43,9 @@ static void edit_value(uint8_t field,UI_ACTION action,uint32_t now)
     switch(field)
     {
     case EDIT_MODE:
+        /* Switching control modes is an immediate bench power-off. */
+        ConvController_BenchPowerOff();
+        if(s.state==HEATER_RUN_REQUESTED)Heater_Stop();
         Heater_SetMode(s.mode==HEATER_MODE_TEMP?
                        HEATER_MODE_POWER:HEATER_MODE_TEMP);
         break;
@@ -76,6 +79,8 @@ static void edit_value(uint8_t field,UI_ACTION action,uint32_t now)
             int32_t minutes=(int32_t)s.on_minutes+(up?5:-5);
             if(minutes<0)minutes=0;
             if(minutes>1440)minutes=1440;
+            /* Changing schedule during RUN must never leave PC6 high. */
+            ConvController_BenchPowerOff();
             Heater_ScheduleMinutes((uint16_t)minutes,now);
         }
         break;
