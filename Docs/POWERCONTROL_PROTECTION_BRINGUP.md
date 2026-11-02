@@ -104,3 +104,18 @@ was an incorrect transfer assumption for a fixed analog current gain.
 The 2.5V reference requires VBIAS within approximately 1.2V..1.3V.
 Out-of-range bias must prevent comparator arming, not clip a window and
 silently claim ±12A coverage.
+
+## G071 COMP1/2 实际启用顺序
+
+`ConvProtection_Service()` 只有在 ADC 零点校准完成、VBIAS 与
+2.5V DAC 量程相容时才启动模拟窗口。先在 `PWM_EN=LOW` 且
+`TIM1.MOE=0` 状态下写 DAC1 两通道并启动 DAC；随后重新初始化
+COMP1 的窗口公共位（`MX_COMP2_Init` 可能清除共享 WINMODE），
+启动 COMP1、COMP2。以后只在 VBIAS 变化时更新 DAC，始终保持
+±1.2V 电压窗口，**不会因 ARR=426/853 而缩放阈值**。
+未验证 TIM1 Break 硬件实际响应与信号极性前不解锁 Heater ISR 输出。
+
+供电与前端调试需示波器验证：
+正常 CT_OCP 在上下阈值之间时，COMP1 合成窗口输出应为高；
+超过任意阈值应变低，使低有效 TIM1 BRK 动作。输出
+`TIM1.MOE` 必须随故障清除，且不得自动复位后恢复加热。

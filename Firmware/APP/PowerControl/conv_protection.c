@@ -30,6 +30,7 @@ static volatile uint16_t s_ibus_trip_delta_raw;
 static uint32_t s_ibus_limit_ma;
 static uint16_t s_awd2_high;
 static uint8_t s_comp_armed;
+static uint8_t s_awd2_enabled;
 static uint32_t s_ct_sum,s_ibus_sum;
 static uint16_t s_settle,s_ct_min,s_ct_max,s_ib_min,s_ib_max;
 static uint16_t s_dac1,s_dac2,s_low,s_high;
@@ -45,6 +46,7 @@ void ConvProtection_Init(void)
     s_ibus_limit_ma=0u;
     s_awd2_high=4095u;
     s_comp_armed=0u;
+    s_awd2_enabled=0u;
     s_settle=0u;s_ct_sum=s_ibus_sum=0u;
     s_ct_min=s_ib_min=4095u;
     s_ct_max=s_ib_max=0u;
@@ -110,24 +112,27 @@ void ConvProtection_SetIbusLimitMa(uint32_t current_ma)
     uint16_t target=4095u;
     if(ConvProtection_ZeroReady() && current_ma)
         target=ibus_max_adc(s_ibus_zero,current_ma);
-    /* AWD2 hardware only compares ADC[11:4]; threshold truncated to 8b.
-     * For positive IBUS, use an upper watchdog, lower threshold 0.
-     * The independent raw rail monitor catches saturation if the requested
-     * current is beyond the ADC measurement range. */
+    /* AWD2 compares ADC[11:4] only. Use upper trip for unidirectional IBUS.
+     * Rail monitoring catches clipping if 7A is outside ADC measurable range. */
     target=(uint16_t)((target>>4)<<4);
-    if(current_ma==s_ibus_limit_ma && target==s_awd2_high)return;
+    {
+        uint8_t armed=(uint8_t)(ConvProtection_ZeroReady() && current_ma &&
+                              !s_fast_faults && !s_faults);
+        if(current_ma==s_ibus_limit_ma && target==s_awd2_high &&
+           s_awd2_enabled==armed)return;
+        s_awd2_enabled=armed;
+    }
     s_ibus_limit_ma=current_ma;
     s_awd2_high=target;
     ADC1->IER &= ~ADC_IER_AWD2IE;
     MODIFY_REG(ADC1->AWD2TR,ADC_AWD2TR_HT2|ADC_AWD2TR_LT2,
                ((uint32_t)target<<ADC_AWD2TR_HT2_Pos));
     ADC1->ISR=ADC_ISR_AWD2;
-    if(ConvProtection_ZeroReady() && current_ma && !s_fast_faults &&
-       !s_faults)
-        ADC1->IER |= ADC_IER_AWD2IE;
+    if(s_awd2_enabled)ADC1->IER |= ADC_IER_AWD2IE;
 #else
     s_ibus_limit_ma=current_ma;
-    s_awd2_high=ibus_max_adc(s_ibus_zero,current_ma);
+    s_awd2_high=(uint16_t)(ibus_max_adc(s_ibus_zero,current_ma)&~15u);
+    s_awd2_enabled=(uint8_t)(ConvProtection_ZeroReady() && current_ma);
 #endif
 }
 
@@ -225,8 +230,47 @@ void ConvProtection_GetSnapshot(ConvProtectionSnapshot *out)
     out->zero_samples=s_zero_samples;
     out->dac1_code=s_dac1;out->dac2_code=s_dac2;
     out->dac_profile_ready=s_profile_ready;
+    out->comp_armed=s_comp_armed;
+    out->awd2_enabled=s_awd2_enabled;
+    out->awd2_high_code=s_awd2_high;
+    out->ibus_limit_ma=s_ibus_limit_ma;
     out->fault_mask=ConvProtection_FaultMask();
 }
+#ifndef CONV_PROTECTION_HOST_TEST
+static uint8_t Protection_ApplyCompWindow(uint16_t lower,uint16_t upper)
+{
+    if(!s_comp_armed)
+    {
+        /* No switching while analog references and window mode initialize. */
+        ConvController_TripISR();
+        if(HAL_DAC_SetValue(&hdac1,DAC_CHANNEL_1,DAC_ALIGN_12B_R,lower)!=HAL_OK ||
+           HAL_DAC_SetValue(&hdac1,DAC_CHANNEL_2,DAC_ALIGN_12B_R,upper)!=HAL_OK ||
+           HAL_DAC_Start(&hdac1,DAC_CHANNEL_1)!=HAL_OK ||
+           HAL_DAC_Start(&hdac1,DAC_CHANNEL_2)!=HAL_OK)
+            return 0u;
+
+        /* MX_COMP2_Init executes after MX_COMP1_Init and the HAL can clear
+         * the shared WINMODE bits. Reapply the requested COMP1 window
+         * configuration AFTER both handles are initialized. */
+        if(HAL_COMP_Init(&hcomp1)!=HAL_OK)return 0u;
+        if(HAL_COMP_Start(&hcomp1)!=HAL_OK ||
+           HAL_COMP_Start(&hcomp2)!=HAL_OK)return 0u;
+        /* COMP1 window output high=within thresholds, low=outside;
+         * TIM1 Break polarity LOW. This must be oscilloscope-validated
+         * before allowing a nonzero heater power target. */
+        s_comp_armed=1u;
+        return 1u;
+    }
+    if(lower!=s_dac1 || upper!=s_dac2)
+    {
+        if(HAL_DAC_SetValue(&hdac1,DAC_CHANNEL_1,DAC_ALIGN_12B_R,lower)!=HAL_OK ||
+           HAL_DAC_SetValue(&hdac1,DAC_CHANNEL_2,DAC_ALIGN_12B_R,upper)!=HAL_OK)
+            return 0u;
+    }
+    return 1u;
+}
+#endif
+
 void ConvProtection_Service(uint32_t now,const ConvADC_Snapshot *adc,
                             const TempService_Snapshot *temp)
 {
@@ -239,17 +283,28 @@ void ConvProtection_Service(uint32_t now,const ConvADC_Snapshot *adc,
 #endif
     if(adc && adc->frames)
     {
-        if(s_profile_ready &&
-           adc->filtered[CONV_ADC_VBIAS]>8u &&
-           adc->filtered[CONV_ADC_VBIAS]<4080u)
+        /* For ±12A at 0.1V/A, both DAC codes must be inside 0..4095.
+         * An out-of-range VBIAS would invalidate the two-sided trip window. */
+        if(s_profile_ready && ConvProtection_ZeroReady())
         {
-            uint16_t arr=853u;
+            uint16_t bias=adc->filtered[CONV_ADC_VBIAS];
+            uint16_t lower,upper;
+            if(bias<s_low || (uint32_t)bias+s_high>4095u)
+                fresh|=CONV_PROT_DAC_RANGE;
+            else
+            {
+                ConvProtection_CalcDacWindow(bias,0u,s_low,s_high,
+                                              &lower,&upper);
 #ifndef CONV_PROTECTION_HOST_TEST
-            arr=(uint16_t)TIM1->ARR;
+                if(!Protection_ApplyCompWindow(lower,upper))
+                    fresh|=CONV_PROT_COMP_SETUP;
+                else
 #endif
-            ConvProtection_CalcDacWindow(adc->filtered[CONV_ADC_VBIAS],
-                                          arr,s_low,s_high,&s_dac1,&s_dac2);
-            /* Deliberately no HAL_DAC_Start/SetValue or HAL_COMP_Start. */
+                {
+                    s_dac1=lower;
+                    s_dac2=upper;
+                }
+            }
         }
         /* VBUS ~8V lower bound: ADC 2.5V ref and external x16 divider. */
         if(heating && adc->filtered[CONV_ADC_VBUS]<819u)
