@@ -57,8 +57,10 @@ uint32_t ConvProtection_FaultMask(void);
 /* COMP1/2 window uses 0.1V/A centered on measured VBIAS, ±12A.
  * DAC1 CH1 is lower, CH2 upper. Hardware starts only after valid zero
  * calibration and voltage bounds; TIM1 MOE stays prohibited. */
-void ConvProtection_SetDacProfile(uint16_t ch1_delta_at_arr853,
-                                  uint16_t ch2_delta_at_arr853,
+/* Optional future calibration override: DAC deltas are raw counts,
+ * independent of TIM1 ARR and PWM frequency. */
+void ConvProtection_SetDacProfile(uint16_t low_delta_raw,
+                                  uint16_t high_delta_raw,
                                   uint8_t calibrated);
 void ConvProtection_CalcDacWindow(uint16_t vbias_raw,uint16_t arr,
                                   uint16_t low_delta,uint16_t high_delta,
