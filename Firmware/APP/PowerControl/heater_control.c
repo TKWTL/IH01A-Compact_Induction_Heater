@@ -42,6 +42,7 @@ void Heater_Init(void)
     memset(&s,0,sizeof(s));
     s.mode=HEATER_MODE_TEMP;
     s.state=HEATER_OFF;
+    s_proposed_target_mw=0u;
     s.target_temp_deci_c=800u;
     s.target_power_w=60u;
     s_stop_timer_armed=0u;

@@ -25,6 +25,7 @@ int main(void)
     dc=Heater_BudgetClassify(28000u,PD_INPUT_PD,1u,28000u,5000u);
     assert(dc.input==HEATER_INPUT_PD && dc.budget_mw==140000u);
     Heater_Init();
+    assert(Heater_GetProposedTargetMw()==0u);
     Heater_ScheduleMinutes(1u,100u);
     Heater_Poll(101u,&o);
     Heater_GetSnapshot(&s);
