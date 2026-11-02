@@ -154,7 +154,9 @@ void PD_Diag_Flush(void)
 {
     uint8_t guard=0u;
     DebugUART_Service();
-    while(s_head!=s_tail && guard++<PD_DIAG_CAP)PD_Diag_Service();
+    /* Keep the proven 16-record flush budget: no long printf batch while
+     * the cooperative PE must process PS_RDY and timeouts. */
+    while(s_head!=s_tail && guard++<16u)PD_Diag_Service();
     DebugUART_Service();
 }
 
