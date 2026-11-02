@@ -16,6 +16,13 @@
  * at runtime and 'pd epr' still forces a manual attempt. */
 #define IH01A_EPR_28V5A_AUTO_ENTER 1
 
+/* 2026-11-02 analyzer: ST FULL v5.4.1 sends EPR KeepAlive at 500 ms.
+ * A foreground AMS registered with USBPD_PE_Send_ExtendeControlMessage()
+ * was accepted/rejected but did not add a frame on CC. Keep the stable
+ * library-managed cadence. Set to 1 ONLY for a bounded diagnostic probe;
+ * it never provides a production 375 ms KeepAlive pacer. */
+#define IH01A_EPR_APP_KEEPALIVE_PROBE 0
+
 /* EPR policy numbers. The three values must stay consistent: the Sink
  * advertises PDP = 28V x current and asks for exactly that current, so a
  * 84W PDP together with a 5A Sink PDO / 5A request would be a spec

@@ -16,10 +16,12 @@ static uint8_t s_count, s_manual, s_epr_count;
 static uint8_t s_epr_mode, s_epr_enter_once, s_epr_exit_queued;
 static uint8_t s_epr_copy_valid, s_epr_user_requested;
 static uint8_t s_epr_any_event, s_epr_stall_logged, s_epr_probe;
-extern volatile uint32_t g_pd_last_keepalive_ms;  /* set by pd_diag on the stack's own keepalive */
-static uint32_t s_epr_ka_ms;     /* our own 28V KeepAlive pacing */
-static uint8_t  s_epr_ka_fail;   /* consecutive rejected keepalive requests */
-static uint8_t  s_epr_ka_off;    /* give up: keep the stack's own 500 ms frame */
+#if IH01A_EPR_APP_KEEPALIVE_PROBE
+extern volatile uint32_t g_pd_last_keepalive_ms;  /* timestamp from PHY tracing */
+static uint32_t s_epr_ka_ms;
+static uint8_t  s_epr_ka_fail;   /* consecutive rejected probes */
+static uint8_t  s_epr_ka_off;    /* no more app AMS attempts this attachment */
+#endif
 static uint8_t s_epr_capretry;    /* Get_Source_Cap retried when caps lack EPR */
 static uint8_t s_epr_local_pos;   /* 1 = EPR PDOs are numbered 1..6 */
 /* 0 = request the 1-based index inside EPR_Source_Capabilities (default),
@@ -74,6 +76,9 @@ void PD_Input_Init(void)
     s_selected_rdo=s_copy_pdo=s_attach_ms=s_contract_ms=0u;
     s_epr_mode_since_ms=s_epr_enter_ms=0u;
     s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
+#if IH01A_EPR_APP_KEEPALIVE_PROBE
+    s_epr_ka_ms=0u;s_epr_ka_fail=0u;s_epr_ka_off=0u;
+#endif
 }
 void PD_Input_Attach(uint8_t attached)
 {
@@ -95,6 +100,9 @@ void PD_Input_Reset(void)
     s_selected_rdo=s_copy_pdo=0u;
     s_epr_mode_since_ms=s_epr_enter_ms=0u;
     s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
+#if IH01A_EPR_APP_KEEPALIVE_PROBE
+    s_epr_ka_ms=0u;s_epr_ka_fail=0u;s_epr_ka_off=0u;
+#endif
     memset(s_caps,0,sizeof(s_caps));
     memset(s_epr_caps,0,sizeof(s_epr_caps));
 }
@@ -425,17 +433,11 @@ void PD_Input_EPR_Poll(void)
         PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A6u,(uint32_t)r);
     }
 #endif
-    /* EPR KeepAlive pacer: 375 ms, the cadence used by the verified CH32X035
-     * reference sink and comfortably inside PD3.1's 250-500 ms window (the
-     * policy engine's own KeepAlive sits at 500 ms, i.e. exactly on the
-     * ceiling). Our frame goes out when the 375 ms slot expires, unless some
-     * KeepAlive (ours or the stack's) was sent less than 250 ms ago so the
-     * spec's 250 ms minimum gap is never violated.
-     * Analyser result 2026-11-02: the minimum gap stayed 500 ms, i.e. the
-     * policy engine never transmitted our request (same AMS/context problem as
-     * the EPR entry). The result code is now reported and two consecutive
-     * refusals switch the pacer off - the stack's own 500 ms frame is
-     * spec-compliant, so nothing is lost. */
+#if IH01A_EPR_APP_KEEPALIVE_PROBE
+    /* Bounded diagnostic only (disabled by default). The 4 MSa/s capture
+     * found no app-injected KeepAlive frames at 375 ms; the FULL stack alone
+     * maintained its validated 500 ms cadence. At most one accepted probe
+     * or two rejected requests are attempted per attachment. */
     if(!s_epr_ka_off && s_epr_mode && s_state.selected_mv>=28000u &&
        (uint32_t)(HAL_GetTick()-s_epr_ka_ms)>=375u &&
        (uint32_t)(HAL_GetTick()-g_pd_last_keepalive_ms)>=250u)
@@ -446,16 +448,11 @@ void PD_Input_EPR_Poll(void)
                                               USBPD_EXTENDED_CONTROL_EPR_KEEPALIVE);
         if(r==USBPD_OK)
         {
-            /* Distinguish "queued and really transmitted" from "queued but the
-             * AMS never ran": log the first accepted request and let the
-             * analyser show whether a frame actually appeared. */
-            static uint8_t ka_ok_logged;
+            /* A queued AMS is NOT proof of CC transmission. Stop after this
+             * one probe to avoid repeatedly registering a silent machine. */
             s_epr_ka_fail=0u;
-            if(!ka_ok_logged)
-            {
-                ka_ok_logged=1u;
-                PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2ABu,0u);
-            }
+            s_epr_ka_off=1u;
+            PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2ABu,0u);
         }
         else
         {
@@ -463,6 +460,7 @@ void PD_Input_EPR_Poll(void)
             if(++s_epr_ka_fail>=2u)s_epr_ka_off=1u;
         }
     }
+#endif /* IH01A_EPR_APP_KEEPALIVE_PROBE */
     if(s_epr_exit_queued)
     {
         s_epr_exit_queued=0u; /* only one exit attempt */

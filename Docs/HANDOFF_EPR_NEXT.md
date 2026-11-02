@@ -11,7 +11,7 @@
 - 板端已实测：连续 **6 小时**无断联；逻辑分析仪（4 MSa/s）确认完整
   `SPR → EPR_Mode → EPR_Caps → EPR_Request → PS_RDY → KeepAlive` 时序合规。
 - 编译：Keil MDK/armclang（`D:\Program Files\Keil_v5`），批量 Rebuild 命令见 §4。
-  最近一次：`0 Error(s), 0 Warning(s)`，`Code=80,620 RO=4,200 RW=476 ZI=22,748`。
+  最近一次已实测 Rebuild（`6e9cdf7`）：`0 Error(s), 0 Warning(s)`，`Code=80,712 RO=4,200 RW=476 ZI=22,756`。本次开关调整尚待 Keil Rebuild。
 - host 单测 7/7 通过；PulseView 的 PD 解码器已升级到支持 PD3.1/3.2（见 §7）。
 
 ## 1. 板端已实测、可以当结论用的事实
@@ -23,7 +23,7 @@
 | SPR 合同 | `REQUEST 20 V/5 A`，RDO `0x51C7D1F4`（OPOS=5、no_suspend、unchunked、EPR capable） |
 | EPR 合同 | `EPR_Request 28 V/5 A`，RDO `0x81C7D1F4`（**OPOS=8 绝对位置**），CopyPDO `0x0008C1F4` |
 | 源端能力（本机适配器） | 9 个对象：5 V/3 A、9 V/3 A、12 V/3 A、15 V/3 A、20 V/5 A、PPS 5–21 V、空、**28 V/5 A**、**EPR AVS 15–28 V/140 W** |
-| KeepAlive | 栈自身 500 ms（= 规范上限）；应用侧定速 **375 ms**（见 §2 最后一条，待抓包确认） |
+| KeepAlive | **栈自身约 500 ms**；4 MSa/s 抓包未发现 375 ms 应用补发帧，应用探针默认关闭 |
 | 长时间稳定性 | 6 h 无断联、无 Hard Reset |
 
 ## 2. EPR 能打通的 4 个必要条件（**改动前务必读完，别回退**）
@@ -47,14 +47,15 @@
   通知里调用 `USBPD_PE_Request_EPRModeEnter()`。从空闲主循环调用会让库把
   EPR 通用状态机永久挂起（反汇编确认：该 API 只写 `0xA8` 到句柄并唤醒 PE，
   真正发送在 `PE_STATE_GENERIC` 分支）。
-- KeepAlive：栈 500 ms，应用在 `PD_Input_EPR_Poll()` 里按 **375 ms** 定速补发
-  （仅在距上一帧 KeepAlive ≥250 ms 时才发，保证不违反规范 250 ms 下限）。
+- KeepAlive：由 ST FULL 栈管理，板端实测约 500 ms，6 小时无断联。原来在
+  `PD_Input_EPR_Poll()` 里尝试的 375 ms AMS 从未出现在 CC 上，已将
+  `IH01A_EPR_APP_KEEPALIVE_PROBE` 默认设为 0；仅调试时可启用有次数上限的探针。
 
 ## 3. 代码地图
 
 | 文件 | 职责 |
 |---|---|
-| `Firmware/APP/algorithm/pd_input.c` | SPR/EPR 状态机：能力解析、选档、RDO 编码、EPR 阶段推进、KeepAlive 定速、CLI 用的运行时开关 |
+| `Firmware/APP/algorithm/pd_input.c` | SPR/EPR 状态机：能力解析、选档、RDO 编码、EPR 阶段推进、可选 KeepAlive 诊断探针、CLI 运行时开关 |
 | `Firmware/APP/algorithm/pd_select.c` | 纯 PDO 选择（host 可测）；`PD_INPUT_SPR_MAX_MA` 等常量在 `pd_select.h` |
 | `Firmware/APP/algorithm/pd_epr_policy.h` | **所有策略开关**：`IH01A_EPR_28V5A_HARDWARE_APPROVED`、`AUTO_ENTER`、`IH01A_PD_SPR_MAX_MA`、`IH01A_EPR_SINK_PDP_W`、`IH01A_EPR_REQUEST_MA`、`IH01A_EPR_OPOS_ABSOLUTE_DEFAULT`、`IH01A_PD_FORCE_SINK_TXOK` |
 | `Firmware/USBPD/Target/usbpd_dpm_user.c` | `GetDataInfo`/`SetDataInfo`（EPR PDP/PDO/CopyPDO）、通知分发、`RequestWhatToDo`、诊断打点 |
@@ -99,9 +100,13 @@ python Tools/pulseview_pd_decoder/test_decoder.py
    最小间隔仍是 **500 ms**，没有出现任何 375 ms 间隔、也没有交错。结论：应用通过
    `USBPD_PE_Send_ExtendeControlMessage(EPR_KEEPALIVE)` 发出的请求**没有被 PE 真正发送**
    —— 与 EPR 入口同一类问题（从主循环登记的 AMS 不会被 PE 执行）。
-   代码现在的行为：请求结果会记录一次（`EPR_ACT a=682`/0x2AA 失败码、`a=683`/0x2AB
-   "已接受但请用分析仪确认是否真的上网"）；连续两次失败后自动停用该 pacer，
-   保留栈自身的 500 ms 帧（**500 ms 在 PD3.1 的 250–500 ms 内，合规**）。
+   **本次交接修复**：编译期宏 `IH01A_EPR_APP_KEEPALIVE_PROBE=0`（默认）禁止
+   应用发送额外 KeepAlive AMS；只让 ST 栈负责已验证的 500 ms 帧。
+   如需重新诊断，设为 1 后最多执行 **一次 API 接受的探针**（`EPR_ACT a=683`/
+   0x2AB，不能据此推断线上真的发帧），或者连续 **两次 API 拒绝**（`EPR_ACT
+   a=682`/0x2AA，`b` 为原始返回码）便停用，避免 API 返回 OK 却没有上总线时
+   无限反复登记 AMS。**500 ms 在当前 250–500 ms KeepAlive 窗口内**。
+   此次仅做代码审查与静态核验，未在本环境重新 Keil Rebuild/烧录。
    若将来确实需要 375 ms，可行路线只有三条，按风险从低到高：
    (a) 找到 PE 回调上下文（例如某条通知回调里）来登记这个 AMS；
    (b) 改 vendored 库里 `_Generic_AMS_Send_EPRKeepAlive_SNK` 的 timing 表（在 .lib 里，
@@ -153,7 +158,7 @@ python Tools/pulseview_pd_decoder/test_decoder.py
 |---|---|
 | `EPR_ENTER a=<status>` | `USBPD_PE_Request_EPRModeEnter()` 原始返回（0 OK / 1 不支持 / 2 ERROR / 3 BUSY） |
 | `EPR_EVT a=<112..119>` | EPR 通知原始事件号，下一行是名字（ACK/SUCCEEDED/FAILED/…）；`a=0 b=0xD00D` = 投递后 1 s 内 PE 完全静默 |
-| `EPR_ACT a=…` | 0x2A1 直接发 EPR_Mode 数据报文 / 0x2A2 重发 Request / 0x2A3 通知上下文登记 / 0x2A4 探针 GetSrcCap / 0x2A5 SinkTxOK 证据（`(CCx<<16)|vstate`）/ 0x2A6 延迟取 EPR 能力 / 0x2A9 缺 EPR 位时重取能力 |
+| `EPR_ACT a=…` | 0x2A1 直接发 EPR_Mode 数据报文 / 0x2A2 重发 Request / 0x2A3 通知上下文登记 / 0x2A4 探针 GetSrcCap / 0x2A5 SinkTxOK 证据（`(CCx<<16)|vstate`）/ 0x2A6 延迟取 EPR 能力 / 0x2A9 缺 EPR 位时重取能力；**仅启用诊断探针时** 0x2AA=KeepAlive API 拒绝、0x2AB=API 接受但不代表发帧 |
 | `PD_TX a=<类型> b=<头<<16|长度>` | 每种报文首次出现（重复帧只记一次）；`a=0x10`=扩展，`a=9`=EPR_Request，`a=10`=EPR_Mode |
 | `PD_TXDO do1/do2` | 该帧前两个数据对象（核对 RDO/CopyPDO 用） |
 | `PD_RX a=<类型> b=<头>` | 收到的报文类型 |
