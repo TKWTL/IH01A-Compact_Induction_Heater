@@ -43,7 +43,9 @@ void beep_poll(uint32_t now_ms)
     {
         if(!s_current)
         {
-            if(!s_count){beep_hw_stop();return;}
+            /* Output was muted when the preceding clip ended; avoid
+             * touching TIM14 on every idle superloop iteration. */
+            if(!s_count)return;
             s_current=s_queue[s_tail];
             s_tail=(uint8_t)((s_tail+1u)%BEEP_QUEUE_CAPACITY);
             --s_count;

@@ -36,6 +36,7 @@ extern "C" {
 #include "stdbool.h"
 #include "fonts/fonts.h"
 #include "u8g2.h"
+#include "framework/beep.h"
 
 // 屏幕分辨率定义
 #define UI_HOR_RES     128 // 水平分辨率
@@ -273,7 +274,6 @@ typedef struct{
 } ui_cursor_param_t;
 
 // 对话框运动参数
-#include "framework/beep.h"
 typedef struct{
     // 对话框初始宽度
     uint16_t nowWide;
