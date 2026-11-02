@@ -7,6 +7,7 @@
 #include "dashboard.h"
 #include "conv_adc.h"
 #include "conv_controller.h"
+#include "conv_protection.h"
 #include "temp_service.h"
 #include "core/ui.h"
 #include "main.h"
@@ -16,6 +17,9 @@
 #define POWER_DASHBOARD_ROW_BYTES 28u
 static ui_item_t s_rows[CONV_ADC_COUNT];
 static char s_labels[CONV_ADC_COUNT][POWER_DASHBOARD_ROW_BYTES];
+#define PROTECTION_ROWS 4u
+static ui_item_t s_prot_items[PROTECTION_ROWS];
+static char s_prot_text[PROTECTION_ROWS][POWER_DASHBOARD_ROW_BYTES];
 static const char *const s_names[CONV_ADC_COUNT] = {
     "CT_RMS", "IBUS", "NTC_POT", "VBUS",
     "NTC_SYS", "VBIAS", "ISR_LOAD", "MCU"
@@ -52,6 +56,7 @@ void PowerDashboard_Poll(void)
 {
     ConvADC_Snapshot snapshot;
     TempService_Snapshot temp;
+    ConvProtectionSnapshot protection;
     uint32_t now=HAL_GetTick();
     ConvState state=ConvController_GetState();
     unsigned i;
@@ -59,10 +64,29 @@ void PowerDashboard_Poll(void)
     s_last_update=now;
     ConvADC_CopySnapshot(&snapshot);
     TempService_GetSnapshot(&temp);
+    ConvProtection_GetSnapshot(&protection);
     if(s_last_frames==snapshot.frames && s_last_state==(uint8_t)state)
         return;
     s_last_frames=snapshot.frames;
     s_last_state=(uint8_t)state;
+    (void)snprintf(s_prot_text[0],sizeof(s_prot_text[0]),
+                   "ZERO: %s %u/%u",
+                   protection.zero_status==CONV_ZERO_READY?"OK":
+                   protection.zero_status==CONV_ZERO_FAILED?"FAIL":
+                   protection.zero_status==CONV_ZERO_COLLECT?"AVG":"WAIT",
+                   (unsigned)protection.zero_samples,
+                   (unsigned)CONV_ZERO_AVG_FRAMES);
+    (void)snprintf(s_prot_text[1],sizeof(s_prot_text[1]),
+                   "CT0:%u IB0:%u",
+                   (unsigned)protection.ct_zero_raw,
+                   (unsigned)protection.ibus_zero_raw);
+    (void)snprintf(s_prot_text[2],sizeof(s_prot_text[2]),
+                   "DAC*: %u/%u %c",
+                   (unsigned)protection.dac1_code,
+                   (unsigned)protection.dac2_code,
+                   protection.dac_profile_ready?'C':'-');
+    (void)snprintf(s_prot_text[3],sizeof(s_prot_text[3]),
+                   "PROT: 0x%08lX",(unsigned long)protection.fault_mask);
 
     if(state!=CONV_STATE_ADC_MONITOR || snapshot.frames==0u)
     {
@@ -120,6 +144,12 @@ void PowerDashboard_AddItems(ui_page_t *page)
     {
         s_labels[i][0]='\0';
         AddItem(s_labels[i],UI_ITEM_WORD,0,&s_rows[i],
+                page,0,PowerDashboard_ReadOnly);
+    }
+    for(i=0u;i<PROTECTION_ROWS;++i)
+    {
+        s_prot_text[i][0]='\0';
+        AddItem(s_prot_text[i],UI_ITEM_WORD,0,&s_prot_items[i],
                 page,0,PowerDashboard_ReadOnly);
     }
     s_last_frames=0xFFFFFFFFu;

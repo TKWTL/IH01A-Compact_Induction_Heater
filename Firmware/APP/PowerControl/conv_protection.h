@@ -21,7 +21,8 @@ enum {
     CONV_PROT_NTC_POT=1u<<3,
     CONV_PROT_NTC_SYS=1u<<4,
     CONV_PROT_VBUS_LOW=1u<<5,
-    CONV_PROT_ADC_STALE=1u<<6
+    CONV_PROT_ADC_STALE=1u<<6,
+    CONV_PROT_ZERO_SWITCHING=1u<<7
 };
 typedef struct {
     ConvZeroStatus zero_status;

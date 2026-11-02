@@ -88,6 +88,19 @@ PROT_RAMFUNC void ConvProtection_FrameISR(const volatile uint16_t *frame)
     }
     if(s_zero_status==CONV_ZERO_READY ||
        s_zero_status==CONV_ZERO_FAILED)return;
+#ifndef CONV_PROTECTION_HOST_TEST
+    /* Hard interlock: a zero window is invalid if the bridge was ever
+     * enabled during settling or averaging. This check is independent
+     * of the MiaoUI RUN request and scheduled start state. */
+    if((TIM1->BDTR & TIM_BDTR_MOE)!=0u ||
+       (PWM_EN_GPIO_Port->ODR & PWM_EN_Pin)!=0u)
+    {
+        s_zero_status=CONV_ZERO_FAILED;
+        s_fast_faults|=CONV_PROT_ZERO_SWITCHING;
+        ConvController_TripISR();
+        return;
+    }
+#endif
     if(s_settle<CONV_ZERO_SETTLE_FRAMES){++s_settle;return;}
     s_zero_status=CONV_ZERO_COLLECT;
     ct=frame[CONV_ADC_CT_RMS];
