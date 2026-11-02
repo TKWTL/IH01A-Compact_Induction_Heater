@@ -68,7 +68,7 @@ void PD_Input_Init(void)
     memset(s_epr_caps,0,sizeof(s_epr_caps));
     s_count=s_manual=s_epr_count=s_epr_mode=s_epr_enter_once=0u;
     s_epr_exit_queued=s_epr_copy_valid=s_epr_user_requested=0u;
-    s_epr_any_event=s_epr_stall_logged=0u;s_epr_local_pos=0u;
+    s_epr_any_event=s_epr_stall_logged=0u;s_epr_local_pos=0u;s_epr_capretry=0u;
     s_selected_rdo=s_copy_pdo=s_attach_ms=s_contract_ms=0u;
     s_epr_mode_since_ms=s_epr_enter_ms=0u;
     s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
@@ -89,7 +89,7 @@ void PD_Input_Reset(void)
     s_epr_exit_queued=0u;
     s_epr_any_event=0u;
     s_epr_stall_logged=0u;
-    s_epr_local_pos=0u;
+    s_epr_local_pos=0u;s_epr_capretry=0u;
     s_selected_rdo=s_copy_pdo=0u;
     s_epr_mode_since_ms=s_epr_enter_ms=0u;
     s_spr_rdo=s_spr_mv=s_spr_ma=0u;s_spr_pos=0u;
@@ -140,7 +140,7 @@ void PD_Input_EPRCaps(const uint8_t *data,uint32_t bytes)
         /* Combined SPR+EPR payload: object position already equals index+1. */
         memcpy(&s_epr_caps[0],data,bytes);
         s_epr_count=(uint8_t)count;
-        s_epr_local_pos=0u;
+        s_epr_local_pos=0u;s_epr_capretry=0u;
     }
     memcpy(&first,&s_epr_caps[USBPD_MAX_NB_PDO],sizeof(first));
     PD_Diag_Record(PD_DIAG_EPR_CAPS,bytes,first);
@@ -441,6 +441,20 @@ void PD_Input_EPR_Poll(void)
     {
         s_epr_exit_queued=0u; /* only one exit attempt */
         (void)USBPD_PE_Request_EPRModeExit(USBPD_PORT_0);
+        return;
+    }
+    /* The Source sometimes advertises the PDO1 EPR-capable bit only on a
+     * later capability set (capture: one attach had eprCap=1 then 0, another
+     * the opposite). Ask for one fresh capability set before giving up on
+     * auto EPR for this attachment. */
+    if((s_epr_auto || s_epr_user_requested) && !s_epr_enter_once && !s_epr_mode &&
+       s_state.explicit_contract && !PD_SourceIsEPRCapable() && !s_epr_capretry &&
+       (uint32_t)(HAL_GetTick()-s_contract_ms)>250u)
+    {
+        s_epr_capretry=1u;
+        (void)USBPD_PE_Request_CtrlMessage(USBPD_PORT_0,USBPD_CONTROLMSG_GET_SRC_CAP,
+                                          USBPD_SOPTYPE_SOP);
+        PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A9u,0u);
         return;
     }
     if(!(s_epr_auto || s_epr_user_requested)||
