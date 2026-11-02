@@ -4,7 +4,7 @@
 
 - `Main` 进入独立的 `Heater_UI_Page()`，屏幕标题只用 `HEATER`；`IH01A` 保留在 About。
 - ENTER 在 `MODE → TARGET → OFF → ON → RUN` 五个域中切换，L/R 改变当前域；EXIT 退出 Main，不停止已配置的预约与定时关闭。
-- MODE=TEMP/POWER；TARGET=锅底摄氏温度(40–120°C)或用户功率(10W步进)；OFF=自动停止时长(0–240分钟)，ON=相对预约等待(0–1440分钟)，RUN 域 R 请求启动、L 立即停止。
+- MODE=TEMP/POWER；TARGET=锅底摄氏温度(40–120°C)或用户功率(进入 POWER 模式时默认为当前输入预算，L/R 以10W步进调低)；OFF=自动停止时长(0–240分钟)，ON=相对预约等待(0–1440分钟)，RUN 域 R 请求启动、L 立即停止。
 - 预约到期进入 `HEATER_WAIT_CONFIRM`，**不会自动启动功率输出**。需回到 Main 选 RUN、按 R 人工确认。因为锅具检测和功率控制 ISR 尚未经过安全验证，继续保持 `Heater_GetIsrTargetMw()==0`。页面上的 P x/yW 是建议功率和预算，并非实际测量功率。
 - `thread_heater` 100ms 执行一次，独立于 OLED 和 MiaoUI 页面；温度闭环采用定点 PI，积分有抗饱和限制。转换过程仅调用 `TempService_GetSnapshot()`，不在 ADC 20kHz ISR 中做温度查表或浮点。
 - `Heater_BudgetClassify`：验证有效 PD合同后，按其电压*电流确定上限；无有效PD且 PD_InputSnapshot.mode=DCIN、VBUS≥8V 时按 VBUS*7A；协商中/欠压时预算为0。附加临时软件上限270W，未来需根据 IH01A 实际功率器件定标。用户在功率模式设定较低功率，最终建议功率取 min(用户目标, 当前预算)。不能把合同额定功率当作真实消耗。

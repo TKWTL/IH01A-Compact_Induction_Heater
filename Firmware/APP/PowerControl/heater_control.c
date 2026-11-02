@@ -43,9 +43,12 @@ void Heater_SetMode(HeaterMode mode)
     if(mode!=HEATER_MODE_TEMP && mode!=HEATER_MODE_POWER)return;
     if(mode==s.mode)return;
     s.mode=mode;
-    if(mode==HEATER_MODE_POWER && s.budget_mw &&
-       (uint32_t)s.target_power_w*1000u>s.budget_mw)
+    if(mode==HEATER_MODE_POWER)
+    {
+        /* Default power mode to the current nominal input ceiling,
+         * matching DPC27A; L/R may immediately reduce the target. */
         s.target_power_w=(uint16_t)(s.budget_mw/1000u);
+    }
     clear_output();
 }
 void Heater_SetTargetTemp(uint16_t deci_c)

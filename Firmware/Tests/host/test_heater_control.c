@@ -40,6 +40,8 @@ int main(void)
     assert(s.state==HEATER_RUN_REQUESTED && s.off_remaining_s>0u);
     assert(s.requested_power_mw<=o.budget_mw && s.isr_target_mw==0u);
     Heater_SetMode(HEATER_MODE_POWER);
+    Heater_GetSnapshot(&s);
+    assert(s.target_power_w==140u); /* initially V*I or contract ceiling */
     Heater_SetTargetPowerW(120u);
     Heater_Poll(60300u,&o);
     Heater_GetSnapshot(&s);
@@ -52,11 +54,11 @@ int main(void)
     Heater_Poll(180100u,&o);
     Heater_GetSnapshot(&s);
     assert(s.state==HEATER_OFF && s.requested_power_mw==0u);
-    Heater_ScheduleMinutes(1u,0xffff0000u);
+    Heater_ScheduleMinutes(1u,0xffffff00u);
     Heater_Poll(0xffff0010u,&o);
     Heater_GetSnapshot(&s);
     assert(s.state==HEATER_WAIT_START);
-    Heater_Poll(0xffff0000u+60000u,&o);
+    Heater_Poll(0xffffff00u+60000u,&o);
     Heater_GetSnapshot(&s);
     assert(s.state==HEATER_WAIT_CONFIRM); /* rollover-safe */
     Heater_Stop();
