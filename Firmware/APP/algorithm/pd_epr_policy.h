@@ -14,7 +14,7 @@
  * contract (fallback: stay at SPR 20 V). Enabled so a cold boot produces the
  * full SPR -> EPR sequence for a logic-analyser capture. 'pd auto' toggles it
  * at runtime and 'pd epr' still forces a manual attempt. */
-#define IH01A_EPR_28V5A_AUTO_ENTER 1
+#define IH01A_EPR_28V5A_AUTO_ENTER 0
 
 /* 2026-11-02 analyzer: ST FULL v5.4.1 sends EPR KeepAlive at 500 ms.
  * A foreground AMS registered with USBPD_PE_Send_ExtendeControlMessage()

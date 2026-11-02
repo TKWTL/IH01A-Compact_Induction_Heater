@@ -20,6 +20,12 @@ int main(void)
     assert(c.angle_deg==180u && c.ccr3==213u);
     assert(ConvPhase_Calculate(427u,180u,&c));
     assert(c.ccr3==213u && c.ccr4==426u);
+    assert(ConvPhase_Calculate(639u,0u,&c));
+    assert(c.ccr1==319u && c.ccr3==0u && c.ccr4==319u);
+    assert(ConvPhase_Calculate(639u,20u,&c));
+    assert(c.ccr1==319u && c.ccr3==36u && c.ccr4==355u);
+    assert(ConvPhase_Calculate(639u,180u,&c));
+    assert(c.ccr3==319u && c.ccr4==638u);
     printf("phase: PASS\n");
     return 0;
 }

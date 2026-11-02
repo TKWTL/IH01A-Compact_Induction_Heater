@@ -8,7 +8,7 @@ uint8_t ConvPhase_Calculate(uint16_t arr,uint16_t angle_deg,
     if(angle_deg>180u)angle_deg=180u;
     half=(uint16_t)(arr/2u);
     /* D=round(angle * ARR / 360); at 180deg clamp to floor(ARR/2).
-     * ARR=426 gives f=128MHz/427=299.77kHz and half=213 counts. */
+     * ARR=639 gives f=128MHz/640=200kHz and half=319 counts. */
     d=((uint32_t)angle_deg*arr+180u)/360u;
     if(d>half)d=half;
     out->arr=arr;

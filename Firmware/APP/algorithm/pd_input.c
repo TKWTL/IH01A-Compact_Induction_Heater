@@ -48,7 +48,7 @@ static PD_InputSnapshot s_state;
 static PD_InputContract s_active, s_candidate;
 static uint8_t s_active_valid,s_candidate_valid;
 static uint8_t s_req_enabled=1u;   /* retained across unplug; not in Flash */
-static uint8_t s_max_fixed_v=31u;  /* permits 28V EPR by default */
+static uint8_t s_max_fixed_v=12u;  /* 12V low-power heating bench default */
 static uint8_t s_policy_dirty,s_policy_tries;
 static uint32_t s_policy_dirty_ms;   /* when the policy change was requested */
 static uint8_t s_policy_stall_logged;
@@ -635,6 +635,9 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
     }
     else if(!PD_Input_BestFixedLimited((const uint8_t *)s_caps,
               (uint32_t)s_count*4u,PD_PolicyMaxMv(),&pos,&mv,&ma))return 0u;
+    /* Low-power bench: cap RDO to 3A, even when a 12V fixed PDO advertises
+     * a larger current. The RDO allowance is NOT a fast overcurrent trip. */
+    if(PD_PolicyMaxMv()<=12000u && ma>3000u)ma=3000u;
     epr=(uint8_t)(IH01A_EPR_28V5A_HARDWARE_APPROVED && PD_SourceIsEPRCapable());
     s_selected_rdo=PD_EncodeFixedRDO(pos,ma,epr);
     if(!s_selected_rdo)return 0u;
