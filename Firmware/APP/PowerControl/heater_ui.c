@@ -6,6 +6,7 @@
 #include "PowerControl/heater_control.h"
 #include "PowerControl/conv_controller.h"
 #include "PowerControl/conv_phase.h"
+#include "PowerControl/conv_zcd.h"
 #include "tim.h"
 #include "display/dispDriver.h"
 #include "framework/pm_api.h"
@@ -113,6 +114,7 @@ void Heater_UI_Page(ui_t *ui)
         /* Both reservation timers survive returning to the parent menu. */
         return;
     }
+    ConvZcd_Poll(now);
     Heater_GetSnapshot(&s);
     Disp_ClearBuffer();
     Disp_SetFont(UI_FONT);
@@ -160,6 +162,23 @@ void Heater_UI_Page(ui_t *ui)
     else
         (void)snprintf(line,sizeof(line),"ON %um OFF %um",
             (unsigned)s.on_minutes,(unsigned)s.off_minutes);
+    /* During manual phase testing reserve one row for latest TIM1_CH2 edge.
+     * Lag is relative to the model voltage +->- at ARR/4+D/2. */
+    if(s.mode==HEATER_MODE_POWER)
+    {
+        ConvZcdSnapshot z;
+        ConvZcd_GetSnapshot(&z);
+        if(z.valid)
+        {
+            int16_t mag=z.lag_deci_deg<0?(int16_t)-z.lag_deci_deg:
+                                              z.lag_deci_deg;
+            (void)snprintf(line,sizeof(line),"IC2:%u L:%c%d.%d",
+                           (unsigned)z.capture_raw,
+                           z.lag_deci_deg<0?'-':'+',
+                           (int)(mag/10),(int)(mag%10));
+        }
+        else (void)snprintf(line,sizeof(line),"IC2:-- L:--");
+    }
     Disp_DrawStr(0u,47u,line);
     /* At 128px and ~6px/glyph, keep line <=21 ASCII characters.
      * P=TIM1 PWM output, E=FD2204 PC6 gate enable. */

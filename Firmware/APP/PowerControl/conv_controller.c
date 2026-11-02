@@ -4,6 +4,7 @@
 #include "conv_controller.h"
 #include "conv_adc.h"
 #include "conv_phase.h"
+#include "conv_zcd.h"
 #include "conv_protection.h"
 #include "heater_control.h"
 #include "main.h"
@@ -26,6 +27,7 @@ void ConvController_Init(void)
     s_logic_pwm_start_attempted=0u;
     s_phase_deg=0u;
     s_phase_arr=0u;
+    ConvZcd_Init();
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port, PWM_EN_Pin);
     TIM1->BDTR &= ~TIM_BDTR_MOE;
     LL_GPIO_ResetOutputPin(ISR_TIME_GPIO_Port, ISR_TIME_Pin);
@@ -111,6 +113,7 @@ uint8_t ConvController_StartLogicPwm(void)
      * configured by MX_TIM1_Init() including OC3 Combined PWM2. */
     TIM1->CCMR1 |= TIM_CCMR1_OC1PE;
     TIM1->CCMR2 |= TIM_CCMR2_OC3PE | TIM_CCMR2_OC4PE;
+    ConvZcd_StartCapture(); /* PA9 rising IC, no DMA or CC interrupt */
     TIM1->CCER |= TIM_CCER_CC1E | TIM_CCER_CC3E;
     TIM1->EGR=TIM_EGR_UG;
     TIM1->CR1 |= TIM_CR1_CEN;
