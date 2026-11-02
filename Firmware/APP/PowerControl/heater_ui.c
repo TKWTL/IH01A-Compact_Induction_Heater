@@ -13,15 +13,16 @@
 #include <stdio.h>
 
 enum {EDIT_MODE=0u,EDIT_TARGET,EDIT_OFF,EDIT_ON,EDIT_RUN,EDIT_COUNT};
-static uint8_t s_edit_field;
+/* Power bench default: L/R edits phase immediately on Main entry. */
+static uint8_t s_edit_field=EDIT_TARGET;
 
 static const char *state_name(HeaterState s)
 {
     switch(s)
     {
     case HEATER_WAIT_START:return "WAIT";
-    case HEATER_WAIT_CONFIRM:return "CONFIRM";
-    case HEATER_RUN_REQUESTED:return "REQUEST";
+    case HEATER_WAIT_CONFIRM:return "CFM";
+    case HEATER_RUN_REQUESTED:return "REQ";
     case HEATER_FAULT:return "FAULT";
     default:return "STOP";
     }
@@ -160,7 +161,9 @@ void Heater_UI_Page(ui_t *ui)
         (void)snprintf(line,sizeof(line),"ON %um OFF %um",
             (unsigned)s.on_minutes,(unsigned)s.off_minutes);
     Disp_DrawStr(0u,47u,line);
-    (void)snprintf(line,sizeof(line),"%s PWM:%c EN:%c >%s",
+    /* At 128px and ~6px/glyph, keep line <=21 ASCII characters.
+     * P=TIM1 PWM output, E=FD2204 PC6 gate enable. */
+    (void)snprintf(line,sizeof(line),"%s P:%c E:%c >%s",
         state_name(s.state),
         ConvController_LogicPwmRunning()?'Y':'N',
         ConvController_OutputEnabled()?'Y':'N',

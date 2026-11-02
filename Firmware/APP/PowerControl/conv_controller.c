@@ -85,7 +85,11 @@ uint8_t ConvController_StartLogicPwm(void)
      * No polling for the COMP1 window level: its brief active-low excursions
      * are handled asynchronously by TIM1 BRK hardware. Never assert PC6.
      * This bench output is independent of Heater RUN/OFF/schedule state. */
+#if !IH_POWER_STAGE_COMMISSIONED
+    /* Bench build invariant: no path, including a timer restart attempt,
+     * is permitted to leave FD2204 EN asserted. */
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
+#endif
     if(s_state!=CONV_STATE_ADC_MONITOR ||
        !ConvProtection_ZeroReady() ||
        ConvProtection_FaultMask()!=0u ||
