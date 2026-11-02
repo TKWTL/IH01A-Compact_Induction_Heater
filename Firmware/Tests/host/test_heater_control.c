@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "PowerControl/heater_control.h"
 #include "PowerControl/heater_budget.h"
+#include "algorithm/pd_input.h"
 static HeaterObservation sensor(uint32_t budget)
 {
     HeaterObservation o={0};
@@ -15,13 +16,13 @@ int main(void)
 {
     HeaterSnapshot s;
     HeaterObservation o=sensor(140000u);
-    HeaterObservation dc=Heater_BudgetClassify(20000u,2u,0u,0u,0u);
+    HeaterObservation dc=Heater_BudgetClassify(20000u,PD_INPUT_DCIN,0u,0u,0u);
     assert(dc.input==HEATER_INPUT_DCIN && dc.budget_mw==140000u);
-    dc=Heater_BudgetClassify(20000u,3u,0u,0u,0u);
+    dc=Heater_BudgetClassify(20000u,PD_INPUT_PD,0u,0u,0u);
     assert(dc.input==HEATER_INPUT_WAIT && dc.budget_mw==0u);
-    dc=Heater_BudgetClassify(5000u,2u,0u,0u,0u);
+    dc=Heater_BudgetClassify(5000u,PD_INPUT_DCIN,0u,0u,0u);
     assert(dc.budget_mw==0u);
-    dc=Heater_BudgetClassify(28000u,3u,1u,28000u,5000u);
+    dc=Heater_BudgetClassify(28000u,PD_INPUT_PD,1u,28000u,5000u);
     assert(dc.input==HEATER_INPUT_PD && dc.budget_mw==140000u);
     Heater_Init();
     Heater_ScheduleMinutes(1u,100u);

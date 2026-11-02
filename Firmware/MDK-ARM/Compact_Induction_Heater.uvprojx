@@ -3876,6 +3876,11 @@
               <FilePath>../APP/PowerControl/heater_budget.c</FilePath>
             </File>
             <File>
+              <FileName>heater_ui.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/PowerControl/heater_ui.c</FilePath>
+            </File>
+            <File>
               <FileName>temp_service.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/PowerControl/temp_service.c</FilePath>

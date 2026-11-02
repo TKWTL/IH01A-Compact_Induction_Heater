@@ -1,5 +1,5 @@
 /* IH01A MiaoUI root: Main, Settings, Statistics, About.
- * Main is a deliberately read-only placeholder: no heater actions.
+ * Main is a safe, nonblocking heater control panel; hardware PWM disabled.
  * Settings is split into Display (contrast / background / burn-in / flip) and
  * System (sleep options). Statistics/Source PDO shows SPR and EPR capabilities;
  * Statistics/System displays ADC pin voltages and MCU temperature.
@@ -12,6 +12,7 @@
 #include "framework/pm_ui_register.h"
 #include "algorithm/pd_source_stats.h"
 #include "dashboard.h"
+#include "PowerControl/heater_ui.h"
 #include "framework/system.h"
 #include "pd_ui.h"
 #include <stdint.h>
@@ -92,23 +93,12 @@ void Create_Text(ui_t *ui)
     about_element.text = &about_text;
     Create_element(&s_about, &about_element);
 }
-static void IH_MainPage(ui_t *ui)
-{
-    (void)ui;
-    Disp_ClearBuffer();
-    Disp_SetFont(UI_FONT);
-    Disp_DrawStr(2u, 12u, "IH01A Main");
-    Disp_DrawStr(2u, 28u, "Layout: Pending");
-    Disp_DrawStr(2u, 44u, "Heater: OFF");
-    Disp_DrawStr(2u, 60u, "EXIT: Back");
-    Disp_SendBuffer();
-}
 void Create_MenuTree(ui_t *ui)
 {
     uint8_t i;
     (void)ui;
     AddPage("[Menu]", &s_root, UI_PAGE_ICON, 0);
-    AddItem("-Main", UI_ITEM_WORD, img_dashboard, &s_main, &s_root, 0, IH_MainPage);
+    AddItem("-Main", UI_ITEM_WORD, img_dashboard, &s_main, &s_root, 0, Heater_UI_Page);
 
     AddItem("-Settings", UI_ITEM_PARENTS, img_configuration, &s_settings_item, &s_root, &s_settings, 0);
     AddPage("[Settings]", &s_settings, UI_PAGE_TEXT, &s_root);
