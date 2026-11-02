@@ -136,8 +136,20 @@ void Heater_UI_Page(ui_t *ui)
             (unsigned long)(s.requested_power_mw/1000u),
             (unsigned long)(s.budget_mw/1000u));
     Disp_DrawStr(0u,35u,line);
-    (void)snprintf(line,sizeof(line),"ON %um OFF %um",
-        (unsigned)s.on_minutes,(unsigned)s.off_minutes);
+    /* Show live countdown when armed, not only the configuration values.
+     * Timers remain active even if this menu item is closed. */
+    if(s.state==HEATER_WAIT_START)
+        (void)snprintf(line,sizeof(line),"ON %02lu:%02lu OFF %um",
+            (unsigned long)(s.on_remaining_s/60u),
+            (unsigned long)(s.on_remaining_s%60u),
+            (unsigned)s.off_minutes);
+    else if(s.state==HEATER_RUN_REQUESTED && s.off_minutes)
+        (void)snprintf(line,sizeof(line),"ON -- OFF %02lu:%02lu",
+            (unsigned long)(s.off_remaining_s/60u),
+            (unsigned long)(s.off_remaining_s%60u));
+    else
+        (void)snprintf(line,sizeof(line),"ON %um OFF %um",
+            (unsigned)s.on_minutes,(unsigned)s.off_minutes);
     Disp_DrawStr(0u,47u,line);
     (void)snprintf(line,sizeof(line),"%s >%s",
         state_name(s.state),field_name(s_edit_field));
