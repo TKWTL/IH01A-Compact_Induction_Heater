@@ -1,7 +1,8 @@
 /* STM32G071 cooperative application shell.
  * The ST non-RTOS USBPD_DPM_Run() loop does not return. Each pass calls
  * APP_Tasks_RunOnce() through USBPD_DPM_UserExecute() after CAD/PE.
- * One OLED page per pass; TIM1 bench PWM allowed, FD2204 PC6 stays OFF.
+ * TIM1 logic PWM runs independently. FD2204 PC6 can be enabled only by
+ * explicit, interlocked low-power RUN for up to 10 seconds.
  */
 #include "app_tasks.h"
 #include "main.h"

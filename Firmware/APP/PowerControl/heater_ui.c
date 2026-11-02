@@ -126,9 +126,15 @@ void Heater_UI_Page(ui_t *ui)
         const char *kind=s.input==HEATER_INPUT_PD?"PD":
             s.input==HEATER_INPUT_DCIN?"DC":
             s.input==HEATER_INPUT_WAIT?"WAIT":"NO";
-        (void)snprintf(line,sizeof(line),"HEATER %c %s%luV",
-            s.mode==HEATER_MODE_TEMP?'T':'P',kind,
-            (unsigned long)((s.bus_mv+500u)/1000u));
+        if(ConvController_OutputEnabled())
+            (void)snprintf(line,sizeof(line),"HEATER %c %s%luV %us",
+                s.mode==HEATER_MODE_TEMP?'T':'P',kind,
+                (unsigned long)((s.bus_mv+500u)/1000u),
+                (unsigned)ConvController_BenchSecondsLeft(now));
+        else
+            (void)snprintf(line,sizeof(line),"HEATER %c %s%luV",
+                s.mode==HEATER_MODE_TEMP?'T':'P',kind,
+                (unsigned long)((s.bus_mv+500u)/1000u));
         Disp_DrawStr(0u,11u,line);
     }
     if(s.pot_valid && s.sys_valid)

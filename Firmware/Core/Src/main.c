@@ -171,8 +171,9 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   APP_Tasks_Init();
-  /* ADC/TIM6 and zero capture begin once in TempService_Poll(), within
-   * the foreground PD scheduler. TIM1/PWM_EN remain permanently OFF. */
+  /* ADC/TIM6 and zero capture start once in TempService_Poll(). TIM1
+   * 200kHz logic PWM is then started with PC6 LOW; only the explicit,
+   * independently checked 12V bench RUN may enable FD2204 for <=10s. */
   g_uart_boot_stage=4u;
   while (1)
   {

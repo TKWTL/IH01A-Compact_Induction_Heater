@@ -28,6 +28,7 @@ uint8_t ConvController_LogicPwmRunning(void);
 /* 12V low-power bench experiment: gated PC6, <=20deg, <=10s per RUN.
  * Normal power stage commissioning gate remains disabled. */
 void ConvController_BenchPowerOff(void);
+uint8_t ConvController_BenchSecondsLeft(uint32_t now_ms);
 void ConvController_BenchRunPoll(uint32_t now_ms,
                                  const HeaterObservation *observation);
 uint8_t ConvController_BenchAdcFrameWatchdogISR(void);

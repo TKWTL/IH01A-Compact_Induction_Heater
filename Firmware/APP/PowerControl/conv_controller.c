@@ -1,5 +1,6 @@
-/* G071 observer: TIM6/ADC-DMA ISR decoupled from the TIM1 PWM domain.
- * Output always disabled in this stage, regardless of ADC readings.
+/* G071: TIM6 ADC/DMA ISR independent of TIM1 PWM and CH2 input capture.
+ * Only the explicit <=12V, <=3A, <=20deg, <=10s manual bench gate may
+ * enable FD2204 PC6. Production heater controller remains uncommissioned.
  */
 #include "conv_controller.h"
 #include "conv_adc.h"
@@ -61,6 +62,14 @@ IH_RAMFUNC void ConvController_TripISR(void)
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
     __DSB();
     TIM1->BDTR &= ~TIM_BDTR_MOE;
+}
+uint8_t ConvController_BenchSecondsLeft(uint32_t now_ms)
+{
+    uint32_t elapsed;
+    if(!ConvController_OutputEnabled())return 0u;
+    elapsed=(uint32_t)(now_ms-s_bench_started_ms);
+    if(elapsed>=IH_BENCH_MAX_RUNTIME_MS)return 0u;
+    return (uint8_t)((IH_BENCH_MAX_RUNTIME_MS-elapsed+999u)/1000u);
 }
 void ConvController_BenchPowerOff(void)
 {
@@ -163,7 +172,7 @@ uint8_t ConvController_StartLogicPwm(void)
 IH_RAMFUNC uint8_t ConvController_BenchAdcFrameWatchdogISR(void)
 {
 #if IH_LOW_POWER_BENCH_ENABLE
-    if(!ConvController_OutputEnabled())
+    if((PWM_EN_GPIO_Port->ODR&PWM_EN_Pin)==0u)
     {
         s_bench_on_adc_frames=0u;
         return 0u;

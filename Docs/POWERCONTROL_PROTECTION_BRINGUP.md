@@ -1,3 +1,7 @@
+> **当前版本更新**：TIM1改为200kHz（ARR=639），默认USB-PD
+> 固定电压请求上限12V/3A；TIM1 Break现已接入PC6快速关断中断。
+> 更多边界及零点相位测量见[LOW_POWER_ZCD_BENCH.md](LOW_POWER_ZCD_BENCH.md)。
+>
 # IH01A · PowerControl ADC / DAC / COMP 保护接入（2026-11-02）
 
 ## 1. 硬件与时钟
