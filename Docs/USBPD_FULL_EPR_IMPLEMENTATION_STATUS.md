@@ -28,7 +28,7 @@
 
 ## 本次代码组织与重要约束
 
-- FULL Core/Device 物料来自 `Firmware/Middlewares/ST/STM32_USBPD_Library_v541`，旧目录保留只用于回滚，不在新编译路径中混用。
+- FULL Core/Device 物料来自 `Firmware/ST_USBPD_Library_v541`，旧目录保留只用于回滚，不在新编译路径中混用。
 - `usbpd_dpm_core.c` 使用 ST FULL 版本；`usbpd_dpm_user.c` 与 `pd_input.c` 提供 EPR 回调、请求和状态。
 - `pd_select.c` 只进行纯 PDO 选择；请求编码在 `pd_input.c` 内通过 ST 结构体完成，已删除旧的手写 EPR RDO 逻辑。
 - `usbpd_devices_conf.h` 使用 **UCPD2 作为逻辑 Port 0**（RX DMA1 CH6、TX CH7），不使用新模板的双端口 `INSTANCE1` CH2/CH4：后者与 ADC CH2 和 UART RX CH4 冲突。
@@ -267,7 +267,7 @@ Rebuild：0 Error / 0 Warning，`Code=78,884 RO=4,068 RW=468 ZI=21,180`。
 
 ### 2026-11-02 把观测点下沉到 PHY：到底有没有把 EPR_Mode 发出去
 
-应用层日志能区分"PE 没构造报文"和"报文构造了但没上总线"吗？**不能**。所以在 ST 设备层加了三个只入队、不打印的探针（`Firmware/Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/src/usbpd_phy_hw_if.c` 与 `usbpd_hw_if_it.c`）：
+应用层日志能区分"PE 没构造报文"和"报文构造了但没上总线"吗？**不能**。所以在 ST 设备层加了三个只入队、不打印的探针（`Firmware/ST_USBPD_Library_v541/Devices/STM32G0XX/src/usbpd_phy_hw_if.c` 与 `usbpd_hw_if_it.c`）：
 
 | 新日志 | 位置 | 含义 |
 |---|---|---|

@@ -2,7 +2,7 @@
 
 > 状态：**仅调研与物料准备，未改动任何构建配置**。当前 Keil 工程仍链接旧的 MINSNK 库，
 > 行为与 main 一致（20V/3A，实测正常）。
-> 物料已入库：`Firmware/Middlewares/ST/STM32_USBPD_Library_v541/`（未加入编译）。
+> 物料已入库：`Firmware/ST_USBPD_Library_v541/`（未加入编译）。
 
 ## 1. 现状（实测，非推测）
 
@@ -29,7 +29,7 @@
 - `Core/lib/USBPDCORE_PD3_FULL_CM0PLUS_Keil.lib`（**140,892 B**）
 - `Devices/STM32G0XX/inc/usbpd_devices_conf_template.h`（7,873 B）——**新版设备层强制要求的板级配置头**
 
-版本台账见 `Firmware/Middlewares/ST/STM32_USBPD_Library_v541/VERSION.md`。
+版本台账见 `Firmware/ST_USBPD_Library_v541/VERSION.md`。
 
 ## 3. `.uvprojx` 需要的改动（切换时才做，做成**一个**可 revert 的提交）
 
@@ -37,8 +37,8 @@
 |---|---|---|---|
 | 1 | `<Define>` | `USBPDCORE_LIB_PD3_CONFIG_MINSNK` | `USBPDCORE_LIB_PD3_FULL` |
 | 2 | 库文件 `<FilePath>` | `.../STM32_USBPD_Library/Core/lib/USBPDCORE_PD3_CONFIG_MINSNK_CM0PLUS_Keil.lib` | `.../STM32_USBPD_Library_v541/Core/lib/USBPDCORE_PD3_FULL_CM0PLUS_Keil.lib` |
-| 3 | `<IncludePath>` | `../Middlewares/ST/STM32_USBPD_Library/Core/inc` | `../Middlewares/ST/STM32_USBPD_Library_v541/Core/inc` |
-| 4 | `<IncludePath>` | `../Middlewares/ST/STM32_USBPD_Library/Devices/STM32G0XX/inc` | `../Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/inc` |
+| 3 | `<IncludePath>` | `../Middlewares/ST/STM32_USBPD_Library/Core/inc` | `../ST_USBPD_Library_v541/Core/inc` |
+| 4 | `<IncludePath>` | `../Middlewares/ST/STM32_USBPD_Library/Devices/STM32G0XX/inc` | `../ST_USBPD_Library_v541/Devices/STM32G0XX/inc` |
 | 5 | `<IncludePath>` 新增 | — | `../USBPD/Target`（放新生成的 `usbpd_devices_conf.h`；该目录本来就在 include 列表里，确认即可） |
 | 6 | `usbpd_trace.c` | `.../STM32_USBPD_Library/Core/src/usbpd_trace.c` | `..._v541/Core/src/usbpd_trace.c` |
 | 7 | 设备层 7 个 `.c` | `.../STM32_USBPD_Library/Devices/STM32G0XX/src/*.c` | `..._v541/Devices/STM32G0XX/src/*.c` |

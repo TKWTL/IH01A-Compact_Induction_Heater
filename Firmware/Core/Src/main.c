@@ -73,9 +73,12 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN 0 */
 /* IH01A 生成护栏: uvprojx 里没有 FULL 的定义,说明有人在 CubeMX 里重新生成过工程
  * (CubeMX 会按固件包 v1.6.3 的旧记录把 PD 配置打回 MINSNK)。
- * 处理办法: 运行 Firmware/Tools/cubemx_post_generate.ps1, 再 Rebuild。 */
+ * 处理办法: git checkout HEAD -- Firmware/MDK-ARM/Compact_Induction_Heater.uvprojx
+ *          (CubeMX 6.17 会保留工程里的自定义 IncludePath/Define/文件列表,
+ *           只把 PD 库目录和它自认为"多余"的驱动源文件删掉;库已搬到
+ *           Firmware/ST_USBPD_Library_v541 不再受它管理)。 */
 #if !defined(USBPDCORE_LIB_PD3_FULL)
-#error "CubeMX regenerated the project without the FULL USB-PD stack. Run Firmware/Tools/cubemx_post_generate.ps1, then Rebuild."
+#error "CubeMX regenerated the project without the FULL USB-PD stack. Run: git checkout HEAD -- Firmware/MDK-ARM/Compact_Induction_Heater.uvprojx, then Rebuild."
 #endif
 /* SRAM VTOR relocation lives in main.c, not in the PowerControl module.
  * Flash RESET stays at 0x08000000; .ih_vectors is reserved in scatter.

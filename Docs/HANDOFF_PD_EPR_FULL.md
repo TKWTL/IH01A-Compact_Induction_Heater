@@ -1,5 +1,13 @@
 > **当前状态请看 Docs/HANDOFF_EPR_NEXT.md**（2026-11-02：SPR 20V/5A + EPR 28V/5A 已板端打通）。
 > 本文保留为迁移过程的历史记录。
+>
+> **2026-11-02 变更**：文中提到的 `Firmware/Tools/cubemx_post_generate.ps1` 已删除。
+> CubeMX 6.17 实测只删 `Firmware/Middlewares/**` 与它不认识的驱动源文件，因此 ST PD 栈已搬到
+> `Firmware/ST_USBPD_Library_v541`（CubeMX 管理范围之外），用不到的
+> `stm32g0xx_ll_tim.c` 也已从工程移除 —— 现在 Generate Code 之后直接 Rebuild 即可，
+> 不再需要生成后修复工具。唯一兜底命令：
+> `git checkout HEAD -- Firmware/MDK-ARM/Compact_Induction_Heater.uvprojx`
+> （仅在 `main.c` 护栏报 `USBPDCORE_LIB_PD3_FULL` 缺失时）。
 
 # 交接：IH01A USB-PD FULL/EPR 迁移（下一棒从这里继续）
 
@@ -81,7 +89,7 @@ USBPD 中间件已在 `.ioc` 里**取消勾选**（`753c4d1`）：CubeMX 不再�
 ## 4. 下一棒：按这个顺序做，每步都有验收标准
 
 ### 步骤 1　生成 `usbpd_devices_conf.h`　✅ 已完成
-- 从 `Firmware/Middlewares/ST/STM32_USBPD_Library_v541/Devices/STM32G0XX/inc/usbpd_devices_conf_template.h` 派生，只保留 UCPD2 相关项：`UCPD_INSTANCE0=UCPD2`（唯一逻辑端口 0）、RX(`DMA1`/`DMA_REQUEST_UCPD2_RX`/`LL_DMA_CHANNEL_6`/`DMA1_Channel6`)、TX(`DMA1`/`DMA_REQUEST_UCPD2_TX`/`LL_DMA_CHANNEL_7`/`DMA1_Channel7`)、`UCPD_INSTANCE1_ENABLEIRQ`；FRS 段按未使用处理。
+- 从 `Firmware/ST_USBPD_Library_v541/Devices/STM32G0XX/inc/usbpd_devices_conf_template.h` 派生，只保留 UCPD2 相关项：`UCPD_INSTANCE0=UCPD2`（唯一逻辑端口 0）、RX(`DMA1`/`DMA_REQUEST_UCPD2_RX`/`LL_DMA_CHANNEL_6`/`DMA1_Channel6`)、TX(`DMA1`/`DMA_REQUEST_UCPD2_TX`/`LL_DMA_CHANNEL_7`/`DMA1_Channel7`)、`UCPD_INSTANCE1_ENABLEIRQ`；FRS 段按未使用处理。
 - 使用已有的 `Firmware/USBPD/Target/usbpd_devices_conf.h`，适配 FULL 单端口 UCPD2 后保留 TIM3 时基。**错误的 2/4 通道会分别冲突 ADC DMA CH2 和 UART RX DMA CH4。**
 - **验收**：与 `Firmware/Core/Src/dma.c` 里 UCPD2 的实际 DMA 通道、`usbpd.c` 里的 UCPD2 初始化逐项对上；此步不接入编译。
 
@@ -142,7 +150,7 @@ CubeMX 的 **Software Packs / Additional Software** 列表里没有单列的 USB
 | 文档 | 用途 |
 |---|---|
 | `Docs/USBPD_FULL_EPR_MIGRATION_IMPACT.md` | 影响面清单（现状实测、uvprojx 改法、应用层落差） |
-| `Firmware/Middlewares/ST/STM32_USBPD_Library_v541/VERSION.md` | vendored 物料的仓库/提交/日期 |
+| `Firmware/ST_USBPD_Library_v541/VERSION.md` | vendored 物料的仓库/提交/日期 |
 | `Docs/USBPD_EPR_28V_PLAN.md` | 28V/5A 选档与硬件检查要求（部分内容为旧版） |
 | `Docs/PD_UART_DIAG.md` | 串口诊断里程碑与状态机说明 |
 | `Docs/NEXT_STAGE_PLAN.md` | 更宏观的 P0–P3 阶段计划（加热控制、测量、UI） |

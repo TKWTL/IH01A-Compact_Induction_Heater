@@ -64,7 +64,7 @@
 | `Firmware/APP/algorithm/pd_diag.{c,h}` | 诊断队列 + `PD_TX`/`PD_TXDO`/`PD_RX`/`TXDONE` 打点、KeepAlive 时间戳 |
 | `Firmware/BSP/Console/console_cli.c` | 串口命令 |
 | `Devices/.../usbpd_phy_hw_if.c`、`usbpd_phy.c`、`usbpd_hw_if_it.c` | **对 ST 设备层的唯一改动**：SinkTxOK 补偿 + 收发探针（体积很小，注释齐全） |
-| `Firmware/Tools/cubemx_post_generate.ps1` | CubeMX 生成后一键修复 + 校验（含 4 个 USER CODE 关键调用检查） |
+| `Firmware/ST_USBPD_Library_v541/**` | vendored ST FULL PD 栈（**故意放在 CubeMX 管理目录之外**，见 §6） |
 
 ## 4. 构建 / 烧录 / 回归
 
@@ -80,7 +80,7 @@ python Tools/pulseview_pd_decoder/test_decoder.py
 
 # CubeMX 改配置之后（顺序不能变）
 # 1) CubeMX Generate Code
-# 2) powershell -ExecutionPolicy Bypass -File Firmware/Tools/cubemx_post_generate.ps1
+# 2) git checkout HEAD -- Firmware/MDK-ARM/Compact_Induction_Heater.uvprojx   （仅当护栏报 define 丢失）
 # 3) Keil Rebuild
 ```
 
@@ -197,13 +197,26 @@ python Tools/pulseview_pd_decoder/test_decoder.py
 `9E 90 | 02 80 | 03 00 | CRC32`（Header `0x909E` = extended + NDO 1 + MsgID 7、ext header `0x8002` = 非分块 / 2 字节、ext control type 3 = KeepAlive；CRC 覆盖 header+ext header+全部字节，算法已在 77 帧真实抓包上 100% 验证）。
 ## 6. 关键坑（都踩过）
 
-- **CubeMX 重新生成会删**：`Firmware/USBPD/**`、`_v541`、`stm32g0xx_ll_tim.c`、
-  `uvprojx` 的 FULL define/库/include，以及 `main.c`/`stm32g0xx_it.c` 里**非 USER CODE**
-  的关键调用（`DebugUART_Init`、`USBPD_DPM_Run`、`USBPD_DPM_TimerCounter`、
-  `USBPD_PORT0_IRQHandler`）。所以这些都放在 USER CODE 里，并由 `cubemx_post_generate.ps1` 校验。
+- **CubeMX 6.17 重新生成实测（2026-11-02）**：
+  - **会保留**：工程里的自定义 `IncludePath`、`Define`（含 `USBPDCORE_LIB_PD3_FULL`）、
+    自定义文件组与文件列表、`uvoptx`、`USER CODE` 段（`main.c`/`stm32g0xx_it.c`/`usart.c`
+    里的 `DebugUART_Init`/`USBPD_DPM_Run`/`USBPD_DPM_TimerCounter`/`USBPD_PORT0_IRQHandler`/
+    `IH_FatalReport` 全部完好）。
+  - **会删除**：`Firmware/Middlewares/**` 与 `Firmware/Drivers/**` 里它认不出的文件
+    （本次删掉了 `_v541` 整目录 + `stm32g0xx_ll_tim.c`）。`Firmware/APP`、`BSP`、`USBPD`、
+    `Peripheral`、`ThirdParty` 这些非管理目录一个字节都没动。
+  - **永久对策（已落地）**：
+    1. ST PD 栈从 `Firmware/ST_USBPD_Library_v541` 搬到
+       **`Firmware/ST_USBPD_Library_v541`**（CubeMX 不管这个目录，以后再也不会被删）；
+    2. 删掉 `Drivers/.../stm32g0xx_ll_tim.c` 并从工程移除 —— 我们只用
+       `LL_TIM_OC_SetCompareCHx` / `ClearFlag_CCx` / `IsActiveFlag_CCx` 这些**头文件里的
+       inline 函数**，一个 `.c` 里的符号都没用到（已 `git grep` 全仓核实）；
+    3. 因此**不再需要任何生成后修复脚本**（`Firmware/Tools/` 已删除）。
+  - 万一哪天护栏还是报 `USBPDCORE_LIB_PD3_FULL` 丢失，只跑一条：
+    `git checkout HEAD -- Firmware/MDK-ARM/Compact_Induction_Heater.uvprojx`，再 Rebuild。
 - **改任何编译选项后必须 Rebuild**（否则 `startup_stm32g071xx.o` 是旧的，会报
   `__initial_sp`/`__heap_base` 未定义）。
-- **`main.c` 有生成护栏**：`USBPDCORE_LIB_PD3_FULL` 未定义时 `#error`，提示先跑修复脚本。
+- **`main.c` 有生成护栏**：`USBPDCORE_LIB_PD3_FULL` 未定义时 `#error`，报错信息里就是上面那条 git 命令。
 - **板子由 VBUS 供电**：源端发 Hard Reset 会让 MCU 掉电重启，所以任何"每次插入都
   硬复位"的行为都会表现为反复重启。正常流程不该有 Hard Reset。
 - **本板上电时若 MCU 单独复位而源端仍持 20 V**，硬复位会卡在等 VBUS 降到 vSafe0V
@@ -261,7 +274,7 @@ python Tools/pulseview_pd_decoder/test_decoder.py
 | `Docs/HANDOFF_PD_EPR_FULL.md` | 更早的迁移交接（FULL 栈替换、设备层、时序坑） |
 | `Docs/USBPD_FULL_EPR_MIGRATION_IMPACT.md` | uvprojx 改动清单、应用层 API 落差 |
 | `Tools/pulseview_pd_decoder/README.md` | 解码器安装/回滚、改动清单、测试向量 |
-| `Firmware/Middlewares/ST/STM32_USBPD_Library_v541/VERSION.md` | vendored 物料来源 |
+| `Firmware/ST_USBPD_Library_v541/VERSION.md` | vendored 物料来源 |
 
 ## 10. 2026-11-02 Source PDO、SPR 回退与 KeepAlive 修改决策
 
