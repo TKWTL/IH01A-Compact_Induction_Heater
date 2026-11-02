@@ -127,9 +127,14 @@ THRD_DECLARE(thread_heater)
     while(1)
     {
         PD_Input_GetSnapshot(&pd);
-        observation=Heater_BudgetClassify(pd.bus_mv,pd.mode,
-            PD_Input_GetActiveContract(&contract),
-            contract.voltage_mv,contract.current_ma);
+        /* Read the contract before consuming its fields: C does not define
+         * function-argument evaluation order. A stale or missing contract
+         * must never provide a nonzero power allowance. */
+        {
+            uint8_t valid=PD_Input_GetActiveContract(&contract);
+            observation=Heater_BudgetClassify(pd.bus_mv,pd.mode,valid,
+                contract.voltage_mv,contract.current_ma);
+        }
         TempService_GetSnapshot(&temperature);
         observation.pot_valid=(temperature.valid&TEMP_VALID_POT)!=0u;
         observation.sys_valid=(temperature.valid&TEMP_VALID_SYS)!=0u;
