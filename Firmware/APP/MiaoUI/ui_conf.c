@@ -1,7 +1,7 @@
 /* IH01A MiaoUI root: Main, Settings, Statistics, About.
  * Main is a deliberately read-only placeholder: no heater actions.
  * Settings is split into Display (contrast / background / burn-in / flip) and
- * System (sleep options). Statistics/PD in shows live Source PDOs;
+ * System (sleep options). Statistics/Source PDO shows SPR and EPR capabilities;
  * Statistics/System displays ADC pin voltages and MCU temperature.
  * The current ASCII font is used until the Chinese glyph port.
  */
@@ -25,7 +25,7 @@ static ui_item_t s_back, s_back_display, s_back_system,
 
 /* Static PAGE_TEXT content: capacity for every USB-PD Source PDO.
  * Row strings persist for the lifetime of the menu; no dynamic allocation. */
-#define PD_UI_ROW_CAPACITY 32u
+#define PD_UI_ROW_CAPACITY 40u
 static ui_item_t s_pd_rows[PD_SOURCE_MAX_PDOS];
 static char s_pd_text[PD_SOURCE_MAX_PDOS][PD_UI_ROW_CAPACITY];
 static uint32_t s_pd_revision = 0xFFFFFFFFu;
@@ -109,8 +109,8 @@ void Create_MenuTree(ui_t *ui)
     AddItem("-Statistics", UI_ITEM_PARENTS, img_statistics, &s_statistics_item, &s_root, &s_statistics, 0);
     AddPage("[Statistics]", &s_statistics, UI_PAGE_TEXT, &s_root);
         AddItem("[Menu]", UI_ITEM_RETURN, 0, &s_back_statistics, &s_statistics, &s_root, 0);
-        AddItem("-PD in", UI_ITEM_PARENTS, 0, &s_pd_in_item, &s_statistics, &s_pd_in, 0);
-        AddPage("[PD in]", &s_pd_in, UI_PAGE_TEXT, &s_statistics);
+        AddItem("-Source PDO", UI_ITEM_PARENTS, 0, &s_pd_in_item, &s_statistics, &s_pd_in, 0);
+        AddPage("[Source PDO]", &s_pd_in, UI_PAGE_TEXT, &s_statistics);
             s_pd_in.wideText = 1u;  /* allow complete Fixed 5.0V 3.0A labels */
             AddItem("[Return]", UI_ITEM_RETURN, 0, &s_back_pd_in, &s_pd_in, &s_statistics, 0);
             IH_Statistics_Poll();

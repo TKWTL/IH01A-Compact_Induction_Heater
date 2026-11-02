@@ -53,6 +53,41 @@ int main(void)
     PD_SourceStats_Receive((const uint8_t *)objects, 32u);
     assert(PD_SourceStats_Count() == 0u);
 
+    /* EPR only: position 8 starts after seven SPR positions, including
+     * vacant slots 6 and 7. No EPR must preserve the SPR list. */
+    {
+        uint32_t epr[2], combined[9] = {0u};
+        epr[0] = (560u << 10) | 500u;  /* 28V/5A EPR Fixed */
+        epr[1] = (3u << 30) | (1u << 28) | (280u << 17) | (150u << 8) | 140u;
+        objects[0] = (100u << 10) | 300u;
+        objects[1] = (400u << 10) | 500u;
+        PD_SourceStats_Receive((const uint8_t *)objects, 8u);
+        assert(PD_SourceStats_Count() == 2u);
+        PD_SourceStats_ReceiveEPR((const uint8_t *)epr, 8u);
+        assert(PD_SourceStats_Count() == 9u);
+        check_row(5, ""); check_row(6, "");
+        check_row(7, "8. EPR Fixed 28.0V 5.0A");
+        check_row(8, "9. EPR AVS 15.0-28.0V 140W");
+        PD_SourceStats_ClearEPR();
+        assert(PD_SourceStats_Count() == 2u);
+        check_row(1, "2. Fixed 20.0V 5.0A");
+        check_row(7, "");
+        combined[0] = objects[0]; combined[1] = objects[1];
+        combined[7] = epr[0]; combined[8] = epr[1];
+        PD_SourceStats_ReceiveEPR((const uint8_t *)combined, sizeof(combined));
+        assert(PD_SourceStats_Count() == 9u);
+        check_row(7, "8. EPR Fixed 28.0V 5.0A");
+        check_row(8, "9. EPR AVS 15.0-28.0V 140W");
+        PD_SourceStats_ReceiveEPR((const uint8_t *)combined, 28u);
+        assert(PD_SourceStats_Count() == 7u);
+        check_row(7, "");
+        PD_SourceStats_ReceiveEPR((const uint8_t *)combined, 3u);
+        assert(PD_SourceStats_Count() == 7u);
+        /* New SPR source capabilities invalidate EPR metadata. */
+        PD_SourceStats_Receive((const uint8_t *)objects, 8u);
+        assert(PD_SourceStats_Count() == 2u);
+    }
+
     PD_SourceStats_Clear(); /* detach/hard reset path */
     check_row(0, "No PD Source");
     puts("pd_source_stats: PASS");

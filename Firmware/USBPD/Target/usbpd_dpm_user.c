@@ -290,6 +290,10 @@ void USBPD_DPM_Notification(uint8_t PortNum, USBPD_NotifyEventValue_TypeDef Even
     case USBPD_NOTIFY_EPRMODE_EXIT:
     case USBPD_NOTIFY_EPR_SNKCAP_RECEIVED:
     case USBPD_NOTIFY_EPR_SRCCAP_RECEIVED:
+      if(EventVal == USBPD_NOTIFY_EPRMODE_INVALID ||
+         EventVal == USBPD_NOTIFY_EPRMODE_FAILED ||
+         EventVal == USBPD_NOTIFY_EPRMODE_EXIT)
+          PD_SourceStats_ClearEPR();
       PD_Input_EPR_Notify((uint32_t)EventVal);
       break;
 #endif
@@ -502,7 +506,11 @@ void USBPD_DPM_SetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
   {
 #if defined(USBPDCORE_EPR)
   case USBPD_CORE_DATATYPE_RCV_SRC_PDO_EPR:
-    if(PortNum==USBPD_PORT_0)PD_Input_EPRCaps(Ptr,Size);
+    if(PortNum==USBPD_PORT_0)
+    {
+        PD_SourceStats_ReceiveEPR(Ptr,Size);
+        PD_Input_EPRCaps(Ptr,Size);
+    }
     break;
 #endif
   case USBPD_CORE_DATATYPE_RCV_SRC_PDO:
