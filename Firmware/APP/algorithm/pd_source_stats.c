@@ -114,7 +114,7 @@ void PD_SourceStats_FormatRow(uint8_t index, char *out, size_t capacity)
     uint8_t epr;
     if(out == 0 || capacity == 0u) return;
     out[0] = '\0';
-    if(s_count == 0u)
+    if(s_count == 0u && s_epr_count == 0u)
     {
         if(index == 0u) (void)snprintf(out, capacity, "No PD Source");
         return;
