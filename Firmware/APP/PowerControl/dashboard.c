@@ -81,10 +81,10 @@ void PowerDashboard_Poll(void)
                    (unsigned)protection.ct_zero_raw,
                    (unsigned)protection.ibus_zero_raw);
     (void)snprintf(s_prot_text[2],sizeof(s_prot_text[2]),
-                   "DAC*: %u/%u %c",
+                   "DAC: %u/%u %c",
                    (unsigned)protection.dac1_code,
                    (unsigned)protection.dac2_code,
-                   protection.dac_profile_ready?'C':'-');
+                   protection.comp_armed?'Y':'-');
     (void)snprintf(s_prot_text[3],sizeof(s_prot_text[3]),
                    "AWD2: %u-%u %c",
                    (unsigned)protection.awd2_low_code,
