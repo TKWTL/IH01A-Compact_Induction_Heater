@@ -18,6 +18,7 @@ enum {
 };
 void PD_Diag_Record(uint8_t code,uint32_t a,uint32_t b);
 void PD_Diag_Service(void);
+void PD_Diag_Flush(void);
 /* Called from the ST PHY TX hook: one record per distinct message type. */
 void PD_TxTrace(uint32_t type,uint32_t hdr,uint32_t size,uint32_t do1,uint32_t do2);
 void PD_RxTrace(uint32_t type,uint32_t hdr,uint32_t do1);

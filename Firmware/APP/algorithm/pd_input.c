@@ -634,10 +634,17 @@ void PD_Input_EPR_Poll(void)
     {
         USBPD_StatusTypeDef r;
         /* Existing PE API; do not infer EPR exit from its return code.
-         * An exit notification is required before requesting 5V SPR. */
+         * An exit notification is required before requesting 5V SPR.
+         * 'pd off' from a 28 V EPR contract is the risky direction: the
+         * Source may interrupt VBUS while our MCU is powered from it, so the
+         * decision and the API result are flushed to the UART immediately
+         * instead of waiting for the next main-loop pass. */
         s_epr_exit_queued=0u;
+        PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B0u,(uint32_t)s_epr_mode);
+        PD_Diag_Flush();
         r=USBPD_PE_Request_EPRModeExit(USBPD_PORT_0);
         PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2ADu,(uint32_t)r);
+        PD_Diag_Flush();
         return;
     }
     /* The Source sometimes advertises the PDO1 EPR-capable bit only on a

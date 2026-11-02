@@ -1,4 +1,4 @@
-/* PD callback: record binary event only. Format and transmit later.
+﻿/* PD callback: record binary event only. Format and transmit later.
  * No blocking UART, printf, flash writes or I2C in the sender-response path.
  */
 #include "algorithm/pd_diag.h"
@@ -98,6 +98,14 @@ void PD_SinkTxOkProbe(uint32_t ccx,uint32_t vstate)
     if(done)return;
     done=1u;
     PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A5u,(ccx<<16)|(vstate&0xFFFFu));
+}
+/* Drain the queue now. Used on paths that change the power contract: if the
+ * main loop stalls right afterwards (source browns VBUS out, EPR exit
+ * handshake), the queued evidence would otherwise never be printed. */
+void PD_Diag_Flush(void)
+{
+    uint32_t guard=0u;
+    while(s_head!=s_tail && guard++<16u)PD_Diag_Service();
 }
 void PD_Diag_Service(void)
 {
