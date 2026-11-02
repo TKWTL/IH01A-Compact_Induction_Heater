@@ -93,4 +93,17 @@
  * The 1-based index inside EPR_Source_Capabilities (1..6) is rejected with a
  * Hard Reset. 'pd epr1' still selects the local convention for experiments. */
 #define IH01A_EPR_OPOS_ABSOLUTE_DEFAULT 1
+
+/* Explicit EPR_Mode Exit (USBPD_PE_Request_EPRModeExit). OFF by default.
+ * Bench (Lenovo C140, 28 V/5 A -> 'pd off'): the EPR_Mode Action=Exit message
+ * reached the wire and was GoodCRC'd, then the whole cooperative superloop
+ * stopped - no further diary line, no capability answer to the source's ~20
+ * Source_Capabilities retransmissions, OLED frozen at its last frame, no
+ * reboot. The PE API registers an AMS machine that wants to be completed from
+ * the same loop that called it, so it must not be used from the idle main
+ * loop (same failure class as calling EPRModeEnter from there).
+ * With 0, 'pd off' from an EPR contract instead refreshes the SPR capability
+ * set and requests the highest legal Fixed SPR PDO through the proven
+ * Evaluate -> Request -> PS_RDY pipeline (implicit EPR exit). */
+#define IH01A_EPR_EXIT_API_FALLBACK 0
 #endif

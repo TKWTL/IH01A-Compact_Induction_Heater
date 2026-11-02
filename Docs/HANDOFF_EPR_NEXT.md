@@ -96,6 +96,33 @@ python Tools/pulseview_pd_decoder/test_decoder.py
 
 ## 5. 未完成事项（按优先级）
 
+0. **`pd off`（28 V EPR → 5 V）——C140 上曾把主循环打死，已改走向**。
+   C140 实测：`pd off` 打出 `[CLI] Fixed request OFF (5V); negotiating` 之后
+   **再无任何串口输出、没有 `[BOOT]` 重启、OLED 停在最后一帧**。这说明不是掉电，
+   而是 **超级循环停了**（`printf` 只入 512 B 环形队列，真正发 DMA 的是主循环里的
+   `DebugUART_Service()`；主循环一停，队列里的字就永远发不出去）。
+   旧代码在 `PD_Input_EPR_Poll()` 里从主循环直接调
+   `USBPD_PE_Request_EPRModeExit()`——和"从主循环调 `EPRModeEnter`"同一类错误：
+   PE 登记了一个只能由同一循环推进的 AMS 机器。抓包里能看到 EPR_Mode(Action=Exit)
+   确实上了总线、源端回 GoodCRC，然后源端重发约 20 次 Source_Capabilities 都收不到
+   Sink 的 GoodCRC，正是主循环已死的表现。
+   **现改为**（`IH01A_EPR_EXIT_API_FALLBACK=0`，默认）：
+   EPR 模式下策略要求降到 SPR 时，**不走 PE 的 EPR_Mode Exit API**，而是
+   `USBPD_DPM_RequestGetSourceCapability()` 重取 SPR 能力（最多 3 次、间隔 1 s，
+   记录 `EPR_ACT 690/691`），由 `PD_Input_Evaluate()` 在 EPR 模式下按策略挑
+   **最高合法 Fixed SPR PDO**（`pd off` → 5 V，`pd max 9..20` → 对应档），
+   走已验证的 Request → PS_RDY 流程（PD3.1：请求 SPR PDO 即隐式退出 EPR，
+   RDO 仍带 EPR Capable 位）。`pd on` 反向走同一条刷新路径回到 28 V（`EPR_ACT 693`）。
+   **待板验证**：C140 是否接受 EPR 模式内的 SPR Request（若回 Reject，需要改回
+   显式 Exit 但把调用挪到 PE 回调上下文，而不是主循环）。
+   两个新取证手段：
+   - `PD_Diag_Flush()` 现在会自己踢一次 `DebugUART_Service()`，所以关键路径的
+     记录在"下一句就卡死"的情况下也能真正出现在串口上；
+   - `HardFault`/`NMI` 现在用**直写 USART1（关 DMA、轮询 TDR）**打印
+     `[FAULT] … sp=… off=0/8/16 pc=… lr=…`：PC 落在 0x0800xxxx 的那一行才是真的
+     异常栈帧，可直接在 .map 里查函数名。没有任何 `[FAULT]` 输出但串口彻底静默 ⇒
+     是死循环（不是异常）。
+
 1. **375 ms KeepAlive —— 已验证不可行，保持 500 ms**。板端逻辑分析仪（4 MSa/s）实测：
    最小间隔仍是 **500 ms**，没有出现任何 375 ms 间隔、也没有交错。结论：应用通过
    `USBPD_PE_Send_ExtendeControlMessage(EPR_KEEPALIVE)` 发出的请求**没有被 PE 真正发送**
@@ -174,6 +201,12 @@ python Tools/pulseview_pd_decoder/test_decoder.py
 | `EPR_ENTER a=<status>` | `USBPD_PE_Request_EPRModeEnter()` 原始返回（0 OK / 1 不支持 / 2 ERROR / 3 BUSY） |
 | `EPR_EVT a=<112..119>` | EPR 通知原始事件号，下一行是名字（ACK/SUCCEEDED/FAILED/…）；`a=0 b=0xD00D` = 投递后 1 s 内 PE 完全静默 |
 | `EPR_ACT a=…` | 0x2A1 直接发 EPR_Mode 数据报文 / 0x2A2 重发 Request / 0x2A3 通知上下文登记 / 0x2A4 探针 GetSrcCap / 0x2A5 SinkTxOK 证据（`(CCx<<16)|vstate`）/ 0x2A6 延迟取 EPR 能力 / 0x2A9 缺 EPR 位时重取能力；**仅启用诊断探针时** 0x2AA=KeepAlive API 拒绝、0x2AB=API 接受但不代表发帧 |
+| `EPR_ACT a=688` | 0x2B0 决策去调 `USBPD_PE_Request_EPRModeExit()`（仅在 `IH01A_EPR_EXIT_API_FALLBACK=1` 时出现） |
+| `EPR_ACT a=685` | 0x2AD 上面那个 PE API 的原始返回 |
+| `EPR_ACT a=689` | 0x2B1 策略变更后 2 s 的状态快照（一次性）：b 的 bit0 attached / bit1 显式合同 / bit2 EPR 模式 / bit3 待定 RDO / bit4 退出排队 / bit8..11 重试数 / bit12 请求使能 / bit16..23 maxFixed |
+| `EPR_ACT a=690` | 0x2B2 EPR 内降档：重取 SPR 能力的返回 + 第几次（高 16 位=状态，低 16 位=次数） |
+| `EPR_ACT a=691` | 0x2B3 三次重取都没拿到能力集，停止继续戳（`selected_mv<<16 | position`） |
+| `EPR_ACT a=693` | 0x2B5 EPR 模式内按策略改请求 SPR Fixed PDO（`mv<<16 | position`），随后就是普通 `REQUEST`/`CONTRACT` |
 | `PD_TX a=<类型> b=<头<<16|长度>` | 每种报文首次出现（重复帧只记一次）；`a=0x10`=扩展，`a=9`=EPR_Request，`a=10`=EPR_Mode |
 | `PD_TXDO do1/do2` | 该帧前两个数据对象（核对 RDO/CopyPDO 用） |
 | `PD_RX a=<类型> b=<头>` | 收到的报文类型 |

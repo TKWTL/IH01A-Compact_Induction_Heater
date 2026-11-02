@@ -1,8 +1,9 @@
-﻿/* PD callback: record binary event only. Format and transmit later.
+/* PD callback: record binary event only. Format and transmit later.
  * No blocking UART, printf, flash writes or I2C in the sender-response path.
  */
 #include "algorithm/pd_diag.h"
 #include "main.h"
+#include "usart.h"
 #include <stdio.h>
 #define PD_DIAG_CAP 128u
 typedef struct {
@@ -101,11 +102,19 @@ void PD_SinkTxOkProbe(uint32_t ccx,uint32_t vstate)
 }
 /* Drain the queue now. Used on paths that change the power contract: if the
  * main loop stalls right afterwards (source browns VBUS out, EPR exit
- * handshake), the queued evidence would otherwise never be printed. */
+ * handshake), the queued evidence would otherwise never be printed.
+ * printf only appends to the 512-byte UART ring; the DMA transfer is normally
+ * started by DebugUART_Service() later in the same main-loop pass. A path that
+ * wants the bytes on the wire BEFORE the next call runs must kick the DMA
+ * itself, otherwise the text dies with the loop: the C140 'pd off' capture
+ * showed exactly that (records queued, nothing printed). DMA completion is
+ * interrupt driven, so the transfer survives a stalled superloop. */
 void PD_Diag_Flush(void)
 {
     uint32_t guard=0u;
+    DebugUART_Service(); /* push whatever is already queued, without waiting */
     while(s_head!=s_tail && guard++<16u)PD_Diag_Service();
+    DebugUART_Service();
 }
 void PD_Diag_Service(void)
 {

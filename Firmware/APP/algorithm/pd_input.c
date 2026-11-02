@@ -54,6 +54,8 @@ static uint32_t s_policy_dirty_ms;   /* when the policy change was requested */
 static uint8_t s_policy_stall_logged;
 static uint32_t s_candidate_ms;   /* when the pending RDO candidate was built */
 static uint32_t s_policy_try_ms;
+static uint8_t  s_epr_exit_tries;  /* EPR-mode 'step down to SPR' attempts */
+static uint32_t s_epr_exit_ms;
 /* Setters affect requested power, not physical CC. Never call a PE send
  * directly from an arbitrary caller (see EPR AMS context incident). */
 static uint32_t PD_PolicyMaxMv(void)
@@ -75,6 +77,8 @@ static void PD_PolicyChanged(void)
     s_policy_try_ms=0u;
     s_policy_dirty_ms=HAL_GetTick();
     s_policy_stall_logged=0u;
+    s_epr_exit_tries=0u;
+    s_epr_exit_ms=0u;
     s_epr_user_requested=0u;
     g_epr_ctx_pending=0u;
     if(!s_req_enabled || s_max_fixed_v<28u)
@@ -155,6 +159,7 @@ void PD_Input_Init(void)
     memset(&s_state,0,sizeof(s_state));
     PD_ActiveInvalidate();
     s_policy_dirty=s_policy_tries=0u;s_policy_try_ms=0u;
+    s_epr_exit_tries=0u;s_epr_exit_ms=0u;
     memset(s_caps,0,sizeof(s_caps));
     memset(s_epr_caps,0,sizeof(s_epr_caps));
     s_count=s_manual=s_epr_count=s_epr_mode=s_epr_enter_once=0u;
@@ -191,6 +196,7 @@ void PD_Input_Reset(void)
     s_epr_enter_once=1u;
     s_epr_user_requested=0u;
     s_epr_exit_queued=0u;
+    s_epr_exit_tries=0u;
     s_epr_any_event=0u;
     s_epr_stall_logged=0u;
     s_epr_local_pos=0u;s_epr_capretry=0u;
@@ -348,6 +354,7 @@ void PD_Input_EPR_Notify(uint32_t event)
     {
     case USBPD_NOTIFY_EPRMODE_SUCCEEDED:
         s_epr_mode=1u;
+        s_epr_exit_tries=0u;
         PD_ActiveInvalidate(); /* SPR contract is not an EPR power budget */
         if(!s_req_enabled || s_max_fixed_v<28u)s_epr_exit_queued=1u;
         s_epr_mode_since_ms=HAL_GetTick();
@@ -377,6 +384,7 @@ void PD_Input_EPR_Notify(uint32_t event)
         s_epr_count=0u;
         s_epr_copy_valid=0u;
         s_epr_exit_queued=0u;
+        s_epr_exit_tries=0u;
         s_epr_user_requested=0u;
         PD_EPR_RestoreSPR();
         PD_Diag_Record(PD_DIAG_EPR_MODE,0u,event);
@@ -418,6 +426,46 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
     if(s_epr_mode)
     {
+        /* The policy asks for an SPR-only level while an EPR contract is up
+         * ('pd off' -> 5 V, 'pd max 9..20' -> that Fixed PDO). PD3.1 lets the
+         * Sink request an SPR PDO out of the SPR capability set; the Source
+         * treats that as an implicit exit from EPR Mode. The Request keeps the
+         * EPR Capable bit (this Source hard-resets any Request without it).
+         * Going through the normal DPM pipeline means the candidate/budget and
+         * the PS_RDY handling stay identical to the proven SPR path, and no
+         * PE AMS machine is registered from the main loop. */
+        if((!s_req_enabled || s_max_fixed_v<28u) && s_count &&
+           PD_Input_BestFixedLimited((const uint8_t *)s_caps,
+                                     (uint32_t)s_count*4u,PD_PolicyMaxMv(),
+                                     &pos,&mv,&ma))
+        {
+            uint32_t nrdo=PD_EncodeFixedRDO(pos,ma,1u);
+            if(nrdo)
+            {
+                /* Leave the exit bookkeeping behind: from here on this is an
+                 * ordinary SPR Request and must not be overwritten by the
+                 * EPR-exit path in PD_Input_EPR_Poll(). */
+                s_epr_exit_queued=0u;
+                s_epr_exit_tries=0u;
+                s_epr_user_requested=0u;
+                s_epr_copy_valid=0u;
+                s_selected_rdo=nrdo;
+                s_state.attempted=1u;
+                s_state.position=pos;
+                s_state.selected_mv=mv;
+                s_state.requested_ma=ma;
+                s_candidate.voltage_mv=mv;s_candidate.current_ma=ma;
+                s_candidate.position=pos;s_candidate.epr=0u;
+                s_candidate_valid=1u;s_active_valid=0u;
+                s_candidate_ms=HAL_GetTick();
+                PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B5u,
+                               ((uint32_t)mv<<16)|(uint32_t)pos);
+                PD_Diag_Record(PD_DIAG_RDO,mv,nrdo);
+                *rdo=nrdo;
+                *type=USBPD_CORE_PDO_TYPE_FIXED;
+                return 1u;
+            }
+        }
 #if IH01A_EPR_DELAY_GETCAP
         /* Decline the capability set the PE fetched immediately after
          * EPRMODE_SUCCEEDED; we ask for a fresh one after the reference
@@ -565,8 +613,13 @@ void PD_Input_EPR_Poll(void)
     /* Active policy changes are negotiated by the existing GetSrcCap ->
      * Evaluate -> Request -> contract PE path, never by forging a VBUS level.
      * Bounded retries tolerate a busy PE; on unresolved failure GetActive
-     * Contract remains invalid, so the heater cannot draw stale power. */
-    if(s_policy_dirty && !s_epr_mode && s_state.explicit_contract &&
+     * Contract remains invalid, so the heater cannot draw stale power.
+     * Also valid while an EPR contract is up ('pd on' back to 28 V, or a step
+     * down once the exit attempt has been resolved): in EPR Mode the plain
+     * Source_Capabilities message still carries the SPR table, and Evaluate
+     * decides between the 28 V EPR PDO and an SPR PDO from the policy. A
+     * pending exit attempt owns the refresh itself, so it must not interleave. */
+    if(s_policy_dirty && !s_epr_exit_queued && s_state.explicit_contract &&
        s_policy_tries<3u && (s_policy_tries==0u ||
        (uint32_t)(HAL_GetTick()-s_policy_try_ms)>=1000u))
     {
@@ -660,19 +713,55 @@ void PD_Input_EPR_Poll(void)
     if(s_epr_exit_queued)
     {
         USBPD_StatusTypeDef r;
-        /* Existing PE API; do not infer EPR exit from its return code.
-         * An exit notification is required before requesting 5V SPR.
-         * 'pd off' from a 28 V EPR contract is the risky direction: the
-         * Source may interrupt VBUS while our MCU is powered from it, so the
-         * decision and the API result are flushed to the UART immediately
-         * instead of waiting for the next main-loop pass. */
         s_epr_exit_queued=0u;
+#if IH01A_EPR_EXIT_API_FALLBACK
+        /* Explicit PE EPR_Mode Exit. Kept only for experiments: on the C140
+         * bench the superloop stopped inside/after this call. */
         PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B0u,(uint32_t)s_epr_mode);
         PD_Diag_Flush();
         r=USBPD_PE_Request_EPRModeExit(USBPD_PORT_0);
         PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2ADu,(uint32_t)r);
         PD_Diag_Flush();
         return;
+#else
+        if(!s_epr_mode)
+        {
+            /* Nothing EPR-specific to unwind: the ordinary 'policy changed'
+             * refresh below already drives GetSrcCap -> Evaluate -> Request. */
+            s_epr_exit_tries=0u;
+        }
+        else if(s_epr_exit_tries<3u &&
+                (s_epr_exit_tries==0u ||
+                 (uint32_t)(HAL_GetTick()-s_epr_exit_ms)>=1000u))
+        {
+            /* Step down out of EPR without the suspending PE exit API: refresh
+             * the SPR capability set and let PD_Input_Evaluate() request the
+             * highest legal Fixed SPR PDO (5 V for 'pd off'). The Request for
+             * an SPR PDO is, per PD3.1, an implicit exit from EPR Mode. */
+            r=USBPD_DPM_RequestGetSourceCapability(USBPD_PORT_0);
+            s_epr_exit_ms=HAL_GetTick();
+            ++s_epr_exit_tries;
+            PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B2u,
+                           ((uint32_t)r<<16)|(uint32_t)s_epr_exit_tries);
+            s_epr_exit_queued=1u; /* stay queued until Evaluate/(contract) */
+            PD_Diag_Flush();
+            return;
+        }
+        else if(s_epr_exit_tries==3u)
+        {
+            /* Three refused refreshes: stop poking a source that answers
+             * nothing and record the reason once. The EPR contract itself is
+             * still enforced by the Source; the app reports no power budget
+             * until a new capability set arrives (or the cable is replugged). */
+            ++s_epr_exit_tries;
+            PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B3u,
+                           ((uint32_t)s_state.selected_mv<<16)|
+                           (uint32_t)(s_state.position&0xFFu));
+            PD_Diag_Flush();
+        }
+        if(!s_epr_mode)s_epr_exit_tries=0u;
+        if(s_epr_exit_tries>=3u)return;
+#endif
     }
     /* The Source sometimes advertises the PDO1 EPR-capable bit only on a
      * later capability set (capture: one attach had eprCap=1 then 0, another

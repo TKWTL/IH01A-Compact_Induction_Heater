@@ -59,7 +59,59 @@ __WEAK void DMA1_Channel2_3_IRQHandler(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+/* Fatal-path console. The normal console formats into a RAM ring and lets the
+ * main loop start the DMA, so it silently stops working when the superloop
+ * stops - exactly the case these dumps exist for. Here USART1 is driven
+ * directly: DMA request disabled, TDR polled, interrupts not required. */
+static void ih_fatal_putc(char c)
+{
+  uint32_t guard=0u;
+  if((USART1->CR1&USART_CR1_UE)==0u)return;
+  /* ISR bit 7 = TXE/TXFNF (name differs between G0 sub-families). */
+  while(((USART1->ISR&(1UL<<7))==0u)&&(guard++<400000u)) { }
+  USART1->TDR=(uint32_t)(uint8_t)c;
+}
+static void ih_fatal_str(const char *s)
+{
+  while(*s)ih_fatal_putc(*s++);
+}
+static void ih_fatal_hex(uint32_t v)
+{
+  static const char hex[]="0123456789ABCDEF";
+  char b[9];
+  uint32_t i;
+  b[8]=0;
+  for(i=0u;i<8u;++i){ b[7u-i]=hex[v&0xFu]; v>>=4; }
+  ih_fatal_str(b);
+}
+static void ih_fatal_frame(uint32_t off,const uint32_t *base)
+{
+  ih_fatal_str(" off=");ih_fatal_hex(off);
+  ih_fatal_str(" pc=");ih_fatal_hex(base[6]);
+  ih_fatal_str(" lr=");ih_fatal_hex(base[5]);
+  ih_fatal_str(" r0=");ih_fatal_hex(base[0]);
+  ih_fatal_str(" r1=");ih_fatal_hex(base[1]);
+  ih_fatal_str(" psr=");ih_fatal_hex(base[7]);
+  ih_fatal_str("\r\n");
+}
+/* Called from a fault handler: report the Cortex-M0+ exception stack frame
+ * (R0,R1,R2,R3,R12,LR,PC,xPSR) so PC can be resolved in the .map file.
+ * The handler prologue may already have pushed, so the frame is printed for
+ * three candidate MSP offsets; the real one has PC inside the flash image. */
+void IH_FatalReport(const char *tag)
+{
+  uint32_t sp=0u;
+  const uint32_t *base;
+  USART1->CR3&=~USART_CR3_DMAT;   /* take the transmitter away from the DMA */
+  __asm volatile ("mrs %0, msp" : "=r"(sp));
+  ih_fatal_str("\r\n[FAULT] ");ih_fatal_str(tag);
+  ih_fatal_str(" sp=");ih_fatal_hex(sp);
+  ih_fatal_str("\r\n");
+  base=(const uint32_t *)sp;
+  ih_fatal_frame(0u,base);
+  ih_fatal_frame(8u,base+2);
+  ih_fatal_frame(16u,base+4);
+}
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
@@ -83,7 +135,7 @@ extern UART_HandleTypeDef huart1;
 void NMI_Handler(void)
 {
   /* USER CODE BEGIN NonMaskableInt_IRQn 0 */
-
+  IH_FatalReport("NMI");
   /* USER CODE END NonMaskableInt_IRQn 0 */
   /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
    while (1)
@@ -98,7 +150,7 @@ void NMI_Handler(void)
 void HardFault_Handler(void)
 {
   /* USER CODE BEGIN HardFault_IRQn 0 */
-
+  IH_FatalReport("HARDFAULT");
   /* USER CODE END HardFault_IRQn 0 */
   while (1)
   {
