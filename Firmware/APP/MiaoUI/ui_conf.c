@@ -36,14 +36,33 @@ void IH_Statistics_Poll(void)
     PowerDashboard_Poll();
     System_Poll();
     PD_UI_Poll();
-    uint8_t i;
+    uint8_t i, visible = 0u;
+    char candidate[PD_UI_ROW_CAPACITY];
 
     if(revision == s_pd_revision)
         return;
 
+    /* Preserve real PDO numbers in labels while packing valid rows at the
+     * top of the menu (SPR positions 6/7 may be reserved before EPR #8).
+     * Back/scroll item structure stays static and allocation-free. */
     for(i = 0u; i < PD_SOURCE_MAX_PDOS; i++)
     {
-        PD_SourceStats_FormatRow(i, s_pd_text[i], sizeof(s_pd_text[i]));
+        PD_SourceStats_FormatRow(i, candidate, sizeof(candidate));
+        if(candidate[0] != '\0')
+        {
+            uint8_t k = 0u;
+            while(candidate[k] != '\0' && k + 1u < PD_UI_ROW_CAPACITY)
+            {
+                s_pd_text[visible][k] = candidate[k];
+                ++k;
+            }
+            s_pd_text[visible][k] = '\0';
+            ++visible;
+        }
+    }
+    for(i = 0u; i < PD_SOURCE_MAX_PDOS; i++)
+    {
+        if(i >= visible) s_pd_text[i][0] = '\0';
         s_pd_rows[i].x = UI_PAGE_INIT_X;
 #if ( UI_TITLE_ROLL == 1 )
         s_pd_rows[i].rollState = UI_ITEM_ROLL_STOP;

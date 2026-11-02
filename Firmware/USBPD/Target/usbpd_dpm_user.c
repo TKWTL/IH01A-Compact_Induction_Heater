@@ -508,7 +508,9 @@ void USBPD_DPM_SetDataInfo(uint8_t PortNum, USBPD_CORE_DataInfoType_TypeDef Data
   case USBPD_CORE_DATATYPE_RCV_SRC_PDO_EPR:
     if(PortNum==USBPD_PORT_0)
     {
-        PD_SourceStats_ReceiveEPR(Ptr,Size);
+        /* Ignore a late EPR capability callback after EPR Mode exited. */
+        if(PD_Input_EPR_Active()) PD_SourceStats_ReceiveEPR(Ptr,Size);
+        else PD_SourceStats_ClearEPR();
         PD_Input_EPRCaps(Ptr,Size);
     }
     break;

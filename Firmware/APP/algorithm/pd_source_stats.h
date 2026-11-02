@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-/* Up to seven 32-bit Source Power Data Objects, owned by this module.
+/* SPR positions 1..7 plus EPR positions 8..13, stored independently.
  * No malloc and no dependency on UI or the USBPD protocol library. */
 #define PD_SOURCE_MAX_SPR_PDOS 7u
 #define PD_SOURCE_MAX_EPR_PDOS 6u
