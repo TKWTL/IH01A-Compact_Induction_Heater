@@ -1,0 +1,48 @@
+#include <assert.h>
+#include <stdio.h>
+#include "conv_protection.h"
+int main(void)
+{
+    uint16_t low,high;
+    volatile uint16_t f[CONV_ADC_COUNT]={0};
+    ConvProtectionSnapshot s;
+    ConvADC_Snapshot adc={0};
+    TempService_Snapshot tmp={0};
+    ConvProtection_Init();
+    assert(!ConvProtection_ZeroReady());
+    f[CONV_ADC_CT_RMS]=1500u;
+    f[CONV_ADC_IBUS]=1900u;
+    f[CONV_ADC_VBUS]=2500u;
+    for(unsigned i=0;i<CONV_ZERO_SETTLE_FRAMES+CONV_ZERO_AVG_FRAMES;i++)
+        ConvProtection_FrameISR(f);
+    ConvProtection_GetSnapshot(&s);
+    assert(s.zero_status==CONV_ZERO_READY);
+    assert(s.ct_zero_raw==1500u && s.ibus_zero_raw==1900u);
+    assert(s.zero_samples==CONV_ZERO_AVG_FRAMES);
+    ConvProtection_CalcDacWindow(2000u,853u,100u,120u,&low,&high);
+    assert(low==1900u && high==2120u);
+    ConvProtection_SetDacProfile(100u,120u,1u);
+    adc.frames=1u;
+    adc.filtered[CONV_ADC_VBIAS]=2000u;
+    ConvProtection_Service(1000u,&adc,&tmp);
+    ConvProtection_GetSnapshot(&s);
+    assert(s.dac_profile_ready && s.dac1_code==1900u);
+    f[CONV_ADC_VBUS]=4095u;
+    ConvProtection_FrameISR(f);
+    ConvProtection_Service(1100u,&adc,&tmp);
+    assert(ConvProtection_FaultMask()&CONV_PROT_VBUS_RAIL);
+    ConvProtection_Init();
+    f[CONV_ADC_VBUS]=2000u;f[CONV_ADC_CT_RMS]=1500u;
+    for(unsigned i=0;i<CONV_ZERO_SETTLE_FRAMES;i++)
+        ConvProtection_FrameISR(f);
+    for(unsigned i=0;i<CONV_ZERO_AVG_FRAMES;i++)
+    {
+        f[CONV_ADC_CT_RMS]=(uint16_t)((i&1u)?1400u:1700u);
+        ConvProtection_FrameISR(f);
+    }
+    ConvProtection_GetSnapshot(&s);
+    assert(s.zero_status==CONV_ZERO_FAILED);
+    assert(s.fault_mask&CONV_PROT_ZERO_UNSTABLE);
+    puts("conv protection/zero: PASS");
+    return 0;
+}
