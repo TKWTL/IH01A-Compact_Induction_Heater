@@ -30,4 +30,5 @@ uint8_t ConvController_LogicPwmRunning(void);
 void ConvController_BenchPowerOff(void);
 void ConvController_BenchRunPoll(uint32_t now_ms,
                                  const HeaterObservation *observation);
+uint8_t ConvController_BenchAdcFrameWatchdogISR(void);
 #endif

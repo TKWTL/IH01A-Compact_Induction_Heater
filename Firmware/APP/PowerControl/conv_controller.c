@@ -25,6 +25,8 @@ static uint16_t s_phase_arr;
 static uint8_t s_logic_pwm_started;
 static uint8_t s_logic_pwm_start_attempted;
 static uint32_t s_bench_started_ms;
+/* ~20k full ADC frames/s. Hard deadline independent of PD superloop. */
+static volatile uint32_t s_bench_on_adc_frames;
 
 void ConvController_Init(void)
 {
@@ -35,6 +37,7 @@ void ConvController_Init(void)
     s_phase_deg=0u;
     s_phase_arr=0u;
     s_bench_started_ms=0u;
+    s_bench_on_adc_frames=0u;
     ConvZcd_Init();
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port, PWM_EN_Pin);
     TIM1->BDTR &= ~TIM_BDTR_MOE;
@@ -157,6 +160,24 @@ uint8_t ConvController_StartLogicPwm(void)
     s_logic_pwm_started=1u;
     return 1u;
 }
+IH_RAMFUNC uint8_t ConvController_BenchAdcFrameWatchdogISR(void)
+{
+#if IH_LOW_POWER_BENCH_ENABLE
+    if(!ConvController_OutputEnabled())
+    {
+        s_bench_on_adc_frames=0u;
+        return 0u;
+    }
+    /* 200000 complete TIM6 frames ≈10s. This requires interrupts and ADC
+     * DMA working; it is not an independent hardware watchdog. */
+    if(++s_bench_on_adc_frames>=200000u)
+    {
+        ConvController_TripISR();
+        return 1u;
+    }
+#endif
+    return 0u;
+}
 void ConvController_BenchRunPoll(uint32_t now_ms,
                                  const HeaterObservation *observation)
 {
@@ -201,9 +222,10 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
         Heater_Stop(); /* no deferred power-on once missing PD becomes valid */
         return;
     }
-    /* ONE explicit user RUN event is allowed to assert the gate. Logic
-     * PWM runs separately. Require hardware break and fault-free contract
-     * even at the last instant before enabling FD2204. */
+    /* ONE explicit RUN can assert the gate; time budget starts before
+     * the GPIO state changes to prevent the ISR seeing a stale counter. */
+    s_bench_on_adc_frames=0u;
+    __DMB();
     LL_GPIO_SetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
     __DSB();
     if((TIM1->SR&TIM_SR_BIF)!=0u ||

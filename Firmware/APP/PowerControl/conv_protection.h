@@ -30,7 +30,8 @@ enum {
     CONV_PROT_COMP_SETUP=1u<<12,
     CONV_PROT_DAC_RANGE=1u<<13,
     CONV_PROT_TIM1_BREAK=1u<<14,
-    CONV_PROT_BENCH_VBUS=1u<<15
+    CONV_PROT_BENCH_VBUS=1u<<15,
+    CONV_PROT_BENCH_TIMEOUT=1u<<16
 };
 typedef struct {
     ConvZeroStatus zero_status;

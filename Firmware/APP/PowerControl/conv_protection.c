@@ -175,6 +175,10 @@ PROT_RAMFUNC void ConvProtection_FrameISR(const volatile uint16_t *frame)
     if(!frame)return;
     /* Raw watchdog equivalents run in the existing DMA IRQ; these detect
      * ADC rail/saturation, not accurately calibrated physical current. */
+#ifndef CONV_PROTECTION_HOST_TEST
+    if(ConvController_BenchAdcFrameWatchdogISR())
+        s_fast_faults|=CONV_PROT_BENCH_TIMEOUT;
+#endif
     if(frame[CONV_ADC_VBUS]>=CONV_PROT_VBUS_RAIL_RAW)
     {
         s_fast_faults|=CONV_PROT_VBUS_RAIL;
