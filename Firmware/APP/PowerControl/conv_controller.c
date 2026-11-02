@@ -3,6 +3,7 @@
  */
 #include "conv_controller.h"
 #include "conv_adc.h"
+#include "conv_phase.h"
 #include "conv_protection.h"
 #include "heater_control.h"
 #include "main.h"
@@ -12,16 +13,24 @@
 #define IH_POWER_STAGE_COMMISSIONED 0u
 static volatile ConvState s_state;
 static volatile uint32_t s_errors;
+static uint16_t s_phase_deg;
+static uint16_t s_phase_arr;
+static uint8_t s_logic_pwm_started;
 
 void ConvController_Init(void)
 {
     s_state=CONV_STATE_STOP;
     s_errors=0u;
+    s_logic_pwm_started=0u;
+    s_phase_deg=0u;
+    s_phase_arr=0u;
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port, PWM_EN_Pin);
     TIM1->BDTR &= ~TIM_BDTR_MOE;
     LL_GPIO_ResetOutputPin(ISR_TIME_GPIO_Port, ISR_TIME_Pin);
     LL_GPIO_SetPinSpeed(ISR_TIME_GPIO_Port, ISR_TIME_Pin,
                         LL_GPIO_SPEED_FREQ_VERY_HIGH);
+    /* Preload the 0deg waveform with PC6 low and MOE disabled. */
+    ConvController_SetPhaseDegrees(0u);
     ConvADC_Reset();
     if(ConvADC_Start()!=0u) s_state=CONV_STATE_ADC_MONITOR;
     else ConvController_FaultISR();
@@ -37,6 +46,70 @@ IH_RAMFUNC void ConvController_TripISR(void)
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
     __DSB();
     TIM1->BDTR &= ~TIM_BDTR_MOE;
+}
+void ConvController_SetPhaseDegrees(uint16_t angle_deg)
+{
+    ConvPhaseConfig phase;
+    uint16_t arr=(uint16_t)TIM1->ARR;
+    if(!ConvPhase_Calculate(arr,angle_deg,&phase))return;
+    if(s_phase_arr==arr && s_phase_deg==phase.angle_deg)return;
+    /* Enable compare preload BEFORE writing CH3/CH4. UDIS prevents
+     * an intervening update event from loading a mixed phase pair.
+     * At the next natural update both CCR3/4 become active together.
+     * This sequence is for BENCH logic output with PC6 held LOW.
+     * Future energized operation also needs bounded phase slew. */
+    TIM1->CCMR1 |= TIM_CCMR1_OC1PE;
+    TIM1->CCMR2 |= TIM_CCMR2_OC3PE | TIM_CCMR2_OC4PE;
+    TIM1->CR1 |= TIM_CR1_UDIS;
+    TIM1->CCR1=phase.ccr1;
+    TIM1->CCR3=phase.ccr3;
+    TIM1->CCR4=phase.ccr4;
+    TIM1->CR1 &= ~TIM_CR1_UDIS;
+    s_phase_deg=phase.angle_deg;
+    s_phase_arr=arr;
+}
+uint16_t ConvController_GetPhaseDegrees(void)
+{
+    return s_phase_deg;
+}
+uint8_t ConvController_LogicPwmRunning(void)
+{
+    return (uint8_t)((TIM1->CR1&TIM_CR1_CEN)!=0u &&
+       (TIM1->CCER&(TIM_CCER_CC1E|TIM_CCER_CC3E))==
+                   (TIM_CCER_CC1E|TIM_CCER_CC3E) &&
+       (TIM1->BDTR&TIM_BDTR_MOE)!=0u);
+}
+uint8_t ConvController_StartLogicPwm(void)
+{
+    /* Start only after startup ADC zero capture and valid COMP/DAC setup.
+     * No polling for the COMP1 window level: its brief active-low excursions
+     * are handled asynchronously by TIM1 BRK hardware. Never assert PC6.
+     * This bench output is independent of Heater RUN/OFF/schedule state. */
+    LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
+    if(s_state!=CONV_STATE_ADC_MONITOR ||
+       !ConvProtection_ZeroReady() ||
+       ConvProtection_FaultMask()!=0u ||
+       !ConvProtection_CompArmed())
+        return 0u;
+    if((TIM1->SR&TIM_SR_BIF)!=0u)return 0u;
+    if(s_logic_pwm_started)return ConvController_LogicPwmRunning();
+    /* CH4's PWM1 compare is an INTERNAL constituent of combined CH3 output.
+     * No CH4 pin is required. Both PWM reference sources are already
+     * configured by MX_TIM1_Init() including OC3 Combined PWM2. */
+    TIM1->CCMR1 |= TIM_CCMR1_OC1PE;
+    TIM1->CCMR2 |= TIM_CCMR2_OC3PE | TIM_CCMR2_OC4PE;
+    TIM1->CCER |= TIM_CCER_CC1E | TIM_CCER_CC3E;
+    TIM1->EGR=TIM_EGR_UG;
+    TIM1->CR1 |= TIM_CR1_CEN;
+    TIM1->BDTR |= TIM_BDTR_MOE;
+    __DSB();
+    if((TIM1->SR&TIM_SR_BIF)!=0u || ConvProtection_FaultMask()!=0u)
+    {
+        ConvController_TripISR();
+        return 0u;
+    }
+    s_logic_pwm_started=1u;
+    return 1u;
 }
 uint8_t ConvController_OutputEnabled(void)
 {

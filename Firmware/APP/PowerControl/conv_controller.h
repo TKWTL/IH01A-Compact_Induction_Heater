@@ -16,4 +16,10 @@ void ConvController_TripISR(void); /* PC6 low FIRST, optional TIM1 MOE clear */
  * Current build remains locked OFF (IH_POWER_STAGE_COMMISSIONED=0). */
 uint8_t ConvController_TryEnableOutput(void);
 uint8_t ConvController_OutputEnabled(void);
+/* Bench-only timer PWM: TIM1 CH1 and combined CH3/CH4 run with FD2204 PC6=0.
+ * This must not be conflated with ConvController_TryEnableOutput(). */
+void ConvController_SetPhaseDegrees(uint16_t phase_deg);
+uint16_t ConvController_GetPhaseDegrees(void);
+uint8_t ConvController_StartLogicPwm(void);
+uint8_t ConvController_LogicPwmRunning(void);
 #endif
