@@ -19,6 +19,8 @@
 #include "algorithm/pd_input.h"
 #include "framework/beep.h"
 #include "temp_service.h"
+#include "PowerControl/heater_control.h"
+#include "PowerControl/heater_budget.h"
 
 static coro_scheduler_t s_scheduler;
 static ui_t s_ui;
@@ -58,10 +60,9 @@ THRD_DECLARE(thread_ui)
 THRD_DECLARE(thread_input_pm)
 {
     static uint8_t was_off, wake;
-    static uint32_t off_started, last_poll, now;
+    static uint32_t off_started, now;
     THRD_BEGIN;
     was_off=0u;
-    last_poll=TIME_Millis();
     while(1)
     {
         Buttons_Poll10ms();
@@ -98,11 +99,6 @@ THRD_DECLARE(thread_input_pm)
             }
             (void)Buttons_TakeWake();
         }
-        if((uint32_t)(now-last_poll)>=50u)
-        {
-            last_poll=now;
-            pm_api_poll();
-        }
         THRD_DELAY(10u);
     }
     THRD_END;
@@ -118,15 +114,74 @@ THRD_DECLARE(thread_beep)
     }
     THRD_END;
 }
-static const coro_thread_fn_t s_threads[]={thread_input_pm,thread_ui,thread_beep};
-static coro_pt_t s_states[3];
+/* Always runs regardless of main page visibility, PM UI_OFF, or OLED
+ * initialization. The timer/PID state is owned by this foreground thread,
+ * not by the 20kHz DMA ISR. */
+THRD_DECLARE(thread_heater)
+{
+    static PD_InputSnapshot pd;
+    static PD_InputContract contract;
+    static HeaterObservation observation;
+    static TempService_Snapshot temperature;
+    THRD_BEGIN;
+    while(1)
+    {
+        PD_Input_GetSnapshot(&pd);
+        observation=Heater_BudgetClassify(pd.bus_mv,pd.mode,
+            PD_Input_GetActiveContract(&contract),
+            contract.voltage_mv,contract.current_ma);
+        TempService_GetSnapshot(&temperature);
+        observation.pot_valid=(temperature.valid&TEMP_VALID_POT)!=0u;
+        observation.sys_valid=(temperature.valid&TEMP_VALID_SYS)!=0u;
+        observation.pot_deci_c=temperature.pot_deci_c;
+        observation.sys_deci_c=temperature.sys_deci_c;
+        observation.temperature_updated_ms=temperature.updated_ms;
+        Heater_Poll(TIME_Millis(),&observation);
+        THRD_DELAY(100u);
+    }
+    THRD_END;
+}
+
+/* Last task, after all useful foreground work. SysTick interrupts at 1ms.
+ * Keep PM in this idle thread, even while MiaoUI is not running. A WFI
+ * returns on any enabled interrupt and THRD_YIELD resumes the scheduler. */
+THRD_DECLARE(thread_idle)
+{
+    static uint32_t last_pm_ms,now;
+    THRD_BEGIN;
+    last_pm_ms=TIME_Millis()-50u;
+    while(1)
+    {
+        now=TIME_Millis();
+        if((uint32_t)(now-last_pm_ms)>=50u)
+        {
+            last_pm_ms=now;
+            pm_api_poll();
+        }
+        if(__get_PRIMASK()==0u &&
+           (SysTick->CTRL&SysTick_CTRL_TICKINT_Msk)!=0u)
+        {
+            __DSB();
+            __WFI();
+            __ISB();
+        }
+        THRD_YIELD;
+    }
+    THRD_END;
+}
+static const coro_thread_fn_t s_threads[]={
+    thread_input_pm,thread_ui,thread_beep,thread_heater,thread_idle
+};
+static coro_pt_t s_states[sizeof(s_threads)/sizeof(s_threads[0])];
 
 void APP_Tasks_Init(void)
 {
     Buttons_Init();
     pm_api_init();
     beep_init();
-    CoroOS_Init(&s_scheduler,s_threads,s_states,3u);
+    Heater_Init();
+    CoroOS_Init(&s_scheduler,s_threads,s_states,
+                (uint8_t)(sizeof(s_threads)/sizeof(s_threads[0])));
 }
 void APP_Tasks_RunOnce(void)
 {
