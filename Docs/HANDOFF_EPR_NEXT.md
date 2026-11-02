@@ -127,6 +127,21 @@ python Tools/pulseview_pd_decoder/test_decoder.py
 5. **EPR 失败回落策略**：失败即退回 SPR 且不自动重试（每次接入一次）。若产品需要
    "插上就一定要 28 V"，需要加跨复位记忆或用户可配置重试。
 
+### 5.1 已做过的 lib 反汇编结论（2026-11-02，别重复劳动）
+
+对 `USBPDCORE_PD3_FULL_CM0PLUS_Keil.lib`（140,892 B，14 个成员）做了完整核查：
+
+| 查了什么 | 结果 |
+|---|---|
+| KeepAlive 报文生成 | `usbpd_pe_extctrl.o` 的 `SendKeepAliveMessage`：只是 `USBPD_PE_FormatExtendedCtrlMsg(port, 3, 0, 0)` + 置 PE state 0x19，**不含任何周期** |
+| KeepAlive 状态机 | `_Generic_AMS_Send_EPRKeepAlive_SNK`（5 B：AMS=0x19 + state table 指针）+ `_Generic_AMS_Send_EPRKeepAlive_SNK_table`（**39 B = 3 条 × 13 B**）。表项布局实测：`state@0 / state_next@1 / state_error@2 / timing@3..4（uint16 LE）/ ptrDataFunction@5..8（重定位在 0x05、0x12）/ action@9..12`；三条 timing = **28 / 0 / 0 ms**（28 ms 即 tSenderResponse），**没有 500** |
+| 代码里的 500/375/480/400 | 全镜像反汇编 grep：`#0x1f4`(500) 命中 3 处均为 `LDR rX,[pc,#500]`（无关）；`#0x177`(375)、`#0x1e0`(480)、`#0x190`(400)、`#0x7d`(可选 500 编码) 均无相关命中 |
+| 所有 14 个成员的数据段里的 0x01F4 / 0x0177 | **一次都没有**（覆盖 .rodata/.constdata/.data） |
+
+**结论：500 ms 不是库里的常量，而是 PE 重新启动 KeepAlive 状态机的节奏**（所以实测会出现"最小 500 ms、部分间隔更大"的抖动特征）。**改 .lib 里任何常量都不会得到 375 ms**。
+
+如果一定要 375 ms，只能走 §5 第 1 条列出的 (a)/(b)/(c) 三条路，其中最可控的是 (c) PHY 层注入：帧内容是
+`9E 90 | 02 80 | 03 00 | CRC32`（Header `0x909E` = extended + NDO 1 + MsgID 7、ext header `0x8002` = 非分块 / 2 字节、ext control type 3 = KeepAlive；CRC 覆盖 header+ext header+全部字节，算法已在 77 帧真实抓包上 100% 验证）。
 ## 6. 关键坑（都踩过）
 
 - **CubeMX 重新生成会删**：`Firmware/USBPD/**`、`_v541`、`stm32g0xx_ll_tim.c`、
