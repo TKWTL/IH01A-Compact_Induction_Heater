@@ -1,3 +1,6 @@
+> **当前状态请看 Docs/HANDOFF_EPR_NEXT.md**（2026-11-02：SPR 20V/5A + EPR 28V/5A 已板端打通）。
+> 本文保留为迁移过程的历史记录。
+
 # 交接：IH01A USB-PD FULL/EPR 迁移（下一棒从这里继续）
 
 **分支**：`feature/pd-epr-28v5a`　**基点**：`main@668e541`　**HEAD 见 `git log -1`**（本文档随代码一起提交）

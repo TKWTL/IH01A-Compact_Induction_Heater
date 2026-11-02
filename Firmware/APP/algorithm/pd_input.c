@@ -423,13 +423,16 @@ void PD_Input_EPR_Poll(void)
         PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A6u,(uint32_t)r);
     }
 #endif
-    /* Safety net only. The stack's own EPR KeepAlive measures 500 ms on the
-     * logic analyser (PD3.1 allows 250-500 ms), so in normal operation this
-     * never fires. It exists for the case where a heavy main-loop workload
-     * stretches the PE pacing well beyond the spec window. */
+    /* EPR KeepAlive pacer: 375 ms, the cadence used by the verified CH32X035
+     * reference sink and comfortably inside PD3.1's 250-500 ms window (the
+     * policy engine's own KeepAlive sits at 500 ms, i.e. exactly on the
+     * ceiling). Our frame goes out when the 375 ms slot expires, unless some
+     * KeepAlive (ours or the stack's) was sent less than 250 ms ago so the
+     * spec's 250 ms minimum gap is never violated. The Source ACKs every
+     * KeepAlive, duplicates included. */
     if(s_epr_mode && s_state.selected_mv>=28000u &&
        (uint32_t)(HAL_GetTick()-s_epr_ka_ms)>=375u &&
-       (uint32_t)(HAL_GetTick()-g_pd_last_keepalive_ms)>=800u)
+       (uint32_t)(HAL_GetTick()-g_pd_last_keepalive_ms)>=250u)
     {
         s_epr_ka_ms=HAL_GetTick();
         (void)USBPD_PE_Send_ExtendeControlMessage(USBPD_PORT_0,
