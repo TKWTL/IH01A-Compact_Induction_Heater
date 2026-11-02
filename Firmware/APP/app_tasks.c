@@ -4,6 +4,7 @@
  * One OLED page per pass maximum; heater PWM remains OFF.
  */
 #include "app_tasks.h"
+#include "main.h"
 #include "coroOS.h"
 #include "time_api.h"
 #include "buttons.h"

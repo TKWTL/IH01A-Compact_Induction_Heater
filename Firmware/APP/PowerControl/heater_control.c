@@ -11,11 +11,14 @@
 #define HEATER_SYS_TRIP_DECI 850  /* provisional SW guard, not HW protection */
 #define HEATER_POT_TRIP_DECI 1300 /* provisional SW guard, not HW protection */
 #define HEATER_KP_MW_PER_DECI 300L
-#define HEATER_KI_STEP_MW_PER_DECI 1L /* 100 ms rate: ~0.1 W/K/s */
+#define HEATER_KI_STEP_MW_PER_DECI 1L /* 100ms rate: slow integration */
+#define HEATER_KD_MW_PER_DELTA_DECI 800L /* derivative on measurement,
+                                             smoothed in Q4 */
 static HeaterSnapshot s;
 static uint32_t s_start_deadline_ms,s_stop_deadline_ms;
-static int32_t s_integrator_mw;
-static uint8_t s_stop_timer_armed;
+static int32_t s_integrator_mw,s_derivative_q4;
+static int16_t s_previous_pot;
+static uint8_t s_stop_timer_armed,s_power_manual,s_derivative_ready;
 
 static uint32_t remaining_s(uint32_t now,uint32_t deadline)
 {
@@ -27,6 +30,8 @@ static void clear_output(void)
     s.requested_power_mw=0u;
     s.isr_target_mw=0u;
     s_integrator_mw=0;
+    s_derivative_q4=0;
+    s_derivative_ready=0u;
 }
 void Heater_Init(void)
 {
@@ -36,6 +41,7 @@ void Heater_Init(void)
     s.target_temp_deci_c=800u;
     s.target_power_w=60u;
     s_stop_timer_armed=0u;
+    s_power_manual=0u;
     s_start_deadline_ms=s_stop_deadline_ms=0u;
 }
 void Heater_SetMode(HeaterMode mode)
@@ -47,6 +53,7 @@ void Heater_SetMode(HeaterMode mode)
     {
         /* Default power mode to the current nominal input ceiling,
          * matching DPC27A; L/R may immediately reduce the target. */
+        s_power_manual=0u;
         s.target_power_w=(uint16_t)(s.budget_mw/1000u);
     }
     clear_output();
@@ -64,6 +71,7 @@ void Heater_SetTargetPowerW(uint16_t watts)
     if(watts>270u)watts=270u;
     if(ceiling && watts>ceiling)watts=(uint16_t)ceiling;
     s.target_power_w=watts;
+    s_power_manual=1u;
 }
 void Heater_SetOffMinutes(uint16_t minutes,uint32_t now_ms)
 {
@@ -102,6 +110,8 @@ void Heater_StartConfirmed(uint32_t now_ms)
     s.state=HEATER_RUN_REQUESTED;
     s.on_minutes=0u;
     s_integrator_mw=0;
+    s_derivative_ready=0u;
+    s_derivative_q4=0;
     s_stop_timer_armed=s.off_minutes!=0u;
     if(s_stop_timer_armed)
         s_stop_deadline_ms=now_ms+(uint32_t)s.off_minutes*60000u;
@@ -117,12 +127,15 @@ void Heater_Poll(uint32_t now_ms,const HeaterObservation *obs)
 {
     int32_t err;
     int32_t proportional;
+    int32_t derivative;
     int32_t raw;
     int32_t cap;
     if(!obs)return;
     s.input=obs->input;
     s.bus_mv=obs->bus_mv;
     s.budget_mw=obs->budget_mw;
+    if(s.mode==HEATER_MODE_POWER && !s_power_manual)
+        s.target_power_w=(uint16_t)(obs->budget_mw/1000u);
     s.pot_deci_c=obs->pot_deci_c;
     s.sys_deci_c=obs->sys_deci_c;
     s.pot_valid=obs->pot_valid;
@@ -174,7 +187,23 @@ void Heater_Poll(uint32_t now_ms,const HeaterObservation *obs)
          * the new error would move output away from saturation). */
         err=(int32_t)s.target_temp_deci_c-(int32_t)obs->pot_deci_c;
         proportional=HEATER_KP_MW_PER_DECI*err;
-        raw=proportional+s_integrator_mw;
+        /* D term is based on measured pot temperature, not the setpoint:
+         * this avoids a large derivative kick when the user edits TARGET.
+         * IIR Q4 smoothing reduces quantization noise at 10Hz. */
+        if(!s_derivative_ready)
+        {
+            s_previous_pot=obs->pot_deci_c;
+            s_derivative_q4=0;
+            s_derivative_ready=1u;
+        }
+        else
+        {
+            int32_t delta=(int32_t)obs->pot_deci_c-s_previous_pot;
+            s_derivative_q4+=(delta*16-s_derivative_q4)/4;
+            s_previous_pot=obs->pot_deci_c;
+        }
+        derivative=-(HEATER_KD_MW_PER_DELTA_DECI*s_derivative_q4)/16;
+        raw=proportional+s_integrator_mw+derivative;
         if((raw>=0 && raw<=cap) || (raw>cap && err<0) ||
            (raw<0 && err>0))
         {
@@ -182,7 +211,7 @@ void Heater_Poll(uint32_t now_ms,const HeaterObservation *obs)
             if(s_integrator_mw>cap)s_integrator_mw=cap;
             if(s_integrator_mw<0)s_integrator_mw=0;
         }
-        raw=proportional+s_integrator_mw;
+        raw=proportional+s_integrator_mw+derivative;
         if(raw<0)raw=0;
         if(raw>cap)raw=cap;
         s.requested_power_mw=(uint32_t)raw;

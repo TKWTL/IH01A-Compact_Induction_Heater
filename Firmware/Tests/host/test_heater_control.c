@@ -50,6 +50,15 @@ int main(void)
     Heater_Poll(60400u,&o);
     Heater_GetSnapshot(&s);
     assert(s.requested_power_mw==80000u);
+    Heater_SetMode(HEATER_MODE_TEMP);
+    Heater_SetMode(HEATER_MODE_POWER);
+    Heater_Poll(60500u,&o);
+    Heater_GetSnapshot(&s);
+    assert(s.target_power_w==80u);
+    o.budget_mw=140000u;
+    Heater_Poll(60600u,&o);
+    Heater_GetSnapshot(&s);
+    assert(s.target_power_w==140u); /* auto tracks on new mode entry */
     o.temperature_updated_ms=180100u;
     Heater_Poll(180100u,&o);
     Heater_GetSnapshot(&s);
