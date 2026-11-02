@@ -22,8 +22,7 @@ int main(void)
     assert(PD_Input_BestFixed((const uint8_t *)pdo,sizeof(pdo),
                              &pos,&mv,&ma));
     /* 20V/5A PDO: the request follows the PDO up to IH01A_PD_SPR_MAX_MA. */
-    assert(pos==3u && mv==20000u && ma==PD_INPUT_MAX_MA);
-    assert(ma==5000u);
+    assert(pos==3u && mv==20000u && ma==5000u);
     /* SW3538-style 20V/7A Fixed PDO: directly use declared current. */
     pdo[2]=fixed(20000u,7000u);
     assert(PD_Input_BestFixed((const uint8_t *)pdo,sizeof(pdo),
