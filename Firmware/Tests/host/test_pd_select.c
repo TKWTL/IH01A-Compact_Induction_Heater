@@ -24,7 +24,25 @@ int main(void)
     /* 20V/5A PDO: the request follows the PDO up to IH01A_PD_SPR_MAX_MA. */
     assert(pos==3u && mv==20000u && ma==PD_INPUT_MAX_MA);
     assert(ma==5000u);
-    /* A 3A cable makes the Source advertise 3A; the request stays at 3A. */
+    /* SW3538-style 20V/7A Fixed PDO: directly use declared current. */
+    pdo[2]=fixed(20000u,7000u);
+    assert(PD_Input_BestFixed((const uint8_t *)pdo,sizeof(pdo),
+                             &pos,&mv,&ma));
+    assert(pos==3u && mv==20000u && ma==7000u);
+    /* A higher advertised current is clamped to board's 7A ceiling. */
+    pdo[2]=fixed(20000u,8000u);
+    assert(PD_Input_BestFixed((const uint8_t *)pdo,sizeof(pdo),
+                             &pos,&mv,&ma));
+    assert(pos==3u && mv==20000u && ma==7000u);
+    assert(PD_Input_BestFixedLimited((const uint8_t *)pdo,sizeof(pdo),
+                                      15000u,&pos,&mv,&ma));
+    assert(pos==4u && mv==12000u && ma==3000u);
+    assert(PD_Input_BestFixedLimited((const uint8_t *)pdo,sizeof(pdo),
+                                      5000u,&pos,&mv,&ma));
+    assert(pos==1u && mv==5000u && ma==1500u);
+    assert(!PD_Input_BestFixedLimited((const uint8_t *)pdo,sizeof(pdo),
+                                       4000u,&pos,&mv,&ma));
+    /* A 3A Source PDO naturally limits the requested current to 3A. */
     pdo[2]=fixed(20000,3000);
     assert(PD_Input_BestFixed((const uint8_t *)pdo,sizeof(pdo),
                              &pos,&mv,&ma));

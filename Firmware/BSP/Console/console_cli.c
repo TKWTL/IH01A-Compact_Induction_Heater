@@ -10,9 +10,10 @@ static uint8_t s_len;
 static void cli_dispatch(void)
 {
     PD_InputSnapshot pd;
+    PD_InputContract active;
     DebugUART_Stats stats;
     if(!strcmp(s_line,"help"))
-        printf("[CLI] help, ping, pd, pd epr, pd epr1, pd auto, uart\r\n");
+        printf("[CLI] help, ping, pd, pd on, pd off, pd max N, pd epr, pd auto, uart\r\n");
     else if(!strcmp(s_line,"ping"))
         printf("[CLI] pong\r\n");
     else if(!strcmp(s_line,"pd"))
@@ -27,6 +28,33 @@ static void cli_dispatch(void)
                (unsigned)IH01A_EPR_28V5A_HARDWARE_APPROVED,
                (unsigned)PD_Input_EPR_Active(),
                (unsigned)PD_Input_GetEPRAuto());
+        printf("[CLI] request=%u maxFixed=%uV (off=5V)\r\n",
+               PD_Input_GetRequestEnabled(),PD_Input_GetMaxFixedVoltage());
+        if(PD_Input_GetActiveContract(&active))
+            printf("[CLI] ACTIVE %lu mV %lu mA PDO=%u EPR=%u\r\n",
+                   (unsigned long)active.voltage_mv,
+                   (unsigned long)active.current_ma,active.position,active.epr);
+        else printf("[CLI] ACTIVE not confirmed (0W budget)\r\n");
+    }
+    else if(!strcmp(s_line,"pd on") || !strcmp(s_line,"pd off"))
+    {
+        uint8_t en=(uint8_t)!strcmp(s_line,"pd on");
+        PD_Input_SetRequestEnabled(en);
+        printf("[CLI] Fixed request %s; negotiating\r\n",en?"ON":"OFF (5V)");
+    }
+    else if(!strncmp(s_line,"pd max ",7))
+    {
+        const char *p=s_line+7;
+        uint32_t v=0u;
+        if(!*p)v=255u;
+        while(*p>='0'&&*p<='9'&&v<=31u)
+        {
+            v=v*10u+(uint32_t)(*p-'0');
+            ++p;
+        }
+        if(*p || v>31u || !PD_Input_SetMaxFixedVoltage((uint8_t)v))
+            printf("[CLI] Usage: pd max 5..31\r\n");
+        else printf("[CLI] Max Fixed %luV; negotiating\r\n",(unsigned long)v);
     }
     else if(!strcmp(s_line,"pd epr") || !strcmp(s_line,"pd epr1"))
     {

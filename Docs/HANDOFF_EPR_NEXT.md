@@ -216,3 +216,29 @@ python Tools/pulseview_pd_decoder/test_decoder.py
 - 新增 host 回归覆盖 SPR-only 15/20V 最高 Fixed 选择、EPR Fixed/AVS、
   EPR-only/combined 两类回调及失效化。**尚未在本机运行 Keil Rebuild
   或板端测试，不能把此次改动称为硬件验证通过**。
+
+## 11. Fixed 请求及已生效合同接口（SW3538 7A 兼容）
+
+- `PD_Input_SetRequestEnabled(0)`：Sink 保持启动、外接 Rd 不变，
+  异步请求 5V Fixed。参数 1 恢复自动最高 Fixed 档。
+- `PD_Input_SetMaxFixedVoltage(v)`：单位整数 V，5..31；
+  按源端实际 Fixed PDO 查找不超过限制的最高电压；并非写死档位表。
+  仅 28V EPR Fixed 当前支持；PPS/AVS 不参与档位请求。
+- `PD_Input_GetActiveContract(&contract)`：仅在 PE 通知显式合同、
+  无策略切换、并且 VBUS 测量与电压目标相差不超过 10% 时返回有效。
+  `contract.voltage_mv/current_ma/position/epr` 为已请求成功的
+  Fixed PDO 电压与协议授权电流上限，**不是 ADC 实际输入电流**。
+  不可用时返回 0 且将 out 清零，功率环不应继续使用旧电流预算。
+- SW3538 20V/7A 非标 Fixed PDO 可以直接按 PDO 字段编码 7000mA
+  的 SPR RDO；**不增加线缆确认流程，不针对 20V/7A 做特殊匹配**。
+  当前 `IH01A_PD_SPR_MAX_MA=7000` 是本机硬件上限；
+  20V/3A、20V/5A、20V/7A 分别按实际 PDO 电流请求，
+  声明更高电流时限幅至 7A。28V EPR 请求仍为 5A。
+- API 改变的是异步 PD 策略，不通过 Reset MCU 或关闭 CC Rd 来
+  降压。28V→5V 必须先 EPR Exit 后重新协商 SPR；由于已有
+  AMS 登记/执行的差异，未收到退出及新显式合同前不得报告降压成功。
+- 串口回归：`pd off`、`pd on`、`pd max 15`、
+  `pd max 31`、`pd`，其中 `ACTIVE` 表示已确认合同，
+  `select` 仍仅表示拟请求/上次请求，不可用于加热功率上限。
+- 此次未修改 500ms KeepAlive。仍需 Keil Rebuild、Host 单测及
+  5/15/20V、20V/7A、28V EPR 的板端协商抓包。

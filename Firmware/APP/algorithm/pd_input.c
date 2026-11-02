@@ -102,9 +102,15 @@ uint8_t PD_Input_GetActiveContract(PD_InputContract *out)
 {
     if(!out)return 0u;
     memset(out,0,sizeof(*out));
-    if(!s_active_valid||!s_req_enabled&&s_active.voltage_mv!=5000u||
+    if(!s_active_valid||(!s_req_enabled && s_active.voltage_mv!=5000u)||
        s_policy_dirty||s_epr_exit_queued||!s_state.attached||
        !s_state.explicit_contract||s_candidate_valid)return 0u;
+    /* Contract voltage is valid only while physical VBUS agrees. */
+    {
+        uint32_t bus=PD_Input_VbusMillivolts();
+        if(bus < (s_active.voltage_mv*9u)/10u ||
+           bus > (s_active.voltage_mv*11u)/10u)return 0u;
+    }
     *out=s_active;
     return 1u;
 }
@@ -185,6 +191,11 @@ void PD_Input_Caps(const uint8_t *data,uint32_t bytes)
 {
     if(!data||!bytes||(bytes&3u)||bytes>sizeof(s_caps))
     {s_count=0u;return;}
+    /* Force a new RDO after changes to Source current, Source voltage,
+     * or user voltage policy. Cached RDO must not hide a 7A offer. */
+    if((uint32_t)s_count*4u!=bytes || memcmp(s_caps,data,bytes)!=0 ||
+       s_policy_dirty)
+        s_state.attempted=0u;
     memcpy(s_caps,data,bytes);
     s_count=(uint8_t)(bytes/4u);
     if(s_policy_dirty)
