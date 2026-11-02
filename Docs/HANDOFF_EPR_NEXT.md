@@ -173,3 +173,31 @@ python Tools/pulseview_pd_decoder/test_decoder.py
 | `Docs/USBPD_FULL_EPR_MIGRATION_IMPACT.md` | uvprojx 改动清单、应用层 API 落差 |
 | `Tools/pulseview_pd_decoder/README.md` | 解码器安装/回滚、改动清单、测试向量 |
 | `Firmware/Middlewares/ST/STM32_USBPD_Library_v541/VERSION.md` | vendored 物料来源 |
+
+## 10. 2026-11-02 Source PDO、SPR 回退与 KeepAlive 修改决策
+
+- Statistics → **Source PDO** 已由 PD in 更名，分别保存 SPR 1..7 与
+  EPR 8..13 位置，支持 EPR Fixed 和 EPR AVS（只展示，不发送 Request）。
+  对于收到的 EPR-only 4..24 字节，内容映射到位置 8 开始；
+  32..52 字节 combined 列表直接使用绝对位置。28 字节格式不明确，
+  安全拒绝。SPR 刷新、EPR 退出/失败、Hard Reset 与 Detach 均失效化旧记录。
+- **无 EPR / EPR 失败的 SPR 回退**：初次收到非 EPR Source Capabilities
+  时，仍由 `PD_Input_BestFixed()` 选择不超过 20V 的最高合法 Fixed 电压。
+  Hard Reset 后清除旧 `attempted/position/selected`，下一次重新选择最高
+  Fixed SPR；保留 `s_epr_enter_once=1`，同一次物理插入不自动重进 EPR。
+  之前的 SPR PDO 从新能力列表中消失时，也重新选最高合法 Fixed SPR，
+  不无条件降至 5V。既有有效 SPR 合同仍保持。
+- **ST KeepAlive 核心库**：当前用的 v5.4.1
+  `USBPDCORE_PD3_FULL_CM0PLUS_Keil.lib` 的 EPR KeepAlive 调度在预编译
+  策略引擎内部，仓库没有对应的完整可编辑 C 源。Git 管理可追踪修改，
+  但不能自动使库内计时器变成可配置。**本次没有改动二进制 .lib**，
+  仍为已实测 6 小时稳定的约 500ms。推荐先获取对应版 PE 源码或
+  ST 正式支持的计时参数，再用独立实验分支修改、全量 Rebuild 与波形核验；
+  没有唯一符号/代码路径核对和可重现补丁，不直接改库常量，也不绕过 PE
+  从 PHY 注入 KeepAlive。
+- **以后合并到 main**：功能分支验证后正常 PR 合并。如果未来确实
+  修改 ST vendored 库，需同时合并上游版本、许可证、补丁源码/重现脚本、
+  文件校验和、测试记录及改动过的库，而不是只同步 UI 或应用层定时。
+- 新增 host 回归覆盖 SPR-only 15/20V 最高 Fixed 选择、EPR Fixed/AVS、
+  EPR-only/combined 两类回调及失效化。**尚未在本机运行 Keil Rebuild
+  或板端测试，不能把此次改动称为硬件验证通过**。

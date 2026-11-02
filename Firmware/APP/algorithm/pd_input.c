@@ -90,6 +90,13 @@ void PD_Input_Reset(void)
 {
     /* A PD hard reset is NOT a detach: do not automatically attempt EPR again. */
     s_state.explicit_contract=0u;
+    /* Hard Reset invalidates the RDO. The next SPR capabilities must be
+     * evaluated afresh for the highest legal Fixed PDO. Do not re-enter EPR
+     * on this attachment: s_epr_enter_once is intentionally kept at 1. */
+    s_state.attempted=0u;
+    s_state.position=0u;
+    s_state.selected_mv=0u;
+    s_state.requested_ma=0u;
     s_manual=s_count=s_epr_count=s_epr_mode=s_epr_copy_valid=0u;
     s_epr_enter_once=1u;
     s_epr_user_requested=0u;
@@ -356,10 +363,11 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
                 return 1u;
             }
         }
-        p=s_count?s_caps[0]:0u;
-        if((p>>30u)!=0u||(((p>>10u)&1023u)*50u)!=5000u)return 0u;
-        pos=1u;mv=5000u;ma=(p&1023u)*10u;
-        if(ma>PD_INPUT_MAX_MA)ma=PD_INPUT_MAX_MA;
+        /* The previous SPR PDO disappeared. Re-select the best *current*
+         * Fixed SPR PDO rather than unnecessarily reverting to 5 V. This
+         * does not trigger an additional EPR entry attempt. */
+        if(!PD_Input_BestFixed((const uint8_t *)s_caps,
+               (uint32_t)s_count*4u,&pos,&mv,&ma))return 0u;
     }
     else if(!PD_Input_BestFixed((const uint8_t *)s_caps,
               (uint32_t)s_count*4u,&pos,&mv,&ma))return 0u;

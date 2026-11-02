@@ -1,8 +1,9 @@
 # STM32 USB-PD middleware (FULL / EPR-capable) — vendored copy
 
-本目录是 ST 官方 USB-PD 中间件的一份**未接入编译**的拷贝,用于把 IH01A 从
-MINSNK(只能 SPR)迁移到 FULL(支持 PD3.1 EPR)。当前 Keil 工程仍然链接旧的
-`Firmware/Middlewares/ST/STM32_USBPD_Library`(MINSNK),因此本目录暂不参与构建。
+本目录是 ST 官方 USB-PD 中间件的 vendored 拷贝。IH01A 的
+`feature/pd-epr-28v5a` 分支已使用此处的 FULL CM0+ Keil 静态库和匹配头文件，
+实测完成 20V SPR 与 28V EPR 协商。请勿与旧 MINSNK 头文件或二进制混用。
+KeepAlive 内部调度仍由 ST FULL 库负责，当前未修改原始静态库。
 
 ## 来源与版本
 

@@ -39,6 +39,18 @@ int main(void)
     assert(pos==4u && mv==12000u);
     assert(!PD_Input_BestFixed((const uint8_t *)pdo,3u,&pos,&mv,&ma));
     assert(!PD_Input_BestFixed((const uint8_t *)pdo,32u,&pos,&mv,&ma));
+    /* SPR-only adapter, no EPR advertised: select the highest legal Fixed. */
+    {
+        uint32_t only_spr[5]={fixed(5000u,3000u),fixed(9000u,3000u),
+            fixed(15000u,3000u),fixed(12000u,3000u),0u};
+        assert(PD_Input_BestFixed((const uint8_t *)only_spr,sizeof(only_spr),
+                                   &pos,&mv,&ma));
+        assert(pos==3u && mv==15000u && ma==3000u);
+        only_spr[4]=fixed(20000u,3000u);
+        assert(PD_Input_BestFixed((const uint8_t *)only_spr,sizeof(only_spr),
+                                   &pos,&mv,&ma));
+        assert(pos==5u && mv==20000u && ma==3000u);
+    }
     /* Extended caps include seven SPR slots, followed by EPR position 8. */
     {
         uint32_t epr[10]={0u};
