@@ -56,6 +56,7 @@ static uint32_t s_candidate_ms;   /* when the pending RDO candidate was built */
 static uint32_t s_policy_try_ms;
 static uint8_t  s_epr_exit_tries;  /* EPR-mode 'step down to SPR' attempts */
 static uint32_t s_epr_exit_ms;
+static uint8_t  s_epr_exit_gave_up;
 /* Setters affect requested power, not physical CC. Never call a PE send
  * directly from an arbitrary caller (see EPR AMS context incident). */
 static uint32_t PD_PolicyMaxMv(void)
@@ -79,6 +80,7 @@ static void PD_PolicyChanged(void)
     s_policy_stall_logged=0u;
     s_epr_exit_tries=0u;
     s_epr_exit_ms=0u;
+    s_epr_exit_gave_up=0u;
     s_epr_user_requested=0u;
     g_epr_ctx_pending=0u;
     if(!s_req_enabled || s_max_fixed_v<28u)
@@ -197,6 +199,7 @@ void PD_Input_Reset(void)
     s_epr_user_requested=0u;
     s_epr_exit_queued=0u;
     s_epr_exit_tries=0u;
+    s_epr_exit_gave_up=0u;
     s_epr_any_event=0u;
     s_epr_stall_logged=0u;
     s_epr_local_pos=0u;s_epr_capretry=0u;
@@ -320,6 +323,68 @@ uint8_t PD_Input_EPR_CopyPDO(uint32_t *out)
     return 1u;
 }
 uint8_t PD_Input_EPR_Active(void){return s_epr_mode;}
+/* Send the Request for the current policy directly from the foreground.
+ *
+ * WHY this exists (C140 bench, 2026-11-02): inside EPR Mode the FULL PE does
+ * NOT ask the app for an RDO when a Source_Capabilities message arrives. The
+ * capture after 'pd off' shows Get_Source_Capabilities transmitted, Accept
+ * received, the SPR capability set delivered (twice) - and then Evaluate was
+ * never called (no 0x2B5/0xBAD0/REQUEST record at all), so no Request went
+ * out. tSinkRequest expired and the Source answered with a Hard Reset; the
+ * Sink then waited for VBUS vSafe0V, never saw it on this VBUS-powered board,
+ * reported HR_FAILED and retried once per second for ever.
+ *
+ * So the app must send the Request itself. The message form stays EPR_Request
+ * (RDO + copied Source PDO) because the PE is in EPR Mode; PD3.1 lets the
+ * Request target an SPR PDO out of the SPR capability set, which is how the
+ * contract steps down to 5 V ('pd off') or to 'pd max N', and how it steps
+ * back up to 28 V.
+ * Returns the raw PE status so the caller can log/exhaust it. */
+static uint32_t PD_EncodeFixedRDO(uint8_t pos,uint32_t ma,uint8_t epr);
+static USBPD_StatusTypeDef PD_SendPolicyRequestDirect(void)
+{
+    uint8_t pos=0u;
+    uint32_t mv=0u,ma=0u,pdo=0u,nrdo;
+    USBPD_StatusTypeDef r;
+    if(!s_epr_mode)return USBPD_ERROR;
+    if(s_req_enabled && PD_PolicyMaxMv()>=28000u)
+    {
+        /* back up to 28 V from the cached EPR capability set */
+        if(s_epr_count<8u)return USBPD_ERROR;
+        if(!PD_Input_BestEPRFixed((const uint8_t *)s_epr_caps,
+               (uint32_t)s_epr_count*4u,&pos,&mv,&ma,&pdo))return USBPD_ERROR;
+        if(mv!=28000u||ma<IH01A_EPR_REQUEST_MA)return USBPD_ERROR;
+        if(s_epr_local_pos && pos>(uint8_t)USBPD_MAX_NB_PDO && !s_epr_opos_absolute)
+            pos=(uint8_t)(pos-(uint8_t)USBPD_MAX_NB_PDO);
+        if(ma>IH01A_EPR_REQUEST_MA)ma=IH01A_EPR_REQUEST_MA;
+    }
+    else
+    {
+        /* step down: highest legal Fixed SPR PDO for the policy cap */
+        if(!s_count)return USBPD_ERROR;
+        if(!PD_Input_BestFixedLimited((const uint8_t *)s_caps,
+               (uint32_t)s_count*4u,PD_PolicyMaxMv(),&pos,&mv,&ma))
+            return USBPD_ERROR;
+        pdo=s_caps[pos-1u];
+    }
+    nrdo=PD_EncodeFixedRDO(pos,ma,1u);
+    if(!nrdo)return USBPD_ERROR;
+    s_copy_pdo=pdo;
+    s_epr_copy_valid=1u;
+    s_selected_rdo=nrdo;
+    s_state.attempted=1u;
+    s_state.position=pos;
+    s_state.selected_mv=mv;
+    s_state.requested_ma=ma;
+    s_candidate.voltage_mv=mv;s_candidate.current_ma=ma;
+    s_candidate.position=pos;s_candidate.epr=(uint8_t)(mv>=28000u);
+    s_candidate_valid=1u;s_active_valid=0u;s_candidate_ms=HAL_GetTick();
+    PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B5u,((uint32_t)mv<<16)|(uint32_t)pos);
+    r=USBPD_PE_Send_Request(USBPD_PORT_0,nrdo,USBPD_CORE_PDO_TYPE_FIXED);
+    PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B6u,
+                   ((uint32_t)r<<16)|(uint32_t)pos);
+    return r;
+}
 static void PD_EPR_RestoreSPR(void)
 {
     if(s_spr_pos==0u)return;
@@ -355,6 +420,7 @@ void PD_Input_EPR_Notify(uint32_t event)
     case USBPD_NOTIFY_EPRMODE_SUCCEEDED:
         s_epr_mode=1u;
         s_epr_exit_tries=0u;
+        s_epr_exit_gave_up=0u;
         PD_ActiveInvalidate(); /* SPR contract is not an EPR power budget */
         if(!s_req_enabled || s_max_fixed_v<28u)s_epr_exit_queued=1u;
         s_epr_mode_since_ms=HAL_GetTick();
@@ -442,13 +508,16 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
             uint32_t nrdo=PD_EncodeFixedRDO(pos,ma,1u);
             if(nrdo)
             {
-                /* Leave the exit bookkeeping behind: from here on this is an
-                 * ordinary SPR Request and must not be overwritten by the
-                 * EPR-exit path in PD_Input_EPR_Poll(). */
+                /* Leave the exit bookkeeping behind: from here on this is a
+                 * Request for an SPR PDO and must not be overwritten by the
+                 * EPR-exit path in PD_Input_EPR_Poll(). The copied Source PDO
+                 * has to match the requested position, because the PE formats
+                 * an EPR_Request (RDO + copy) while it is in EPR Mode. */
                 s_epr_exit_queued=0u;
                 s_epr_exit_tries=0u;
                 s_epr_user_requested=0u;
-                s_epr_copy_valid=0u;
+                s_copy_pdo=s_caps[pos-1u];
+                s_epr_copy_valid=1u;
                 s_selected_rdo=nrdo;
                 s_state.attempted=1u;
                 s_state.position=pos;
@@ -614,12 +683,11 @@ void PD_Input_EPR_Poll(void)
      * Evaluate -> Request -> contract PE path, never by forging a VBUS level.
      * Bounded retries tolerate a busy PE; on unresolved failure GetActive
      * Contract remains invalid, so the heater cannot draw stale power.
-     * Also valid while an EPR contract is up ('pd on' back to 28 V, or a step
-     * down once the exit attempt has been resolved): in EPR Mode the plain
-     * Source_Capabilities message still carries the SPR table, and Evaluate
-     * decides between the 28 V EPR PDO and an SPR PDO from the policy. A
-     * pending exit attempt owns the refresh itself, so it must not interleave. */
-    if(s_policy_dirty && !s_epr_exit_queued && s_state.explicit_contract &&
+     * EPR Mode is deliberately excluded: there the PE never follows a
+     * capability set with a RequestWhatToDo, so this refresh would only make
+     * the Source wait and then Hard Reset. EPR-mode policy changes are sent
+     * directly further below. */
+    if(s_policy_dirty && !s_epr_mode && s_state.explicit_contract &&
        s_policy_tries<3u && (s_policy_tries==0u ||
        (uint32_t)(HAL_GetTick()-s_policy_try_ms)>=1000u))
     {
@@ -710,58 +778,70 @@ void PD_Input_EPR_Poll(void)
         }
     }
 #endif /* IH01A_EPR_APP_KEEPALIVE_PROBE */
-    if(s_epr_exit_queued)
+#if IH01A_EPR_EXIT_API_FALLBACK
+    if(s_epr_exit_queued && s_epr_mode)
     {
         USBPD_StatusTypeDef r;
-        s_epr_exit_queued=0u;
-#if IH01A_EPR_EXIT_API_FALLBACK
         /* Explicit PE EPR_Mode Exit. Kept only for experiments: on the C140
          * bench the superloop stopped inside/after this call. */
+        s_epr_exit_queued=0u;
         PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B0u,(uint32_t)s_epr_mode);
         PD_Diag_Flush();
         r=USBPD_PE_Request_EPRModeExit(USBPD_PORT_0);
         PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2ADu,(uint32_t)r);
         PD_Diag_Flush();
         return;
-#else
-        if(!s_epr_mode)
+    }
+#endif
+    /* A policy change while an EPR contract is up is executed by sending the
+     * Request ourselves: the PE does not ask the app for an RDO after a
+     * capability set in EPR Mode, so the usual GetSrcCap -> Evaluate path can
+     * never answer (the Source then Hard Resets on tSinkRequest and gets stuck
+     * retrying because VBUS never reaches vSafe0V on this board). See
+     * PD_SendPolicyRequestDirect(). */
+    if(s_epr_mode && (s_epr_exit_queued || s_policy_dirty))
+    {
+        if(s_epr_exit_tries>=3u)
         {
-            /* Nothing EPR-specific to unwind: the ordinary 'policy changed'
-             * refresh below already drives GetSrcCap -> Evaluate -> Request. */
-            s_epr_exit_tries=0u;
+            /* Three refused submissions: stop poking the PE. The Source keeps
+             * enforcing whatever contract is in force; the app reports no
+             * power budget until the next capability set / replug. */
+            if(!s_epr_exit_gave_up)
+            {
+                s_epr_exit_gave_up=1u;
+                PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B7u,
+                               ((uint32_t)s_state.selected_mv<<16)|
+                               (uint32_t)s_state.position);
+                PD_Diag_Flush();
+            }
+            s_epr_exit_queued=0u;
+            s_policy_dirty=0u;
+            return;
         }
-        else if(s_epr_exit_tries<3u &&
-                (s_epr_exit_tries==0u ||
-                 (uint32_t)(HAL_GetTick()-s_epr_exit_ms)>=1000u))
+        if(s_epr_exit_tries==0u ||
+           (uint32_t)(HAL_GetTick()-s_epr_exit_ms)>=200u)
         {
-            /* Step down out of EPR without the suspending PE exit API: refresh
-             * the SPR capability set and let PD_Input_Evaluate() request the
-             * highest legal Fixed SPR PDO (5 V for 'pd off'). The Request for
-             * an SPR PDO is, per PD3.1, an implicit exit from EPR Mode. */
-            r=USBPD_DPM_RequestGetSourceCapability(USBPD_PORT_0);
+            USBPD_StatusTypeDef r=PD_SendPolicyRequestDirect();
             s_epr_exit_ms=HAL_GetTick();
             ++s_epr_exit_tries;
-            PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B2u,
-                           ((uint32_t)r<<16)|(uint32_t)s_epr_exit_tries);
-            s_epr_exit_queued=1u; /* stay queued until Evaluate/(contract) */
+            if(r==USBPD_OK)
+            {
+                /* The RDO is on the wire: keep the SPR refresh and the EPR
+                 * entry gate out of the way until the new contract lands. */
+                s_policy_dirty=0u;
+                s_policy_tries=0u;
+                s_epr_exit_queued=0u;
+            }
+            else s_epr_exit_queued=1u;   /* PE busy: retry in 200 ms */
             PD_Diag_Flush();
             return;
         }
-        else if(s_epr_exit_tries==3u)
-        {
-            /* Three refused refreshes: stop poking a source that answers
-             * nothing and record the reason once. The EPR contract itself is
-             * still enforced by the Source; the app reports no power budget
-             * until a new capability set arrives (or the cable is replugged). */
-            ++s_epr_exit_tries;
-            PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2B3u,
-                           ((uint32_t)s_state.selected_mv<<16)|
-                           (uint32_t)(s_state.position&0xFFu));
-            PD_Diag_Flush();
-        }
-        if(!s_epr_mode)s_epr_exit_tries=0u;
-        if(s_epr_exit_tries>=3u)return;
-#endif
+    }
+    if(s_epr_exit_queued)
+    {
+        /* No EPR session to unwind: the ordinary refresh below handles it. */
+        s_epr_exit_queued=0u;
+        s_epr_exit_tries=0u;
     }
     /* The Source sometimes advertises the PDO1 EPR-capable bit only on a
      * later capability set (capture: one attach had eprCap=1 then 0, another
