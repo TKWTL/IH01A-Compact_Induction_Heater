@@ -22,6 +22,7 @@
 #include "stm32g0xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "conv_protection.h"
 #include "usbpd_hw_if.h"  /* USBPD_PORT0_IRQHandler */
 #include "usbpd.h"
 /* USER CODE END Includes */
@@ -276,7 +277,9 @@ void DMA1_Ch4_7_DMAMUX1_OVR_IRQHandler(void)
 void ADC1_COMP_IRQHandler(void)
 {
   /* USER CODE BEGIN ADC1_COMP_IRQn 0 */
-
+  /* Respond before HAL's callback dispatch. One-shot: mask and clear the
+   * asserted AWDx IRQ, gate TIM1 instantly, and defer UI/audio to foreground. */
+  ConvProtection_AnalogWatchdogISR();
   /* USER CODE END ADC1_COMP_IRQn 0 */
   HAL_ADC_IRQHandler(&hadc1);
   /* USER CODE BEGIN ADC1_COMP_IRQn 1 */

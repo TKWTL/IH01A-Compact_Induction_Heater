@@ -77,3 +77,30 @@ ADC 硬件模拟看门狗中断，也不是已经激活的比较器硬件关断�
 以后若启用 ADC 模拟看门狗，应在 `ConvADC_Start()` 之前设置阈值、
 通道选择及 ADC1_COMP IRQ，绝不能照搬 G474 代码在 ADC 正转换时
 停启 DMA，否则有采样与时序竞争风险。
+
+## Updated CubeMX AWD source mapping
+
+- AWD1: ADC1 IN10 / VBUS, 33V, high code 3379, interrupt enabled.
+- AWD2: ADC1 IN5 / IBUS, initialization IT disabled; after ADC zero ready,
+  `ConvProtection_SetIbusLimitMa()` updates the 8-bit-resolution upper
+  threshold from the 0.2134V/A sensor gain and measured zero baseline.
+  PD uses the negotiated current; DCin uses 7000mA; absent source disables it.
+  This is an input-current allowance, not evidence of accurately measurable
+  current if the ADC would saturate before reaching the allowance.
+- AWD3: ADC1 IN2 / NTC_SYS, 90C maps to raw 627 in the 5C LUT.
+  Because G071 AWD3 ignores the bottom four ADC bits, a conservative
+  low threshold of 640 detects at raw <=639, slightly below 90C.
+- AWD IRQ handled BEFORE HAL callback from `ADC1_COMP_IRQHandler()`;
+  it first latches a reason, disarms asserted watchdog interrupt sources,
+  gates PWM_EN/MOE, then leaves ADC scanning intact.
+
+## COMP window mode and DAC
+
+CT_OCP 0.1V/A gives ±1.2V around measured VBIAS at ±12A:
+`delta=round(1200mV*4095/2500mV)=1966` counts.
+DAC1_CH1 = bias - 1966, DAC1_CH2 = bias +1966.
+This is **independent of TIM1 ARR**; the previous ARR-dependent proposal
+was an incorrect transfer assumption for a fixed analog current gain.
+The 2.5V reference requires VBIAS within approximately 1.2V..1.3V.
+Out-of-range bias must prevent comparator arming, not clip a window and
+silently claim ±12A coverage.

@@ -23,7 +23,12 @@ enum {
     CONV_PROT_VBUS_LOW=1u<<5,
     CONV_PROT_ADC_STALE=1u<<6,
     CONV_PROT_ZERO_SWITCHING=1u<<7,
-    CONV_PROT_IBUS_LIMIT=1u<<8
+    CONV_PROT_IBUS_LIMIT=1u<<8,
+    CONV_PROT_AWD_VBUS=1u<<9,
+    CONV_PROT_AWD_IBUS=1u<<10,
+    CONV_PROT_AWD_SYS=1u<<11,
+    CONV_PROT_COMP_SETUP=1u<<12,
+    CONV_PROT_DAC_RANGE=1u<<13
 };
 typedef struct {
     ConvZeroStatus zero_status;
@@ -41,9 +46,15 @@ uint8_t ConvProtection_ZeroReady(void);
 /* One raw 12-bit ADC count threshold around the auto-calibrated IBUS zero.
  * 0 disables this protection until the analog A/count scaling is measured. */
 void ConvProtection_SetIbusTripDeltaRaw(uint16_t delta_raw);
+/* Start AWD2 after zero calibration; source current allowance may change
+ * after a new PD contract. 0 disables AWD2 while no input source is valid. */
+void ConvProtection_SetIbusLimitMa(uint32_t current_ma);
+/* Handle ADC1 AWD1/2/3 flags before the regular HAL ADC IRQ dispatcher. */
+void ConvProtection_AnalogWatchdogISR(void);
 uint32_t ConvProtection_FaultMask(void);
-/* DAC codes are PROPOSALS only until analog transfer and COMP polarity are
- * verified. The driver does not arm DAC/COMP or modify TIM1 break routing. */
+/* COMP1/2 window uses 0.1V/A centered on measured VBIAS, ±12A.
+ * DAC1 CH1 is lower, CH2 upper. Hardware starts only after valid zero
+ * calibration and voltage bounds; TIM1 MOE stays prohibited. */
 void ConvProtection_SetDacProfile(uint16_t ch1_delta_at_arr853,
                                   uint16_t ch2_delta_at_arr853,
                                   uint8_t calibrated);

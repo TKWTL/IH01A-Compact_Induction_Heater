@@ -12,6 +12,9 @@
 #include "heater_control.h"
 #include "main.h"
 #include "tim.h"
+#include "adc.h"
+#include "dac.h"
+#include "comp.h"
 #include "framework/beep.h"
 #include "framework/pm_api.h"
 #include "display/dispDriver.h"
@@ -24,6 +27,9 @@ static volatile uint32_t s_fast_faults;
 static volatile uint8_t s_zero_status;
 static volatile uint16_t s_zero_samples,s_ct_zero,s_ibus_zero;
 static volatile uint16_t s_ibus_trip_delta_raw;
+static uint32_t s_ibus_limit_ma;
+static uint16_t s_awd2_high;
+static uint8_t s_comp_armed;
 static uint32_t s_ct_sum,s_ibus_sum;
 static uint16_t s_settle,s_ct_min,s_ct_max,s_ib_min,s_ib_max;
 static uint16_t s_dac1,s_dac2,s_low,s_high;
@@ -36,11 +42,17 @@ void ConvProtection_Init(void)
     s_zero_status=CONV_ZERO_WAIT;
     s_zero_samples=s_ct_zero=s_ibus_zero=0u;
     s_ibus_trip_delta_raw=0u;
+    s_ibus_limit_ma=0u;
+    s_awd2_high=4095u;
+    s_comp_armed=0u;
     s_settle=0u;s_ct_sum=s_ibus_sum=0u;
     s_ct_min=s_ib_min=4095u;
     s_ct_max=s_ib_max=0u;
-    s_dac1=s_dac2=s_low=s_high=0u;
-    s_profile_ready=s_notified=0u;
+    s_dac1=s_dac2=0u;
+    /* 12A * 0.1V/A = 1.2V => round(1.2*4095/2.5)=1966 counts. */
+    s_low=s_high=1966u;
+    s_profile_ready=1u;
+    s_notified=0u;
     s_faults=s_fault_at=0u;
 }
 static uint16_t clamp12(int32_t x)
@@ -53,21 +65,72 @@ void ConvProtection_CalcDacWindow(uint16_t vbias_raw,uint16_t arr,
                                   uint16_t low_delta,uint16_t high_delta,
                                   uint16_t *dac1,uint16_t *dac2)
 {
-    /* The ARR dependency is explicitly PARAMETRIC: these deltas are
-     * externally characterized DAC counts at TIM1 ARR=853. This is not a
-     * derivation of the current threshold without a hardware transfer
-     * function. Never write results to DAC without hardware validation. */
-    uint32_t span=(uint32_t)arr+1u;
-    uint32_t lo=(span*low_delta+427u)/854u;
-    uint32_t hi=(span*high_delta+427u)/854u;
-    if(dac1)*dac1=clamp12((int32_t)vbias_raw-(int32_t)lo);
-    if(dac2)*dac2=clamp12((int32_t)vbias_raw+(int32_t)hi);
+    /* Physical CT_OCP amplifier is 0.1 V/A, independent of switching
+     * frequency. ARR is retained only for source/API compatibility. */
+    (void)arr;
+    if(dac1)*dac1=clamp12((int32_t)vbias_raw-(int32_t)low_delta);
+    if(dac2)*dac2=clamp12((int32_t)vbias_raw+(int32_t)high_delta);
 }
 void ConvProtection_SetDacProfile(uint16_t lo,uint16_t hi,uint8_t calibrated)
 {
     s_low=lo;s_high=hi;
     s_profile_ready=(uint8_t)(calibrated && lo && hi);
 }
+/* Called from ADC1_COMP_IRQHandler before HAL_ADC_IRQHandler.
+ * Latch the exact AWD source and make the interrupt one-shot; otherwise a
+ * static overtemperature value would retrigger at the ADC scan rate. */
+void ConvProtection_AnalogWatchdogISR(void)
+{
+#ifndef CONV_PROTECTION_HOST_TEST
+    uint32_t pending=ADC1->ISR & ADC1->IER &
+        (ADC_ISR_AWD1 | ADC_ISR_AWD2 | ADC_ISR_AWD3);
+    if(!pending)return;
+    if(pending&ADC_ISR_AWD1)s_fast_faults|=CONV_PROT_AWD_VBUS;
+    if(pending&ADC_ISR_AWD2)s_fast_faults|=CONV_PROT_AWD_IBUS;
+    if(pending&ADC_ISR_AWD3)s_fast_faults|=CONV_PROT_AWD_SYS;
+    /* Disarm the asserted IRQ sources and clear their write-one flags;
+     * the ADC scan and DMA remain active for diagnosis. */
+    ADC1->IER &= ~pending;
+    ADC1->ISR = pending;
+    ConvController_TripISR();
+#endif
+}
+static uint16_t ibus_max_adc(uint16_t zero,uint32_t ma)
+{
+    /* 0.2134 V/A => ADC delta = I_mA * 2134 * 4095 / 25,000,000.
+     * 64-bit multiply avoids overflow for arbitrary caller input. */
+    uint64_t raw=(uint64_t)ma*2134u*4095u+12500000u;
+    uint32_t delta=(uint32_t)(raw/25000000u);
+    uint32_t maximum=(uint32_t)zero+delta;
+    return maximum>4095u?4095u:(uint16_t)maximum;
+}
+void ConvProtection_SetIbusLimitMa(uint32_t current_ma)
+{
+#ifndef CONV_PROTECTION_HOST_TEST
+    uint16_t target=4095u;
+    if(ConvProtection_ZeroReady() && current_ma)
+        target=ibus_max_adc(s_ibus_zero,current_ma);
+    /* AWD2 hardware only compares ADC[11:4]; threshold truncated to 8b.
+     * For positive IBUS, use an upper watchdog, lower threshold 0.
+     * The independent raw rail monitor catches saturation if the requested
+     * current is beyond the ADC measurement range. */
+    target=(uint16_t)((target>>4)<<4);
+    if(current_ma==s_ibus_limit_ma && target==s_awd2_high)return;
+    s_ibus_limit_ma=current_ma;
+    s_awd2_high=target;
+    ADC1->IER &= ~ADC_IER_AWD2IE;
+    MODIFY_REG(ADC1->AWD2TR,ADC_AWD2TR_HT2|ADC_AWD2TR_LT2,
+               ((uint32_t)target<<ADC_AWD2TR_HT2_Pos));
+    ADC1->ISR=ADC_ISR_AWD2;
+    if(ConvProtection_ZeroReady() && current_ma && !s_fast_faults &&
+       !s_faults)
+        ADC1->IER |= ADC_IER_AWD2IE;
+#else
+    s_ibus_limit_ma=current_ma;
+    s_awd2_high=ibus_max_adc(s_ibus_zero,current_ma);
+#endif
+}
+
 PROT_RAMFUNC void ConvProtection_FrameISR(const volatile uint16_t *frame)
 {
     uint16_t ct,ibus;

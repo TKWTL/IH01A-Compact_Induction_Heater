@@ -139,6 +139,11 @@ THRD_DECLARE(thread_heater)
             uint8_t valid=PD_Input_GetActiveContract(&contract);
             observation=Heater_BudgetClassify(pd.bus_mv,pd.mode,valid,
                 contract.voltage_mv,contract.current_ma);
+            /* AWD2 tracks PD negotiated current or DCin's 7A policy.
+             * It stays disabled until the raw IBUS zero has settled. */
+            ConvProtection_SetIbusLimitMa(
+                observation.input==HEATER_INPUT_PD ? contract.current_ma :
+                observation.input==HEATER_INPUT_DCIN ? 7000u : 0u);
         }
         TempService_GetSnapshot(&temperature);
         ConvADC_CopySnapshot(&adc);

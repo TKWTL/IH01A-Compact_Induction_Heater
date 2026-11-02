@@ -159,7 +159,8 @@ void MX_ADC1_Init(void)
   */
   AnalogWDGConfig.WatchdogNumber = ADC_ANALOGWATCHDOG_2;
   AnalogWDGConfig.Channel = ADC_CHANNEL_5;
-  AnalogWDGConfig.HighThreshold = 4000;
+  AnalogWDGConfig.ITMode = DISABLE; /* until IBUS auto-zero is available */
+  AnalogWDGConfig.HighThreshold = 4095;
   if (HAL_ADC_AnalogWDGConfig(&hadc1, &AnalogWDGConfig) != HAL_OK)
   {
     Error_Handler();
@@ -169,8 +170,11 @@ void MX_ADC1_Init(void)
   */
   AnalogWDGConfig.WatchdogNumber = ADC_ANALOGWATCHDOG_3;
   AnalogWDGConfig.Channel = ADC_CHANNEL_2;
+  AnalogWDGConfig.ITMode = ENABLE;
   AnalogWDGConfig.HighThreshold = 4095;
-  AnalogWDGConfig.LowThreshold = 212;
+  /* NTC_SYS 90C -> 627 raw; AWD3 resolves top 8 bits only.
+     640 (0x280) trips conservatively at <=639 raw. */
+  AnalogWDGConfig.LowThreshold = 640;
   if (HAL_ADC_AnalogWDGConfig(&hadc1, &AnalogWDGConfig) != HAL_OK)
   {
     Error_Handler();
