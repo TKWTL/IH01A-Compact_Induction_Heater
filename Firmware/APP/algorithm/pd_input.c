@@ -50,6 +50,7 @@ static uint8_t s_active_valid,s_candidate_valid;
 static uint8_t s_req_enabled=1u;   /* retained across unplug; not in Flash */
 static uint8_t s_max_fixed_v=31u;  /* permits 28V EPR by default */
 static uint8_t s_policy_dirty,s_policy_tries;
+static uint32_t s_candidate_ms;   /* when the pending RDO candidate was built */
 static uint32_t s_policy_try_ms;
 /* Setters affect requested power, not physical CC. Never call a PE send
  * directly from an arbitrary caller (see EPR AMS context incident). */
@@ -457,7 +458,7 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
             s_state.requested_ma=ma;
             s_candidate.voltage_mv=mv;s_candidate.current_ma=ma;
             s_candidate.position=pos;s_candidate.epr=1u;
-            s_candidate_valid=1u;s_active_valid=0u;
+            s_candidate_valid=1u;s_active_valid=0u;s_candidate_ms=HAL_GetTick();
             PD_Diag_Record(PD_DIAG_EPR_RDO,mv,nrdo);
             PD_Diag_Record(PD_DIAG_EPR_COPYPDO,pos,p);
             *rdo=nrdo;
@@ -510,7 +511,7 @@ uint8_t PD_Input_Evaluate(uint32_t *rdo,uint32_t *type)
     s_state.requested_ma=ma;
     s_candidate.voltage_mv=mv;s_candidate.current_ma=ma;
     s_candidate.position=pos;s_candidate.epr=0u;
-    s_candidate_valid=1u;s_active_valid=0u;
+    s_candidate_valid=1u;s_active_valid=0u;s_candidate_ms=HAL_GetTick();
     s_manual=0u;
     PD_Diag_Record(PD_DIAG_RDO,mv,s_selected_rdo);
     *rdo=s_selected_rdo;
@@ -521,6 +522,19 @@ void PD_Input_EPR_Poll(void)
 {
 #if IH01A_EPR_28V5A_HARDWARE_APPROVED
     if(!s_state.attached)return;
+    /* A pending RDO candidate must not stay pending for ever: the policy engine
+     * may accept the Request and then never produce the explicit-contract
+     * notification this design waits for (the same context trap that swallows
+     * app-originated AMS requests). While a candidate is pending
+     * PD_Input_GetActiveContract() reports "no power budget" and EPR entry is
+     * blocked, so an unresolved candidate would wedge the heater at 0 W until
+     * the cable is replugged. Drop it after 1.5 s; the next Evaluate or the
+     * next capability set rebuilds it. */
+    if(s_candidate_valid && (uint32_t)(HAL_GetTick()-s_candidate_ms)>1500u)
+    {
+        s_candidate_valid=0u;
+        PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2AEu,(uint32_t)s_candidate.voltage_mv);
+    }
     /* Active policy changes are negotiated by the existing GetSrcCap ->
      * Evaluate -> Request -> contract PE path, never by forging a VBUS level.
      * Bounded retries tolerate a busy PE; on unresolved failure GetActive
@@ -533,6 +547,7 @@ void PD_Input_EPR_Poll(void)
         s_policy_try_ms=HAL_GetTick();
         ++s_policy_tries;
         PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2ACu,(uint32_t)r);
+        if(s_policy_tries==3u)PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2AFu,0u);
     }
     if(s_epr_mode && !s_epr_copy_valid &&
        (uint32_t)(HAL_GetTick()-s_epr_mode_since_ms)>2500u)
