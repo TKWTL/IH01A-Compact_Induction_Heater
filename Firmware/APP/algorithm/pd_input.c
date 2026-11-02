@@ -92,7 +92,18 @@ uint8_t PD_Input_SetMaxFixedVoltage(uint8_t voltage_v)
     if(voltage_v<5u||voltage_v>31u)return 0u;
     if(s_max_fixed_v!=voltage_v)
     {
+        uint8_t lowering=(uint8_t)(voltage_v<s_max_fixed_v);
         s_max_fixed_v=voltage_v;
+        /* Lowering a cap which still admits the confirmed Fixed PDO
+         * needs no AMS; changing the dormant cap while OFF does not
+         * change the requested 5V either. */
+        if(!s_req_enabled)return 1u;
+        if(lowering && s_active_valid &&
+           s_active.voltage_mv<=PD_PolicyMaxMv() && !s_policy_dirty)
+        {
+            if(voltage_v<28u)s_epr_enter_once=1u;
+            return 1u;
+        }
         PD_PolicyChanged();
     }
     return 1u;
@@ -618,7 +629,8 @@ void PD_Input_EPR_Poll(void)
      * later capability set (capture: one attach had eprCap=1 then 0, another
      * the opposite). Ask for one fresh capability set before giving up on
      * auto EPR for this attachment. */
-    if(s_req_enabled && PD_PolicyMaxMv()>=28000u &&
+    if(s_req_enabled && !s_policy_dirty && !s_candidate_valid &&
+       PD_PolicyMaxMv()>=28000u &&
        (s_epr_auto || s_epr_user_requested) && !s_epr_enter_once && !s_epr_mode &&
        s_state.explicit_contract && !PD_SourceIsEPRCapable() && !s_epr_capretry &&
        (uint32_t)(HAL_GetTick()-s_contract_ms)>250u)
@@ -629,7 +641,8 @@ void PD_Input_EPR_Poll(void)
         PD_Diag_Record(PD_DIAG_EPR_ACTION,0x2A9u,0u);
         return;
     }
-    if(!s_req_enabled || PD_PolicyMaxMv()<28000u ||
+    if(!s_req_enabled || s_policy_dirty || s_candidate_valid ||
+       PD_PolicyMaxMv()<28000u ||
        !(s_epr_auto || s_epr_user_requested)||
        s_epr_enter_once||s_epr_mode||!s_state.explicit_contract ||
        !PD_SourceIsEPRCapable() ||

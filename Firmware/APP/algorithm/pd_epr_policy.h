@@ -36,12 +36,9 @@
 #define IH01A_EPR_SINK_PDP_W       140u
 #define IH01A_EPR_SINK_CURRENT_MA  5000u
 
-/* SPR current ceiling. The reference EPR-capable sink baseline opens with a
- * 20 V/5 A EPR-capable Request before EPR_Mode, so the SPR policy now asks
- * for what the Source PDO offers up to 5 A. Safety comes from the Source
- * side: a 3 A (non e-marked) cable makes the Source advertise a 3 A PDO, and
- * the request is clamped to the PDO current, so 5 A can only happen on a
- * 5 A e-marked cable. */
+/* SPR hardware current ceiling. The request follows the Source Fixed PDO
+ * up to 7 A; a 20V/7A capability is handled like any other Fixed object,
+ * with no special identification or extra application approval steps. */
 /* Board power path reviewed for 7 A SPR use. Source Fixed PDO provides the
  * offered current limit (including SW3538's 20V/7A non-standard PDO).
  * Clamp at the hardware ceiling; there is NO hardcoded 20V/7A profile and
