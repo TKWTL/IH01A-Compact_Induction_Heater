@@ -17,6 +17,7 @@
 #include "console_cli.h"
 #include "algorithm/pd_diag.h"
 #include "algorithm/pd_input.h"
+#include "framework/beep.h"
 #include "temp_service.h"
 
 static coro_scheduler_t s_scheduler;
@@ -100,14 +101,25 @@ THRD_DECLARE(thread_input_pm)
     THRD_END;
 }
 
-static const coro_thread_fn_t s_threads[] = {thread_input_pm,thread_ui};
-static coro_pt_t s_states[2];
+THRD_DECLARE(thread_beep)
+{
+    THRD_BEGIN;
+    while(1)
+    {
+        beep_poll(TIME_Millis());
+        THRD_YIELD;
+    }
+    THRD_END;
+}
+static const coro_thread_fn_t s_threads[]={thread_input_pm,thread_ui,thread_beep};
+static coro_pt_t s_states[3];
 
 void APP_Tasks_Init(void)
 {
     Buttons_Init();
     pm_api_init();
-    CoroOS_Init(&s_scheduler,s_threads,s_states,2u);
+    beep_init();
+    CoroOS_Init(&s_scheduler,s_threads,s_states,3u);
 }
 void APP_Tasks_RunOnce(void)
 {

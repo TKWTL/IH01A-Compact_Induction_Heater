@@ -298,11 +298,25 @@ static void Cursor_AnimationParam_Change(ui_t *ui/*, ui_item_t *nowitem*/)
     ui->cursor.targrtWide = ui->nowItem->page.location->parentPage->cursorLastWide;
 }
 
+void UI_Dialog_SetAudio(ui_t *ui,const beep_note_t *sequence)
+{
+    if(!ui)return;
+    ui->dialog.audio=sequence;
+    ui->dialog.audio_queued=0u;
+}
+static void UI_Dialog_QueueAudio(ui_t *ui)
+{
+    if(ui->menuState==UI_ITEM_DRAWING && ui->dialog.audio &&
+       !ui->dialog.audio_queued)
+        ui->dialog.audio_queued=beep_popup(ui->dialog.audio);
+}
 static void Dialog_AnimationParam_Init(ui_t *ui)
 {
     ui->dialog.nowHigh = 0;
     ui->dialog.nowWide = 0;
     ui->dialog.times = 0;
+    ui->dialog.audio=0;
+    ui->dialog.audio_queued=0u;
 }
 
 static void Scrollbar_Init(ui_t *ui)
@@ -354,6 +368,7 @@ static void Draw_Dialog(ui_t *ui, uint16_t x,uint16_t y,uint16_t Now_w,uint16_t 
  */
 uint8_t Dialog_Show(ui_t *ui, int16_t x,int16_t y,int16_t targrtW,int16_t targrtH)
 {
+    UI_Dialog_QueueAudio(ui);
     // 当前处于应用绘制状态时，处理对话框的缩放动画
     if (ui->menuState == UI_ITEM_DRAWING)
     {
@@ -380,6 +395,7 @@ uint8_t Dialog_Show(ui_t *ui, int16_t x,int16_t y,int16_t targrtW,int16_t targrt
 
 uint8_t Notifications(ui_t *ui, int16_t x,int16_t y,int16_t targrtW,int16_t targrtH)
 {
+    UI_Dialog_QueueAudio(ui);
     // 当前处于应用绘制状态时，处理对话框的缩放动画
     if (ui->menuState == UI_ITEM_DRAWING)
     {

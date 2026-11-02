@@ -42,6 +42,7 @@ int easeInOutCirc(int t, int b, int c, int d);
 /* 定点数显示：把“缩放整数 value/10^decimals”写入 buf */
 void UI_FmtScaled(char *buf, size_t size, int32_t value, uint8_t decimals);
 uint8_t Dialog_Show(ui_t *ui, int16_t x,int16_t y,int16_t targrtW,int16_t targrtH);
+void UI_Dialog_SetAudio(ui_t *ui,const beep_note_t *sequence);
 void Draw_Scrollbar(ui_t *ui, uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t r, int step);
 void Create_element(ui_item_t *item, ui_element_t *element);
 void Create_UI(ui_t *ui, ui_item_t *item);

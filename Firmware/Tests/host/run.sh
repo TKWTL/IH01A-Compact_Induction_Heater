@@ -36,3 +36,6 @@ build_run ntc_lut -I APP \
 build_run temp_service -I Tests/host/temp_mock -I APP -I APP/PowerControl \
  APP/PowerControl/temp_service.c APP/algorithm/ntc_lut.c \
  Tests/host/test_temp_service.c
+
+build_run beep -I APP \
+ APP/framework/beep.c Tests/host/test_beep.c

@@ -3946,6 +3946,16 @@
               <FilePath>../APP/framework/system.c</FilePath>
             </File>
             <File>
+              <FileName>beep.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/framework/beep.c</FilePath>
+            </File>
+            <File>
+              <FileName>beep_hw.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/framework/beep_hw.c</FilePath>
+            </File>
+            <File>
               <FileName>time_service.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/framework/time_service.c</FilePath>

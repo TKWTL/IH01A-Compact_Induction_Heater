@@ -273,6 +273,7 @@ typedef struct{
 } ui_cursor_param_t;
 
 // 对话框运动参数
+#include "framework/beep.h"
 typedef struct{
     // 对话框初始宽度
     uint16_t nowWide;
@@ -280,6 +281,8 @@ typedef struct{
     uint16_t nowHigh;
     // 对话框运动时间(次数)
     uint16_t times;
+    const beep_note_t *audio; /* optional queued audio sequence */
+    uint8_t audio_queued;    /* enqueue once per dialog */
 } ui_dialog_param_t;
 
 // 滚动条运动参数（Q10 定点）

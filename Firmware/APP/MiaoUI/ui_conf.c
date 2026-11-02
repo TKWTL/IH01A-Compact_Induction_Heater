@@ -144,7 +144,7 @@ void Create_MenuTree(ui_t *ui)
             System_AddStatisticsItems(&s_stat_sys);
             PowerDashboard_AddItems(&s_stat_sys);
 
-    AddItem("-About", UI_ITEM_WORD, img_user_account, &s_about, &s_root, 0, 0);
+    AddItem("-About", UI_ITEM_WORD, img_toby_fox, &s_about, &s_root, 0, 0);
 }
 
 void MiaoUi_Setup(ui_t *ui) { Create_UI(ui, &s_main); }

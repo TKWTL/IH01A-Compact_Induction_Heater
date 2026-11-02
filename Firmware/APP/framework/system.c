@@ -4,11 +4,29 @@
  */
 #include "framework/system.h"
 #include "framework/time_service.h"
+#include "framework/beep.h"
 #include "main.h"
 #include "core/ui.h"
 #include <stdio.h>
 
 static ui_item_t s_reset_item;
+static ui_item_t s_beep_switch_item,s_beep_demo_item;
+static ui_data_t s_beep_switch_data;
+static ui_element_t s_beep_switch_element;
+static uint8_t s_beep_switch_on=1u;
+static const beep_note_t s_demo_sound[]={
+    {BEEP_ARR_HZ(2700u),100u},{BEEP_REST,60u},{BEEP_E5,100u},BEEP_END
+};
+static void system_beep_changed(ui_t *ui)
+{
+    (void)ui;
+    beep_set_key_enabled(s_beep_switch_on);
+}
+static void system_beep_demo(ui_t *ui)
+{
+    (void)ui;
+    (void)beep_enqueue(s_demo_sound);
+}
 static ui_item_t s_uptime_item;
 static char s_uptime_text[32];
 static uint32_t s_last_seconds = 0xFFFFFFFFu;
@@ -32,6 +50,22 @@ static void System_ResetSelected(ui_t *ui)
 void System_AddSettingsItems(ui_page_t *page)
 {
     if(page == 0) return;
+    s_beep_switch_on=beep_get_key_enabled();
+    s_beep_switch_data.name="Key Sound";
+    s_beep_switch_data.ptr=&s_beep_switch_on;
+    s_beep_switch_data.function=system_beep_changed;
+    s_beep_switch_data.functionType=UI_DATA_FUNCTION_STEP_EXECUTE;
+    s_beep_switch_data.dataType=UI_DATA_SWITCH;
+    s_beep_switch_data.actionType=UI_DATA_ACTION_RW;
+    s_beep_switch_data.min=0;
+    s_beep_switch_data.max=0;
+    s_beep_switch_data.step=0;
+    s_beep_switch_data.decimals=0;
+    s_beep_switch_element.data=&s_beep_switch_data;
+    Create_element(&s_beep_switch_item,&s_beep_switch_element);
+    AddItem(" Key Sound",UI_ITEM_DATA,0,&s_beep_switch_item,page,0,0);
+    AddItem(" Beep Demo",UI_ITEM_ONCE_FUNCTION,0,
+            &s_beep_demo_item,page,0,system_beep_demo);
     /* The caller MUST insert this after all other Settings/System items. */
     AddItem(" System Reset", UI_ITEM_ONCE_FUNCTION, 0,
             &s_reset_item, page, 0, System_ResetSelected);
