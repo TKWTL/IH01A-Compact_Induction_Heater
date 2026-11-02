@@ -11,18 +11,20 @@ static const beep_note_t s_key_sound[] = {
 static const beep_note_t *s_queue[BEEP_QUEUE_CAPACITY];
 static const beep_note_t *s_current;
 static uint32_t s_step_started;
-static uint8_t s_head,s_tail,s_count,s_index,s_key_enabled;
+static uint8_t s_head,s_tail,s_count,s_index,s_key_enabled,s_muted;
 
 void beep_init(void)
 {
     s_head=s_tail=s_count=s_index=0u;
-    s_current=0;s_step_started=0u;s_key_enabled=1u;
+    s_current=0;s_step_started=0u;
+    s_key_enabled=0u; /* Click Beep: default OFF */
+    s_muted=0u;       /* Mute Beep : default OFF */
     beep_hw_init();
     beep_hw_stop();
 }
 uint8_t beep_enqueue(const beep_note_t *sequence)
 {
-    if(!sequence || sequence[0].duration_ms==0u ||
+    if(s_muted || !sequence || sequence[0].duration_ms==0u ||
        s_count>=BEEP_QUEUE_CAPACITY)return 0u;
     s_queue[s_head]=sequence;
     s_head=(uint8_t)((s_head+1u)%BEEP_QUEUE_CAPACITY);
@@ -74,10 +76,19 @@ uint8_t beep_queue_count(void){return s_count;}
 uint8_t beep_note_index(void){return s_index;}
 void beep_set_key_enabled(uint8_t enabled){s_key_enabled=enabled?1u:0u;}
 uint8_t beep_get_key_enabled(void){return s_key_enabled;}
+void beep_set_muted(uint8_t muted)
+{
+    muted=muted?1u:0u;
+    if(s_muted==muted)return;
+    s_muted=muted;
+    if(s_muted)beep_stop();
+}
+uint8_t beep_is_muted(void){return s_muted;}
 void beep_key_click(void)
 {
     /* Don't flood the queue with auto-repeat or delay a popup melody. */
-    if(s_key_enabled && !beep_busy())(void)beep_enqueue(s_key_sound);
+    if(s_key_enabled && !s_muted && !beep_busy())
+        (void)beep_enqueue(s_key_sound);
 }
 uint8_t beep_popup(const beep_note_t *sequence)
 {

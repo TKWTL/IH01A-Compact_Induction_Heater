@@ -88,7 +88,14 @@ THRD_DECLARE(thread_input_pm)
         else
         {
             was_off=0u;
-            if(Buttons_TakePress()) pm_api_refresh_idle();
+            /* One debounced physical press refreshes the PM countdown and
+             * optionally triggers a single click. Auto-repeat generates no
+             * extra sound; the screen-off wake press is deliberately silent. */
+            if(Buttons_TakePress())
+            {
+                pm_api_refresh_idle();
+                beep_key_click();
+            }
             (void)Buttons_TakeWake();
         }
         if((uint32_t)(now-last_poll)>=50u)

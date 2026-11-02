@@ -26,9 +26,13 @@ int main(void)
     beep_poll(1350u);
     assert(s_arr==0u && !beep_busy());
     assert(!beep_enqueue(0));
-    beep_set_key_enabled(0u);beep_key_click();
+    /* Both menu switches default OFF: no click and no global mute. */
+    assert(!beep_get_key_enabled());
+    assert(!beep_is_muted());
+    beep_key_click();
     assert(!beep_busy());
-    beep_set_key_enabled(1u);beep_key_click();
+    beep_set_key_enabled(1u);
+    beep_key_click();
     assert(beep_busy());
     beep_poll(2000u);
     assert(s_arr==BEEP_ARR_HZ(2700u));
@@ -40,6 +44,22 @@ int main(void)
     assert(beep_queue_count()==BEEP_QUEUE_CAPACITY);
     beep_stop();
     assert(!beep_busy() && s_arr==0u);
+    assert(beep_enqueue(melody));
+    beep_poll(3000u);
+    assert(s_arr==BEEP_A4);
+    assert(beep_enqueue(melody));
+    beep_set_muted(1u);
+    assert(beep_is_muted() && s_arr==0u && !beep_busy());
+    assert(!beep_enqueue(melody));
+    beep_key_click();
+    assert(!beep_busy());
+    beep_set_muted(0u);  /* Play Music's unmute operation */
+    assert(!beep_is_muted());
+    assert(beep_enqueue(melody));
+    beep_poll(3200u);
+    assert(s_arr==BEEP_A4);
+    beep_stop();
+    assert(beep_get_key_enabled()); /* mute does not change Click Beep */
     puts("beep: PASS");
     return 0;
 }

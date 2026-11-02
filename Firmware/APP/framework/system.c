@@ -10,22 +10,60 @@
 #include <stdio.h>
 
 static ui_item_t s_reset_item;
-static ui_item_t s_beep_switch_item,s_beep_demo_item;
-static ui_data_t s_beep_switch_data;
-static ui_element_t s_beep_switch_element;
-static uint8_t s_beep_switch_on=1u;
-static const beep_note_t s_demo_sound[]={
-    {BEEP_ARR_HZ(2700u),100u},{BEEP_REST,60u},{BEEP_E5,100u},BEEP_END
+static ui_item_t s_click_item,s_mute_item,s_music_item;
+static ui_data_t s_click_data,s_mute_data;
+static ui_element_t s_click_element,s_mute_element;
+static uint8_t s_click_on,s_mute_on;
+
+/* Johann Pachelbel: Canon in D, public-domain first violin entry, bars 3-4.
+ * Melodic opening: F#5 E5 D5 C#5 | B4 A4 B4 C#5 (short ringtone tempo).
+ * All pitch calculations are compile-time ARR constants. */
+static const beep_note_t s_music[]={
+    {BEEP_FS5,320u},{BEEP_E5,320u},{BEEP_D5,320u},{BEEP_CS5,320u},
+    {BEEP_B4,320u},{BEEP_A4,320u},{BEEP_B4,320u},{BEEP_CS5,320u},
+    BEEP_END
 };
-static void system_beep_changed(ui_t *ui)
+
+static void system_click_changed(ui_t *ui)
 {
     (void)ui;
-    beep_set_key_enabled(s_beep_switch_on);
+    beep_set_key_enabled(s_click_on);
 }
-static void system_beep_demo(ui_t *ui)
+
+static void system_mute_changed(ui_t *ui)
 {
     (void)ui;
-    (void)beep_enqueue(s_demo_sound);
+    beep_set_muted(s_mute_on);
+}
+
+static void system_play_music(ui_t *ui)
+{
+    (void)ui;
+    /* This user-triggered easter egg overrides mute, not Click Beep.
+     * Update the switch's storage too, so the UI reflects the new state. */
+    s_mute_on=0u;
+    beep_set_muted(0u);
+    (void)beep_enqueue(s_music);
+}
+
+static void system_add_beep_switch(ui_page_t *page,
+                                   ui_item_t *item,ui_data_t *data,
+                                   ui_element_t *element,uint8_t *flag,
+                                   const char *name,ui_item_function callback)
+{
+    data->name=name;
+    data->ptr=flag;
+    data->function=callback;
+    data->functionType=UI_DATA_FUNCTION_STEP_EXECUTE;
+    data->dataType=UI_DATA_SWITCH;
+    data->actionType=UI_DATA_ACTION_RW;
+    data->min=0;  /* independent toggle, not a radio group */
+    data->max=0;
+    data->step=0;
+    data->decimals=0;
+    element->data=data;
+    Create_element(item,element);
+    AddItem(name,UI_ITEM_DATA,0,item,page,0,0);
 }
 static ui_item_t s_uptime_item;
 static char s_uptime_text[32];
@@ -50,22 +88,16 @@ static void System_ResetSelected(ui_t *ui)
 void System_AddSettingsItems(ui_page_t *page)
 {
     if(page == 0) return;
-    s_beep_switch_on=beep_get_key_enabled();
-    s_beep_switch_data.name="Key Sound";
-    s_beep_switch_data.ptr=&s_beep_switch_on;
-    s_beep_switch_data.function=system_beep_changed;
-    s_beep_switch_data.functionType=UI_DATA_FUNCTION_STEP_EXECUTE;
-    s_beep_switch_data.dataType=UI_DATA_SWITCH;
-    s_beep_switch_data.actionType=UI_DATA_ACTION_RW;
-    s_beep_switch_data.min=0;
-    s_beep_switch_data.max=0;
-    s_beep_switch_data.step=0;
-    s_beep_switch_data.decimals=0;
-    s_beep_switch_element.data=&s_beep_switch_data;
-    Create_element(&s_beep_switch_item,&s_beep_switch_element);
-    AddItem(" Key Sound",UI_ITEM_DATA,0,&s_beep_switch_item,page,0,0);
-    AddItem(" Beep Demo",UI_ITEM_ONCE_FUNCTION,0,
-            &s_beep_demo_item,page,0,system_beep_demo);
+    s_click_on=beep_get_key_enabled();
+    s_mute_on=beep_is_muted();
+    system_add_beep_switch(page,&s_click_item,&s_click_data,
+                           &s_click_element,&s_click_on,
+                           " Click Beep",system_click_changed);
+    system_add_beep_switch(page,&s_mute_item,&s_mute_data,
+                           &s_mute_element,&s_mute_on,
+                           " Mute Beep",system_mute_changed);
+    AddItem(" Play Music",UI_ITEM_ONCE_FUNCTION,0,
+            &s_music_item,page,0,system_play_music);
     /* The caller MUST insert this after all other Settings/System items. */
     AddItem(" System Reset", UI_ITEM_ONCE_FUNCTION, 0,
             &s_reset_item, page, 0, System_ResetSelected);

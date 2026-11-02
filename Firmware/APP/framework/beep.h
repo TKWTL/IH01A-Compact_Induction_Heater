@@ -59,6 +59,10 @@ uint8_t beep_queue_count(void);
 uint8_t beep_note_index(void);        /* 0-based index of current note */
 void beep_set_key_enabled(uint8_t enabled);
 uint8_t beep_get_key_enabled(void);
+/* Independent global mute. Enabling immediately stops output and clears
+ * queued audio; callers can unmute without changing the Click Beep setting. */
+void beep_set_muted(uint8_t muted);
+uint8_t beep_is_muted(void);
 void beep_key_click(void);            /* opt-in/out 100ms at ~2.7kHz */
 uint8_t beep_popup(const beep_note_t *sequence);
 
