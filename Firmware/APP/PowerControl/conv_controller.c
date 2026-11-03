@@ -9,6 +9,7 @@
 #include "conv_protection.h"
 #include "heater_control.h"
 #include "algorithm/pd_input.h"
+#include "framework/pm_api.h"
 #include "main.h"
 #include "tim.h"
 #define IH_RAMFUNC __attribute__((section(".ih_ramfunc"), used, noinline))
@@ -72,9 +73,10 @@ uint32_t ConvController_BenchElapsedSeconds(uint32_t now_ms)
 }
 void ConvController_BenchPowerOff(void)
 {
-    /* Keep TIM1 CH1/CH3 logic PWM running for oscilloscope capture. */
+    /* PC6 is always switched off FIRST; timer logic PWM may continue. */
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
     __DSB();
+    pm_api_set_sleep_block(PM_BLOCK_HEATER,0u);
 }
 void ConvController_SetPhaseDegrees(uint16_t angle_deg)
 {
@@ -103,6 +105,49 @@ void ConvController_SetPhaseDegrees(uint16_t angle_deg)
 uint16_t ConvController_GetPhaseDegrees(void)
 {
     return s_phase_deg;
+}
+uint16_t ConvController_GetFrequencyKhz(void)
+{
+    return ConvPhase_KHzFromArr((uint16_t)TIM1->ARR);
+}
+uint8_t ConvController_SetFrequencyKhz(uint16_t requested_khz)
+{
+    ConvPhaseConfig phase;
+    HeaterSnapshot hs;
+    uint16_t next_arr;
+    uint8_t was_running;
+    /* Keep the deliberate test range above nominal 150kHz resonance. */
+    if(!ConvPhase_ArrFromKHz(requested_khz,&next_arr))return 0u;
+    if(TIM1->ARR==next_arr)return 1u;
+    Heater_GetSnapshot(&hs);
+    /* Frequency changes are NOT glitch-free with active bridge switches.
+     * Immediately disable FD2204, cancel the RUN request so the 100ms
+     * supervisor cannot rearm it, and only then touch ARR/CCR preload.
+     * The user must explicitly turn PC6 back on after checking frequency. */
+    ConvController_BenchPowerOff();
+    if(hs.state==HEATER_RUN_REQUESTED)Heater_Stop();
+    was_running=(uint8_t)((TIM1->CR1&TIM_CR1_CEN)!=0u);
+    TIM1->CR1 &= ~TIM_CR1_CEN;
+    if(!ConvPhase_Calculate(next_arr,hs.target_phase_deg,&phase))return 0u;
+    TIM1->CR1 |= TIM_CR1_UDIS;
+    TIM1->CCMR1 |= TIM_CCMR1_OC1PE;
+    TIM1->CCMR2 |= TIM_CCMR2_OC3PE | TIM_CCMR2_OC4PE;
+    TIM1->ARR=phase.arr;
+    TIM1->CCR1=phase.ccr1;
+    TIM1->CCR3=phase.ccr3;
+    TIM1->CCR4=phase.ccr4;
+    TIM1->CR1 &= ~TIM_CR1_UDIS;
+    TIM1->EGR=TIM_EGR_UG;
+    TIM1->CNT=0u;
+    s_phase_deg=phase.angle_deg;
+    s_phase_arr=phase.arr;
+    /* Last CCR2 may belong to the former clock period; don't interpret
+     * it using the newly programmed ARR. No DMA and no CC2 interrupt. */
+    ConvZcd_Invalidate();
+    TIM1->SR=(uint32_t)~(TIM_SR_CC2IF|TIM_SR_CC2OF);
+    if(was_running)TIM1->CR1 |= TIM_CR1_CEN;
+    /* Never clear Break BIF or automatically turn PC6 back on here. */
+    return 1u;
 }
 uint8_t ConvController_LogicPwmRunning(void)
 {
@@ -232,6 +277,7 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
                                        observation)==CONV_BENCH_OK);
     if(ConvController_OutputEnabled())
     {
+        pm_api_set_sleep_block(PM_BLOCK_HEATER,1u);
         /* No runtime budget: the run continues until the gate fails (user
          * STOP, heater state change, source/temperature/protection problem). */
         if(!allow)
@@ -268,6 +314,8 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
     }
     s_bench_block=CONV_BENCH_OK;
     s_bench_started_ms=now_ms;
+    pm_api_set_sleep_block(PM_BLOCK_HEATER,1u);
+    pm_api_refresh_idle();
 #else
     (void)now_ms;
     (void)observation;

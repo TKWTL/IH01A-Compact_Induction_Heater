@@ -22,6 +22,8 @@ void pm_api_poll(void);                          /* thread_pm: advance the state
 void pm_api_refresh_idle(void);                  /* activity: restart the idle countdown */
 void pm_api_force_sleep(void);                   /* manual sleep: enter UI_OFF now */
 void pm_api_set_sleep_timeout(int timeout_sec);  /* 0 = No Auto Sleep, >0 = seconds */
+/* Heater power stage PC6 HIGH: prohibit UI_OFF/manual sleep until stopped. */
+#define PM_BLOCK_HEATER (1u<<0)
 void pm_api_set_sleep_block(uint8_t mask, uint8_t enable);
 uint8_t pm_api_get_block_mask(void);
 uint8_t pm_api_ui_should_block(void);            /* 1 = thread_ui must stop drawing */

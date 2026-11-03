@@ -59,6 +59,9 @@ void pm_api_refresh_idle(void)
 void pm_api_force_sleep(void)
 {
     pm_api_init();
+    /* A long-press on the root menu cannot blank the screen while
+     * the heater driver is energized. Other sleep settings are unchanged. */
+    if((s_pm_block_mask & PM_BLOCK_HEATER)!=0u)return;
 
     /* Drop a refresh queued in the same pass (key/menu edge) - otherwise the
      * state machine would return to RUN immediately. */

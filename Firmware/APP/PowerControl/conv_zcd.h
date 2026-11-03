@@ -24,6 +24,7 @@ uint8_t ConvZcd_Calculate(uint16_t arr,uint16_t phase_deg,
                            uint16_t ccr2,ConvZcdSnapshot *out);
 void ConvZcd_Init(void);
 void ConvZcd_StartCapture(void);
+void ConvZcd_Invalidate(void); /* discard CCR2 from old ARR/phase */
 void ConvZcd_Poll(uint32_t now_ms);
 void ConvZcd_GetSnapshot(ConvZcdSnapshot *out);
 #endif

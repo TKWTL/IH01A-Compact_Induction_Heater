@@ -29,6 +29,11 @@ uint8_t ConvController_OutputPinIsOutput(void);
  * This must not be conflated with ConvController_TryEnableOutput(). */
 void ConvController_SetPhaseDegrees(uint16_t phase_deg);
 uint16_t ConvController_GetPhaseDegrees(void);
+/* 180..300kHz at 10kHz steps, safe reconfiguration:
+ * force PC6 low, cancel active RUN, stop counter for ARR/CCR update,
+ * restart logic PWM but NEVER automatically re-enable FD2204. */
+uint8_t ConvController_SetFrequencyKhz(uint16_t requested_khz);
+uint16_t ConvController_GetFrequencyKhz(void);
 uint8_t ConvController_StartLogicPwm(void);
 uint8_t ConvController_LogicPwmRunning(void);
 /* 12V low-power bench experiment: gated PC6, any phase, no time budget.

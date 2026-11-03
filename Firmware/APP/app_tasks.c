@@ -23,6 +23,7 @@
 #include "temp_service.h"
 #include "conv_adc.h"
 #include "conv_controller.h"
+#include "conv_zcd.h"
 #include "conv_protection.h"
 #include "PowerControl/heater_control.h"
 #include "PowerControl/heater_budget.h"
@@ -169,6 +170,7 @@ THRD_DECLARE(thread_heater)
             /* Explicit RUN, validated 12V/3A source, 10..20deg, <=10s.
              * Stop always pulls PC6 LOW, never auto-restart on later PD. */
             ConvController_BenchRunPoll(TIME_Millis(),&observation);
+            ConvZcd_Poll(TIME_Millis()); /* no UI-page dependency */
         }
         THRD_DELAY(100u);
     }
@@ -191,7 +193,10 @@ THRD_DECLARE(thread_idle)
             last_pm_ms=now;
             pm_api_poll();
         }
-        if(__get_PRIMASK()==0u &&
+        /* While FD2204 is active, avoid even idle WFI; the PM block
+         * simultaneously keeps the UI out of UI_OFF. */
+        if(!ConvController_OutputEnabled() &&
+           __get_PRIMASK()==0u &&
            (SysTick->CTRL&SysTick_CTRL_TICKINT_Msk)!=0u)
         {
             __DSB();

@@ -57,6 +57,11 @@ void ConvZcd_StartCapture(void)
 #endif
     s_capture_started=1u;
 }
+void ConvZcd_Invalidate(void)
+{
+    s_result.valid=0u;
+    s_result.last_ms=0u;
+}
 void ConvZcd_Poll(uint32_t now_ms)
 {
 #ifndef CONV_ZCD_HOST_TEST
