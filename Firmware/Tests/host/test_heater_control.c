@@ -50,19 +50,14 @@ int main(void)
     Heater_GetSnapshot(&s);
     assert(s.state==HEATER_FAULT && s.fault_mask==1u);
     Heater_Stop(); /* fault must remain latched */
-    Heater_ScheduleMinutes(1u,100u);
     Heater_GetSnapshot(&s);
     assert(s.state==HEATER_FAULT);
     Heater_Init();
     assert(Heater_GetProposedTargetMw()==0u);
-    Heater_ScheduleMinutes(1u,100u);
-    Heater_Poll(101u,&o);
-    Heater_GetSnapshot(&s);
-    assert(s.state==HEATER_WAIT_START && s.requested_power_mw==0u);
-    Heater_Poll(60100u,&o);
-    Heater_GetSnapshot(&s);
-    assert(s.state==HEATER_WAIT_CONFIRM && Heater_GetIsrTargetMw()==0u);
+    /* No reservation / countdown start: RUN enters RUN_REQUESTED at once. */
     Heater_StartConfirmed(60100u);
+    Heater_GetSnapshot(&s);
+    assert(s.state==HEATER_RUN_REQUESTED);
     o.temperature_updated_ms=60100u;
     Heater_SetOffMinutes(2u,60100u);
     Heater_Poll(60200u,&o);
@@ -94,13 +89,17 @@ int main(void)
     Heater_GetSnapshot(&s);
     assert(s.state==HEATER_OFF && s.requested_power_mw==0u);
     assert(Heater_GetProposedTargetMw()==0u);
-    Heater_ScheduleMinutes(1u,0xffffff00u);
+    /* OFF countdown must survive 32-bit tick rollover. */
+    Heater_Stop();
+    Heater_SetOffMinutes(1u,0xffffff00u);
+    Heater_StartConfirmed(0xffffff00u);
+    o.temperature_updated_ms=0xffff0010u;
     Heater_Poll(0xffff0010u,&o);
     Heater_GetSnapshot(&s);
-    assert(s.state==HEATER_WAIT_START);
+    assert(s.state==HEATER_RUN_REQUESTED && s.off_remaining_s>0u);
     Heater_Poll(0xffffff00u+60000u,&o);
     Heater_GetSnapshot(&s);
-    assert(s.state==HEATER_WAIT_CONFIRM); /* rollover-safe */
+    assert(s.state==HEATER_OFF); /* rollover-safe auto stop */
     Heater_Stop();
     Heater_StartConfirmed(200000u);
     o.temperature_updated_ms=0u;

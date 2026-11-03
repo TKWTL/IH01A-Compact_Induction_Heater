@@ -1,5 +1,5 @@
 /* G071: TIM6 ADC/DMA ISR independent of TIM1 PWM and CH2 input capture.
- * Only the explicit <=12V, <=3A, <=20deg, <=10s manual bench gate may
+ * Only the explicit <=12V, <=3A, <=10s manual bench gate may
  * enable FD2204 PC6. Production heater controller remains uncommissioned.
  */
 #include "conv_controller.h"
@@ -14,10 +14,9 @@
 #define IH_RAMFUNC __attribute__((section(".ih_ramfunc"), used, noinline))
 /* Explicit commissioning gate; no UI command may override this. */
 #define IH_POWER_STAGE_COMMISSIONED 0u
-/* Explicit narrow gate, ONLY for 12V low-power, manual 10..20deg and 10s.
+/* Explicit narrow gate, ONLY for 12V low-power, any manual phase and 10s.
  * Normal heater/power controller remains uncommissioned. */
 #define IH_LOW_POWER_BENCH_ENABLE 1u
-#define IH_BENCH_MAX_ANGLE_DEG 20u
 #define IH_BENCH_MAX_RUNTIME_MS 10000u
 static volatile ConvState s_state;
 static volatile uint32_t s_errors;
@@ -85,12 +84,9 @@ void ConvController_SetPhaseDegrees(uint16_t angle_deg)
     ConvPhaseConfig phase;
     uint16_t arr=(uint16_t)TIM1->ARR;
     if(!ConvPhase_Calculate(arr,angle_deg,&phase))return;
-    if(ConvController_OutputEnabled() &&
-       (phase.angle_deg==0u || phase.angle_deg>IH_BENCH_MAX_ANGLE_DEG))
-    {
-        ConvController_BenchPowerOff();
-        Heater_Stop(); /* no automatic restart if angle returns to 10deg */
-    }
+    /* The phase angle is free 0..180 deg and no longer stops a running bench:
+     * it is a scope/observability setting, not a power request. Stopping stays
+     * with the RUN gate, the 10 s budget and the protection hardware. */
     if(s_phase_arr==arr && s_phase_deg==phase.angle_deg)return;
     /* Enable compare preload BEFORE writing CH3/CH4. UDIS prevents
      * an intervening update event from loading a mixed phase pair.
@@ -205,8 +201,8 @@ static uint8_t bench_block_reason(const HeaterSnapshot *h,
 {
     if(o==0)                              return CONV_BENCH_SOURCE;
     if(h->mode!=HEATER_MODE_POWER)        return CONV_BENCH_MODE;
-    if(h->target_phase_deg<10u ||
-       h->target_phase_deg>IH_BENCH_MAX_ANGLE_DEG) return CONV_BENCH_ANGLE;
+    /* Any 0..180 deg phase is allowed: the angle is a manual scope setting,
+     * not a watt request, so it no longer gates RUN. */
     if(ConvController_GetPhaseDegrees()!=h->target_phase_deg)
                                           return CONV_BENCH_PHASE;
     if(!valid_pd)                         return CONV_BENCH_NOPD;

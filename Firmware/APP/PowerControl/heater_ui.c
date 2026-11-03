@@ -13,7 +13,7 @@
 #include "main.h"
 #include <stdio.h>
 
-enum {EDIT_MODE=0u,EDIT_TARGET,EDIT_OFF,EDIT_ON,EDIT_RUN,EDIT_COUNT};
+enum {EDIT_MODE=0u,EDIT_TARGET,EDIT_OFF,EDIT_RUN,EDIT_COUNT};
 /* Power bench default: L/R edits phase immediately on Main entry. */
 static uint8_t s_edit_field=EDIT_TARGET;
 
@@ -21,8 +21,6 @@ static const char *state_name(HeaterState s)
 {
     switch(s)
     {
-    case HEATER_WAIT_START:return "WAIT";
-    case HEATER_WAIT_CONFIRM:return "CFM";
     case HEATER_RUN_REQUESTED:return "REQ";
     case HEATER_FAULT:return "FAULT";
     default:return "STOP";
@@ -31,7 +29,7 @@ static const char *state_name(HeaterState s)
 static const char *field_name(uint8_t field)
 {
     static const char *const names[EDIT_COUNT]={
-        "MODE","TARGET","OFF","ON","RUN"
+        "MODE","TARGET","OFF","RUN"
     };
     return names[field<EDIT_COUNT?field:0u];
 }
@@ -42,7 +40,6 @@ static const char *bench_block_name(uint8_t why)
     switch(why)
     {
     case CONV_BENCH_MODE:  return "MOD";
-    case CONV_BENCH_ANGLE: return "ANG";
     case CONV_BENCH_PHASE: return "APP";
     case CONV_BENCH_NOPD:  return "NOPD";
     case CONV_BENCH_VOLT:  return "12V";
@@ -98,16 +95,6 @@ static void edit_value(uint8_t field,UI_ACTION action,uint32_t now)
             if(minutes<0)minutes=0;
             if(minutes>240)minutes=240;
             Heater_SetOffMinutes((uint16_t)minutes,now);
-        }
-        break;
-    case EDIT_ON:
-        {
-            int32_t minutes=(int32_t)s.on_minutes+(up?5:-5);
-            if(minutes<0)minutes=0;
-            if(minutes>1440)minutes=1440;
-            /* Changing schedule during RUN must never leave PC6 high. */
-            ConvController_BenchPowerOff();
-            Heater_ScheduleMinutes((uint16_t)minutes,now);
         }
         break;
     case EDIT_RUN:
@@ -189,20 +176,14 @@ void Heater_UI_Page(ui_t *ui)
             (void)snprintf(line,sizeof(line),"PHASE --");
     }
     Disp_DrawStr(0u,35u,line);
-    /* Show live countdown when armed, not only the configuration values.
-     * Timers remain active even if this menu item is closed. */
-    if(s.state==HEATER_WAIT_START)
-        (void)snprintf(line,sizeof(line),"ON %02lu:%02lu OFF %um",
-            (unsigned long)(s.on_remaining_s/60u),
-            (unsigned long)(s.on_remaining_s%60u),
-            (unsigned)s.off_minutes);
-    else if(s.state==HEATER_RUN_REQUESTED && s.off_minutes)
-        (void)snprintf(line,sizeof(line),"ON -- OFF %02lu:%02lu",
+    /* Auto-stop countdown only; there is no reservation/countdown start.
+     * The timer keeps running while this menu item is closed. */
+    if(s.state==HEATER_RUN_REQUESTED && s.off_minutes)
+        (void)snprintf(line,sizeof(line),"OFF %02lu:%02lu",
             (unsigned long)(s.off_remaining_s/60u),
             (unsigned long)(s.off_remaining_s%60u));
     else
-        (void)snprintf(line,sizeof(line),"ON %um OFF %um",
-            (unsigned)s.on_minutes,(unsigned)s.off_minutes);
+        (void)snprintf(line,sizeof(line),"OFF %um",(unsigned)s.off_minutes);
     /* During manual phase testing reserve one row for latest TIM1_CH2 edge.
      * Lag is relative to the model voltage +->- at ARR/4+D/2. */
     if(s.mode==HEATER_MODE_POWER)

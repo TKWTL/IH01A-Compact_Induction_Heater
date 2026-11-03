@@ -1,12 +1,12 @@
 > **当前试验阶段提示（2026-11-02）**：已转为12V、
-> 200kHz、最多10秒的显式手动低功率加热，限10°/20°
-> 测试移相。正常PID及功率驱动仍未授权。详见
+> 200kHz、最多10秒的显式手动低功率加热，相位 0°/180° 全范围可选
+> （不再限制 10°/20°）。正常PID及功率驱动仍未授权。详见
 > [LOW_POWER_ZCD_BENCH.md](LOW_POWER_ZCD_BENCH.md)。
 >
 # IH01A HEATER 手动移相测试界面（2026-11-02）
 
 - Main 默认模式：`HEATER_MODE_POWER`，目前表示手动移相角，不是测得电功率(W)。初始 0°，范围 0～180°，L/R 每次变化 10°；角度保存在 Heater 数据中，退出 Main 后仍保留。温度模式 PID 的建议功率暂不映射到移相角。
-- 默认选中 TARGET，进入 Main 后 L/R 直接改变角度；ENTER 选择 MODE→TARGET→OFF→ON→RUN；EXIT 退出 Main 不影响 TIM1 PWM。后台计时、预约、RUN 操作均不会使能 PC6。
+- 默认选中 TARGET，进入 Main 后 L/R 直接改变角度；ENTER 选择 MODE→TARGET→OFF→RUN（已取消预约/倒计时启动，RUN 立即进入 RUN_REQUESTED）；EXIT 退出 Main 不影响 TIM1 PWM。后台计时与 RUN 操作均不会使能 PC6。
 - 主界面显示输入源、电压、锅底/系统温度、目标角度、CCR3/CCR4、计时、PWM 运行与 PC6 状态。
 - TIM1 128MHz，`ARR=426`，上计数约299.77kHz。CH1 PWM1：`CCR1=ARR/2=213`。CH3 Combined PWM2 + CH4 PWM1：`D=round(angle*ARR/360)` 且钳位 ARR/2；`CCR3=D`，`CCR4=D+ARR/2`。两个输出均为 213 / 427 ≈49.88% 占空比。
 - `ConvPhase_Calculate()` 为纯整数数学函数。CCMR1/CCMR2 开启 CCR1/3/4 preload，以 TIM1 CR1 UDIS 防止双 CCR 在同一次计数更新中应用不同角度；预加载由下一次自然更新事件生效。

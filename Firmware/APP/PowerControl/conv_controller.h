@@ -25,7 +25,7 @@ void ConvController_SetPhaseDegrees(uint16_t phase_deg);
 uint16_t ConvController_GetPhaseDegrees(void);
 uint8_t ConvController_StartLogicPwm(void);
 uint8_t ConvController_LogicPwmRunning(void);
-/* 12V low-power bench experiment: gated PC6, <=20deg, <=10s per RUN.
+/* 12V low-power bench experiment: gated PC6, any phase, <=10s per RUN.
  * Normal power stage commissioning gate remains disabled. */
 void ConvController_BenchPowerOff(void);
 uint8_t ConvController_BenchSecondsLeft(uint32_t now_ms);
@@ -35,7 +35,6 @@ uint8_t ConvController_BenchSecondsLeft(uint32_t now_ms);
 typedef enum {
     CONV_BENCH_OK=0,   /* no block; RUN accepted (or never attempted)      */
     CONV_BENCH_MODE,   /* not in POWER mode                               */
-    CONV_BENCH_ANGLE,  /* target phase outside 10..IH_BENCH_MAX_ANGLE_DEG  */
     CONV_BENCH_PHASE,  /* requested angle not yet applied to TIM1         */
     CONV_BENCH_NOPD,   /* no confirmed explicit PD contract                */
     CONV_BENCH_VOLT,   /* contract is not 12 V                            */

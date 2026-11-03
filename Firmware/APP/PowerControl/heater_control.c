@@ -16,7 +16,7 @@
 #define HEATER_KD_MW_PER_DELTA_DECI 800L /* derivative on measurement,
                                              smoothed in Q4 */
 static HeaterSnapshot s;
-static uint32_t s_start_deadline_ms,s_stop_deadline_ms;
+static uint32_t s_stop_deadline_ms;
 static int32_t s_integrator_mw,s_derivative_q4;
 static int16_t s_previous_pot;
 static uint8_t s_stop_timer_armed,s_derivative_ready;
@@ -47,7 +47,7 @@ void Heater_Init(void)
     s.target_temp_deci_c=800u;
     s.target_phase_deg=0u; /* two logic waveforms initially in phase */
     s_stop_timer_armed=0u;
-    s_start_deadline_ms=s_stop_deadline_ms=0u;
+    s_stop_deadline_ms=0u;
 }
 void Heater_SetMode(HeaterMode mode)
 {
@@ -83,31 +83,14 @@ void Heater_SetOffMinutes(uint16_t minutes,uint32_t now_ms)
     else if(s.state==HEATER_RUN_REQUESTED)
         s_stop_timer_armed=0u;
 }
-void Heater_ScheduleMinutes(uint16_t minutes,uint32_t now_ms)
-{
-    if(s.state==HEATER_FAULT)return; /* booking must not clear fault latch */
-    if(minutes>HEATER_MAX_MINUTES)minutes=HEATER_MAX_MINUTES;
-    /* Scheduling and a current run are mutually exclusive. */
-    if(!minutes)
-    {
-        s.on_minutes=0u;
-        if(s.state==HEATER_WAIT_START || s.state==HEATER_WAIT_CONFIRM)
-            Heater_Stop();
-        return;
-    }
-    clear_output();
-    s_stop_timer_armed=0u;
-    s.on_minutes=minutes;
-    s_start_deadline_ms=now_ms+(uint32_t)minutes*60000u;
-    s.state=HEATER_WAIT_START;
-}
 void Heater_StartConfirmed(uint32_t now_ms)
 {
     /* Physical hardware remains disabled. In a future power-stage port,
-     * human confirmation must be paired with pot/overtemp/interlock checks. */
-    if(s.state==HEATER_FAULT || s.state==HEATER_WAIT_START)return;
+     * human confirmation must be paired with pot/overtemp/interlock checks.
+     * Deliberately immediate: there is no reservation/countdown start, so a
+     * RUN press goes straight to RUN_REQUESTED. */
+    if(s.state==HEATER_FAULT)return;
     s.state=HEATER_RUN_REQUESTED;
-    s.on_minutes=0u;
     s_integrator_mw=0;
     s_derivative_ready=0u;
     s_derivative_q4=0;
@@ -120,7 +103,6 @@ void Heater_LatchFault(uint32_t reason_mask)
     if(!reason_mask)return;
     s.fault_mask|=reason_mask;
     s.state=HEATER_FAULT;
-    s.on_minutes=0u;
     s_stop_timer_armed=0u;
     clear_output();
 }
@@ -132,7 +114,6 @@ void Heater_Stop(void)
         return;
     }
     s.state=HEATER_OFF;
-    s.on_minutes=0u;
     s_stop_timer_armed=0u;
     clear_output();
 }
@@ -152,17 +133,6 @@ void Heater_Poll(uint32_t now_ms,const HeaterObservation *obs)
     s.pot_valid=obs->pot_valid;
     s.sys_valid=obs->sys_valid;
     s.off_remaining_s=0u;
-    s.on_remaining_s=0u;
-    if(s.state==HEATER_WAIT_START)
-    {
-        s.on_remaining_s=remaining_s(now_ms,s_start_deadline_ms);
-        if(s.on_remaining_s==0u)
-        {
-            /* Never auto-energize unattended induction heating. */
-            s.state=HEATER_WAIT_CONFIRM;
-            s.on_minutes=0u;
-        }
-    }
     if(s.state!=HEATER_RUN_REQUESTED)
     {
         clear_output();
