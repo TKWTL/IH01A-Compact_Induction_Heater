@@ -1,7 +1,7 @@
 /* IH01A MiaoUI root: Main, Settings, Statistics, About.
- * Main is a safe, nonblocking heater control panel; hardware PWM disabled.
- * Settings is split into Display (contrast / background / burn-in / flip) and
- * System (sleep options). Statistics/Source PDO shows SPR and EPR capabilities;
+ * Main is a nonblocking heater control panel. Settings contains the
+ * Heater live bench controls (PC6, phase, frequency, CT_RMS/IC2), Display,
+ * PD and System (sleep). Statistics/Source PDO shows SPR/EPR capabilities;
  * Statistics/System displays ADC pin voltages and MCU temperature.
  * The current ASCII font is used until the Chinese glyph port.
  */
@@ -15,6 +15,7 @@
 #include "PowerControl/heater_ui.h"
 #include "framework/system.h"
 #include "pd_ui.h"
+#include "heater_settings.h"
 #include <stdint.h>
 
 static ui_page_t s_root, s_settings, s_display, s_system;
@@ -37,6 +38,7 @@ void IH_Statistics_Poll(void)
     PowerDashboard_Poll();
     System_Poll();
     PD_UI_Poll();
+    HeaterSettings_Poll();
     uint8_t i, visible = 0u;
     char candidate[PD_UI_ROW_CAPACITY];
 
@@ -107,6 +109,7 @@ void Create_MenuTree(ui_t *ui)
         AddPage("[Display]", &s_display, UI_PAGE_TEXT, &s_settings);
             AddItem("[Return]", UI_ITEM_RETURN, 0, &s_back_display, &s_display, &s_settings, 0);
             Add_Disp_Items(&s_display);
+        HeaterSettings_AddSettings(&s_settings);
         PD_UI_AddSettings(&s_settings);
         AddItem("-System", UI_ITEM_PARENTS, 0, &s_system_item, &s_settings, &s_system, 0);
         AddPage("[System]", &s_system, UI_PAGE_TEXT, &s_settings);

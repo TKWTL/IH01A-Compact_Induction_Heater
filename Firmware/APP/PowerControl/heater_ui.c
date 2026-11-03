@@ -135,7 +135,7 @@ void Heater_UI_Page(ui_t *ui)
         /* Both reservation timers survive returning to the parent menu. */
         return;
     }
-    ConvZcd_Poll(now);
+    /* CH2 capture is polled by thread_heater, not by any UI page. */
     Heater_GetSnapshot(&s);
     Disp_ClearBuffer();
     Disp_SetFont(UI_FONT);

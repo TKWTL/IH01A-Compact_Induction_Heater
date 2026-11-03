@@ -3780,6 +3780,11 @@
               <FilePath>../APP/MiaoUI/pd_ui.c</FilePath>
             </File>
             <File>
+              <FileName>heater_settings.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/MiaoUI/heater_settings.c</FilePath>
+            </File>
+            <File>
               <FileName>parameter.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/MiaoUI/widget/parameter.c</FilePath>
