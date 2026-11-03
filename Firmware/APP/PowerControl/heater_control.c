@@ -66,8 +66,6 @@ void Heater_SetTargetTemp(uint16_t deci_c)
 void Heater_SetPhaseDegrees(uint16_t degrees)
 {
     if(degrees>180u)degrees=180u;
-    degrees=(uint16_t)(((uint32_t)degrees+5u)/10u*10u);
-    if(degrees>180u)degrees=180u;
     s.target_phase_deg=degrees;
     /* Only a configuration request; NEVER raises PC6. */
 }

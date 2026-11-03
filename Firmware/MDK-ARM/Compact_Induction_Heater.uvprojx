@@ -3810,6 +3810,11 @@
               <FilePath>../APP/PowerControl/conv_phase.c</FilePath>
             </File>
             <File>
+              <FileName>conv_current.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/PowerControl/conv_current.c</FilePath>
+            </File>
+            <File>
               <FileName>conv_zcd.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/PowerControl/conv_zcd.c</FilePath>

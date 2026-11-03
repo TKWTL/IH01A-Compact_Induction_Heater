@@ -53,3 +53,6 @@ build_run phase -I APP APP/PowerControl/conv_phase.c \
 build_run zcd -DCONV_ZCD_HOST_TEST -I APP/PowerControl \
  APP/PowerControl/conv_phase.c APP/PowerControl/conv_zcd.c \
  Tests/host/test_conv_zcd.c
+
+build_run ct_current -I APP APP/PowerControl/conv_current.c \
+ Tests/host/test_conv_current.c
