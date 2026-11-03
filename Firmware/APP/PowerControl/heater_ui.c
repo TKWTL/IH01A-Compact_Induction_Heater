@@ -35,6 +35,32 @@ static const char *field_name(uint8_t field)
     };
     return names[field<EDIT_COUNT?field:0u];
 }
+/* Why the last bench RUN was refused. Three characters only: the status line
+ * already carries state/P/E and the panel is 21 characters wide. */
+static const char *bench_block_name(uint8_t why)
+{
+    switch(why)
+    {
+    case CONV_BENCH_MODE:  return "MOD";
+    case CONV_BENCH_ANGLE: return "ANG";
+    case CONV_BENCH_PHASE: return "APP";
+    case CONV_BENCH_NOPD:  return "NOPD";
+    case CONV_BENCH_VOLT:  return "12V";
+    case CONV_BENCH_CURR:  return "CUR";
+    case CONV_BENCH_SOURCE:return "SRC";
+    case CONV_BENCH_BUS:   return "BUS";
+    case CONV_BENCH_ZERO:  return "ZERO";
+    case CONV_BENCH_NTC:   return "NTC";
+    case CONV_BENCH_HOT:   return "HOT";
+    case CONV_BENCH_AGE:   return "AGE";
+    case CONV_BENCH_PWM:   return "PWM";
+    case CONV_BENCH_COMP:  return "COMP";
+    case CONV_BENCH_FAULT: return "FLT";
+    case CONV_BENCH_BRK:   return "BRK";
+    case CONV_BENCH_TIME:  return "10S";
+    default:               return "";
+    }
+}
 static void edit_value(uint8_t field,UI_ACTION action,uint32_t now)
 {
     HeaterSnapshot s;
@@ -196,12 +222,24 @@ void Heater_UI_Page(ui_t *ui)
     }
     Disp_DrawStr(0u,47u,line);
     /* At 128px and ~6px/glyph, keep line <=21 ASCII characters.
-     * P=TIM1 PWM output, E=FD2204 PC6 gate enable. */
-    (void)snprintf(line,sizeof(line),"%s P:%c E:%c >%s",
-        state_name(s.state),
-        ConvController_LogicPwmRunning()?'Y':'N',
-        ConvController_OutputEnabled()?'Y':'N',
-        field_name(s_edit_field));
+     * P=TIM1 PWM output, E=FD2204 PC6 gate enable.
+     * A refused bench RUN replaces the edit-field hint with its reason code so
+     * "REQ flashes and drops back to STOP" is never silent. */
+    {
+        uint8_t why=ConvController_BenchBlockReason();
+        if(why!=CONV_BENCH_OK && s.state!=HEATER_RUN_REQUESTED)
+            (void)snprintf(line,sizeof(line),"%s P:%c E:%c R:%s",
+                state_name(s.state),
+                ConvController_LogicPwmRunning()?'Y':'N',
+                ConvController_OutputEnabled()?'Y':'N',
+                bench_block_name(why));
+        else
+            (void)snprintf(line,sizeof(line),"%s P:%c E:%c >%s",
+                state_name(s.state),
+                ConvController_LogicPwmRunning()?'Y':'N',
+                ConvController_OutputEnabled()?'Y':'N',
+                field_name(s_edit_field));
+    }
     Disp_DrawStr(0u,59u,line);
     Disp_SendBuffer();
 }

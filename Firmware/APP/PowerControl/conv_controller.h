@@ -29,6 +29,30 @@ uint8_t ConvController_LogicPwmRunning(void);
  * Normal power stage commissioning gate remains disabled. */
 void ConvController_BenchPowerOff(void);
 uint8_t ConvController_BenchSecondsLeft(uint32_t now_ms);
+/* Why the last bench RUN was refused (or why it stopped). The gate below is a
+ * long AND-list; without this code a refused RUN is indistinguishable from a
+ * lost key press on the OLED. Latched until a RUN is actually accepted. */
+typedef enum {
+    CONV_BENCH_OK=0,   /* no block; RUN accepted (or never attempted)      */
+    CONV_BENCH_MODE,   /* not in POWER mode                               */
+    CONV_BENCH_ANGLE,  /* target phase outside 10..IH_BENCH_MAX_ANGLE_DEG  */
+    CONV_BENCH_PHASE,  /* requested angle not yet applied to TIM1         */
+    CONV_BENCH_NOPD,   /* no confirmed explicit PD contract                */
+    CONV_BENCH_VOLT,   /* contract is not 12 V                            */
+    CONV_BENCH_CURR,   /* contract current zero or above 3 A              */
+    CONV_BENCH_SOURCE, /* input is not the PD port                        */
+    CONV_BENCH_BUS,    /* measured VBUS outside 10.8..13.2 V              */
+    CONV_BENCH_ZERO,   /* ADC zero average not settled yet                */
+    CONV_BENCH_NTC,    /* pot or system NTC not valid                     */
+    CONV_BENCH_HOT,    /* pot >=70 C or system >=60 C                     */
+    CONV_BENCH_AGE,    /* temperature sample older than 250 ms            */
+    CONV_BENCH_PWM,    /* TIM1 logic PWM not running                      */
+    CONV_BENCH_COMP,   /* comparators not armed / already faulted         */
+    CONV_BENCH_FAULT,  /* protection fault mask not clear                 */
+    CONV_BENCH_BRK,    /* TIM1 Break flag latched                         */
+    CONV_BENCH_TIME    /* run ended because the 10 s budget expired       */
+} ConvBenchBlock;
+uint8_t ConvController_BenchBlockReason(void);
 void ConvController_BenchRunPoll(uint32_t now_ms,
                                  const HeaterObservation *observation);
 uint8_t ConvController_BenchAdcFrameWatchdogISR(void);

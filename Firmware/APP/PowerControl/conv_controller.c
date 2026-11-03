@@ -26,6 +26,8 @@ static uint16_t s_phase_arr;
 static uint8_t s_logic_pwm_started;
 static uint8_t s_logic_pwm_start_attempted;
 static uint32_t s_bench_started_ms;
+/* Latched reason the last RUN attempt was refused / why it stopped. */
+static uint8_t s_bench_block;
 /* ~20k full ADC frames/s. Hard deadline independent of PD superloop. */
 static volatile uint32_t s_bench_on_adc_frames;
 
@@ -39,6 +41,7 @@ void ConvController_Init(void)
     s_phase_arr=0u;
     s_bench_started_ms=0u;
     s_bench_on_adc_frames=0u;
+    s_bench_block=CONV_BENCH_OK;
     ConvZcd_Init();
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port, PWM_EN_Pin);
     TIM1->BDTR &= ~TIM_BDTR_MOE;
@@ -187,6 +190,40 @@ IH_RAMFUNC uint8_t ConvController_BenchAdcFrameWatchdogISR(void)
 #endif
     return 0u;
 }
+uint8_t ConvController_BenchBlockReason(void)
+{
+    return s_bench_block;
+}
+/* Evaluate the RUN gate and remember WHICH clause refused it. Same conditions
+ * as the original single AND-expression, in the same order, only expanded so
+ * a refusal can be shown on the OLED instead of silently reverting to STOP. */
+static uint8_t bench_block_reason(const HeaterSnapshot *h,
+                                  uint8_t valid_pd,
+                                  const PD_InputContract *c,
+                                  uint32_t now_ms,
+                                  const HeaterObservation *o)
+{
+    if(o==0)                              return CONV_BENCH_SOURCE;
+    if(h->mode!=HEATER_MODE_POWER)        return CONV_BENCH_MODE;
+    if(h->target_phase_deg<10u ||
+       h->target_phase_deg>IH_BENCH_MAX_ANGLE_DEG) return CONV_BENCH_ANGLE;
+    if(ConvController_GetPhaseDegrees()!=h->target_phase_deg)
+                                          return CONV_BENCH_PHASE;
+    if(!valid_pd)                         return CONV_BENCH_NOPD;
+    if(c->voltage_mv!=12000u)             return CONV_BENCH_VOLT;
+    if(c->current_ma==0u || c->current_ma>3000u) return CONV_BENCH_CURR;
+    if(o->input!=HEATER_INPUT_PD)         return CONV_BENCH_SOURCE;
+    if(o->bus_mv<10800u || o->bus_mv>13200u) return CONV_BENCH_BUS;
+    if(!o->zero_calibrated)               return CONV_BENCH_ZERO;
+    if(!o->pot_valid || !o->sys_valid)    return CONV_BENCH_NTC;
+    if(o->pot_deci_c>=700 || o->sys_deci_c>=600) return CONV_BENCH_HOT;
+    if((uint32_t)(now_ms-o->temperature_updated_ms)>250u) return CONV_BENCH_AGE;
+    if(!ConvController_LogicPwmRunning()) return CONV_BENCH_PWM;
+    if(!ConvProtection_CompArmed())       return CONV_BENCH_COMP;
+    if(ConvProtection_FaultMask()!=0u)    return CONV_BENCH_FAULT;
+    if((TIM1->SR&TIM_SR_BIF)!=0u)         return CONV_BENCH_BRK;
+    return CONV_BENCH_OK;
+}
 void ConvController_BenchRunPoll(uint32_t now_ms,
                                  const HeaterObservation *observation)
 {
@@ -197,29 +234,18 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
     uint8_t allow;
     Heater_GetSnapshot(&h);
     valid_pd=PD_Input_GetActiveContract(&contract);
-    allow=(uint8_t)(observation!=0 &&
-         h.state==HEATER_RUN_REQUESTED &&
-         h.mode==HEATER_MODE_POWER &&
-         h.target_phase_deg>=10u &&
-         h.target_phase_deg<=IH_BENCH_MAX_ANGLE_DEG &&
-         ConvController_GetPhaseDegrees()==h.target_phase_deg &&
-         valid_pd && contract.voltage_mv==12000u &&
-         contract.current_ma>0u && contract.current_ma<=3000u &&
-         observation->input==HEATER_INPUT_PD &&
-         observation->bus_mv>=10800u && observation->bus_mv<=13200u &&
-         observation->zero_calibrated &&
-         observation->pot_valid && observation->sys_valid &&
-         observation->pot_deci_c<700 && observation->sys_deci_c<600 &&
-         (uint32_t)(now_ms-observation->temperature_updated_ms)<=250u &&
-         ConvController_LogicPwmRunning() &&
-         ConvProtection_CompArmed() &&
-         ConvProtection_FaultMask()==0u &&
-         (TIM1->SR&TIM_SR_BIF)==0u);
+    allow=(uint8_t)(h.state==HEATER_RUN_REQUESTED &&
+                    bench_block_reason(&h,valid_pd,&contract,now_ms,
+                                       observation)==CONV_BENCH_OK);
     if(ConvController_OutputEnabled())
     {
         if(!allow ||
            (uint32_t)(now_ms-s_bench_started_ms)>=IH_BENCH_MAX_RUNTIME_MS)
         {
+            if(allow)s_bench_block=CONV_BENCH_TIME;
+            else if(s_bench_block==CONV_BENCH_OK)
+                s_bench_block=bench_block_reason(&h,valid_pd,&contract,now_ms,
+                                                 observation);
             ConvController_BenchPowerOff();
             Heater_Stop(); /* never auto re-arm after a 10s or fault stop */
         }
@@ -228,6 +254,8 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
     if(h.state!=HEATER_RUN_REQUESTED)return;
     if(!allow)
     {
+        s_bench_block=bench_block_reason(&h,valid_pd,&contract,now_ms,
+                                         observation);
         Heater_Stop(); /* no deferred power-on once missing PD becomes valid */
         return;
     }
@@ -240,10 +268,13 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
     if((TIM1->SR&TIM_SR_BIF)!=0u ||
        ConvProtection_FaultMask()!=0u)
     {
+        s_bench_block=((TIM1->SR&TIM_SR_BIF)!=0u)?CONV_BENCH_BRK:
+                                                 CONV_BENCH_FAULT;
         ConvController_BenchPowerOff();
         Heater_Stop();
         return;
     }
+    s_bench_block=CONV_BENCH_OK;
     s_bench_started_ms=now_ms;
 #else
     (void)now_ms;
