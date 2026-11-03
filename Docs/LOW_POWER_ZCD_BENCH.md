@@ -1,3 +1,8 @@
+> **2026-11-03 更新**：Settings → Heater 可以直接开关PC6，
+> 以1°调相、10kHz调频（180～300kHz），观察IC2、Lag和
+> 0.25253V/A零点校准后的CT_RMS电流。频率变化会立即关闭PC6，
+> 不自动恢复加热。详见[HEATER_SETTINGS_BENCH.md](HEATER_SETTINGS_BENCH.md)。
+>
 # IH01A：12V / 200kHz 低功率加热与 TP1941 零电流捕获
 
 ## 测试定位和供电

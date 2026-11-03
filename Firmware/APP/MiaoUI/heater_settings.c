@@ -181,14 +181,18 @@ void HeaterSettings_Poll(void)
     if(protection.zero_status==CONV_ZERO_READY && adc.frames)
     {
         /* ADC low-pass value minus the original no-switching CT_RMS zero.
-         * 0.25253 V/A is a channel gain; current is a display estimate. */
+         * 0.25253 V/A is a channel gain; current is a display estimate.
+         * Near ADC saturation the ampere estimate would under-report. */
         current_ma=ConvCurrent_CtRmsMilliAmp(
                          adc.filtered[CONV_ADC_CT_RMS],
                          protection.ct_zero_raw);
-        (void)snprintf(s_ct_text,sizeof(s_ct_text),
-                       "CT_RMS:%lu.%03luA",
-                       (unsigned long)(current_ma/1000u),
-                       (unsigned long)(current_ma%1000u));
+        if(adc.raw[CONV_ADC_CT_RMS]>=4090u)
+            (void)snprintf(s_ct_text,sizeof(s_ct_text),"CT_RMS: SAT");
+        else
+            (void)snprintf(s_ct_text,sizeof(s_ct_text),
+                           "CT_RMS:%lu.%03luA",
+                           (unsigned long)(current_ma/1000u),
+                           (unsigned long)(current_ma%1000u));
         (void)snprintf(s_zero_text,sizeof(s_zero_text),
                        "CT0:%u ADC:%u",
                        (unsigned)protection.ct_zero_raw,

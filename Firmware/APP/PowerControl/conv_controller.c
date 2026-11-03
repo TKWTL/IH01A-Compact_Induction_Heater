@@ -83,9 +83,9 @@ void ConvController_SetPhaseDegrees(uint16_t angle_deg)
     ConvPhaseConfig phase;
     uint16_t arr=(uint16_t)TIM1->ARR;
     if(!ConvPhase_Calculate(arr,angle_deg,&phase))return;
-    /* The phase angle is free 0..180 deg and no longer stops a running bench:
-     * it is a scope/observability setting, not a power request. Stopping stays
-     * with the RUN gate, the 10 s budget and the protection hardware. */
+    /* Full 0..180deg phase range is available even during a bench run.
+     * Moving phase does not bypass the PD, temperature or Break guards;
+     * frequency changes, unlike phase changes, require PC6 LOW first. */
     if(s_phase_arr==arr && s_phase_deg==phase.angle_deg)return;
     /* Enable compare preload BEFORE writing CH3/CH4. UDIS prevents
      * an intervening update event from loading a mixed phase pair.
