@@ -97,6 +97,9 @@ static uint8_t ConvController_StageTimerPreloads(const ConvPhaseConfig *phase)
     ccmr1=TIM1->CCMR1;
     ccmr2=TIM1->CCMR2;
     running=(uint8_t)((cr1&TIM_CR1_CEN)!=0u);
+    /* A high driver EN with a stopped timer is an abnormal state:
+     * never issue UG/CNT reset while the physical bridge is enabled. */
+    if(!running && ConvController_OutputEnabled())return 0u;
     if((cr1&TIM_CR1_UDIS)!=0u)return 0u;
     if(running &&
        (((cr1&TIM_CR1_ARPE)==0u) ||
