@@ -31,6 +31,8 @@ enum {
     CONV_PROT_DAC_RANGE=1u<<13,
     CONV_PROT_TIM1_BREAK=1u<<14,
     CONV_PROT_BENCH_VBUS=1u<<15,
+    /* OBSOLETE (2026-11-02): the bench run has no time budget, so nothing sets
+     * this bit any more. Value kept so an old logged mask still decodes. */
     CONV_PROT_BENCH_TIMEOUT=1u<<16
 };
 typedef struct {

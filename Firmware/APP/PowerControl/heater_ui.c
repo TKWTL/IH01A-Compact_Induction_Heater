@@ -54,7 +54,6 @@ static const char *bench_block_name(uint8_t why)
     case CONV_BENCH_COMP:  return "COMP";
     case CONV_BENCH_FAULT: return "FLT";
     case CONV_BENCH_BRK:   return "BRK";
-    case CONV_BENCH_TIME:  return "10S";
     default:               return "";
     }
 }
@@ -148,7 +147,7 @@ void Heater_UI_Page(ui_t *ui)
             (void)snprintf(line,sizeof(line),"HEATER %c %s%luV %us",
                 s.mode==HEATER_MODE_TEMP?'T':'P',kind,
                 (unsigned long)((s.bus_mv+500u)/1000u),
-                (unsigned)ConvController_BenchSecondsLeft(now));
+                (unsigned)ConvController_BenchElapsedSeconds(now));
         else
             (void)snprintf(line,sizeof(line),"HEATER %c %s%luV",
                 s.mode==HEATER_MODE_TEMP?'T':'P',kind,

@@ -25,10 +25,10 @@ void ConvController_SetPhaseDegrees(uint16_t phase_deg);
 uint16_t ConvController_GetPhaseDegrees(void);
 uint8_t ConvController_StartLogicPwm(void);
 uint8_t ConvController_LogicPwmRunning(void);
-/* 12V low-power bench experiment: gated PC6, any phase, <=10s per RUN.
+/* 12V low-power bench experiment: gated PC6, any phase, no time budget.
  * Normal power stage commissioning gate remains disabled. */
 void ConvController_BenchPowerOff(void);
-uint8_t ConvController_BenchSecondsLeft(uint32_t now_ms);
+uint32_t ConvController_BenchElapsedSeconds(uint32_t now_ms);
 /* Why the last bench RUN was refused (or why it stopped). The gate below is a
  * long AND-list; without this code a refused RUN is indistinguishable from a
  * lost key press on the OLED. Latched until a RUN is actually accepted. */
@@ -48,8 +48,7 @@ typedef enum {
     CONV_BENCH_PWM,    /* TIM1 logic PWM not running                      */
     CONV_BENCH_COMP,   /* comparators not armed / already faulted         */
     CONV_BENCH_FAULT,  /* protection fault mask not clear                 */
-    CONV_BENCH_BRK,    /* TIM1 Break flag latched                         */
-    CONV_BENCH_TIME    /* run ended because the 10 s budget expired       */
+    CONV_BENCH_BRK     /* TIM1 Break flag latched                         */
 } ConvBenchBlock;
 uint8_t ConvController_BenchBlockReason(void);
 void ConvController_BenchRunPoll(uint32_t now_ms,

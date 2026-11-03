@@ -1,5 +1,5 @@
 /* G071: TIM6 ADC/DMA ISR independent of TIM1 PWM and CH2 input capture.
- * Only the explicit <=12V, <=3A, <=10s manual bench gate may
+ * Only the explicit <=12V, <=3A manual bench gate may
  * enable FD2204 PC6. Production heater controller remains uncommissioned.
  */
 #include "conv_controller.h"
@@ -14,10 +14,9 @@
 #define IH_RAMFUNC __attribute__((section(".ih_ramfunc"), used, noinline))
 /* Explicit commissioning gate; no UI command may override this. */
 #define IH_POWER_STAGE_COMMISSIONED 0u
-/* Explicit narrow gate, ONLY for 12V low-power, any manual phase and 10s.
+/* Explicit narrow gate, ONLY for 12V low-power with any manual phase.
  * Normal heater/power controller remains uncommissioned. */
 #define IH_LOW_POWER_BENCH_ENABLE 1u
-#define IH_BENCH_MAX_RUNTIME_MS 10000u
 static volatile ConvState s_state;
 static volatile uint32_t s_errors;
 static uint16_t s_phase_deg;
@@ -27,7 +26,8 @@ static uint8_t s_logic_pwm_start_attempted;
 static uint32_t s_bench_started_ms;
 /* Latched reason the last RUN attempt was refused / why it stopped. */
 static uint8_t s_bench_block;
-/* ~20k full ADC frames/s. Hard deadline independent of PD superloop. */
+/* ~20k full ADC frames/s. Counted for diagnostics only; the bench run has no
+ * time budget, so nothing trips on this counter any more. */
 static volatile uint32_t s_bench_on_adc_frames;
 
 void ConvController_Init(void)
@@ -65,13 +65,10 @@ IH_RAMFUNC void ConvController_TripISR(void)
     __DSB();
     TIM1->BDTR &= ~TIM_BDTR_MOE;
 }
-uint8_t ConvController_BenchSecondsLeft(uint32_t now_ms)
+uint32_t ConvController_BenchElapsedSeconds(uint32_t now_ms)
 {
-    uint32_t elapsed;
     if(!ConvController_OutputEnabled())return 0u;
-    elapsed=(uint32_t)(now_ms-s_bench_started_ms);
-    if(elapsed>=IH_BENCH_MAX_RUNTIME_MS)return 0u;
-    return (uint8_t)((IH_BENCH_MAX_RUNTIME_MS-elapsed+999u)/1000u);
+    return (uint32_t)(now_ms-s_bench_started_ms)/1000u;
 }
 void ConvController_BenchPowerOff(void)
 {
@@ -168,6 +165,12 @@ uint8_t ConvController_StartLogicPwm(void)
     s_logic_pwm_started=1u;
     return 1u;
 }
+/* Bench run has NO time budget: it stays enabled until the user stops it, the
+ * RUN gate fails, or a protection fault trips. The former 10 s ADC-frame
+ * watchdog latched CONV_PROT_BENCH_TIMEOUT (0x00010000) after 200000 frames,
+ * which showed up as a spurious fault during longer bench work. The frame
+ * counter is kept (reset while PC6 is low) only so a future watchdog can be
+ * re-enabled here without touching the ISR. */
 IH_RAMFUNC uint8_t ConvController_BenchAdcFrameWatchdogISR(void)
 {
 #if IH_LOW_POWER_BENCH_ENABLE
@@ -176,13 +179,7 @@ IH_RAMFUNC uint8_t ConvController_BenchAdcFrameWatchdogISR(void)
         s_bench_on_adc_frames=0u;
         return 0u;
     }
-    /* 200000 complete TIM6 frames ≈10s. This requires interrupts and ADC
-     * DMA working; it is not an independent hardware watchdog. */
-    if(++s_bench_on_adc_frames>=200000u)
-    {
-        ConvController_TripISR();
-        return 1u;
-    }
+    ++s_bench_on_adc_frames;
 #endif
     return 0u;
 }
@@ -235,15 +232,14 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
                                        observation)==CONV_BENCH_OK);
     if(ConvController_OutputEnabled())
     {
-        if(!allow ||
-           (uint32_t)(now_ms-s_bench_started_ms)>=IH_BENCH_MAX_RUNTIME_MS)
+        /* No runtime budget: the run continues until the gate fails (user
+         * STOP, heater state change, source/temperature/protection problem). */
+        if(!allow)
         {
-            if(allow)s_bench_block=CONV_BENCH_TIME;
-            else if(s_bench_block==CONV_BENCH_OK)
-                s_bench_block=bench_block_reason(&h,valid_pd,&contract,now_ms,
-                                                 observation);
+            s_bench_block=bench_block_reason(&h,valid_pd,&contract,now_ms,
+                                             observation);
             ConvController_BenchPowerOff();
-            Heater_Stop(); /* never auto re-arm after a 10s or fault stop */
+            Heater_Stop();
         }
         return;
     }
