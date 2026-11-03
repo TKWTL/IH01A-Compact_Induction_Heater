@@ -29,9 +29,10 @@ uint8_t ConvController_OutputPinIsOutput(void);
  * This must not be conflated with ConvController_TryEnableOutput(). */
 void ConvController_SetPhaseDegrees(uint16_t phase_deg);
 uint16_t ConvController_GetPhaseDegrees(void);
-/* 180..300kHz at 10kHz steps, safe reconfiguration:
- * force PC6 low, cancel active RUN, stop counter for ARR/CCR update,
- * restart logic PWM but NEVER automatically re-enable FD2204. */
+/* 180..300kHz at 10kHz UI steps. ARR, CCR1/3/4 are staged with UDIS
+ * and take effect simultaneously at the next natural TIM1 update event.
+ * While timer is running, PC6/MOE/CEN/CNT are NOT changed; hardware Break
+ * stays active. Missing preload bits fail closed (power gate OFF). */
 uint8_t ConvController_SetFrequencyKhz(uint16_t requested_khz);
 uint16_t ConvController_GetFrequencyKhz(void);
 uint8_t ConvController_StartLogicPwm(void);

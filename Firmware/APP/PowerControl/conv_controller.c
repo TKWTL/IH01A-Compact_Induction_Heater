@@ -78,29 +78,78 @@ void ConvController_BenchPowerOff(void)
     __DSB();
     pm_api_set_sleep_block(PM_BLOCK_HEATER,0u);
 }
+/* Called only from the cooperative foreground (never from an ISR).
+ * With ARPE/OCxPE enabled, the CPU writes ARR and CCR1/3/4 preloads.
+ * UDIS prevents a counter-overflow UEV from transferring only a subset.
+ * Once cleared, the NEXT NATURAL UEV loads all four active registers.
+ *
+ * IMPORTANT: NO EGR.UG / CNT reset / CEN toggle while TIM1 is running.
+ * The hardware Break path remains active throughout the transaction.
+ * This guarantees a coherent timer-register update, NOT ZVS under changing
+ * frequency or load; that must be checked on the power stage.
+ */
+static uint8_t ConvController_StageTimerPreloads(const ConvPhaseConfig *phase)
+{
+    uint8_t running;
+    uint32_t cr1,ccmr1,ccmr2;
+    if(!phase)return 0u;
+    cr1=TIM1->CR1;
+    ccmr1=TIM1->CCMR1;
+    ccmr2=TIM1->CCMR2;
+    running=(uint8_t)((cr1&TIM_CR1_CEN)!=0u);
+    if((cr1&TIM_CR1_UDIS)!=0u)return 0u;
+    if(running &&
+       (((cr1&TIM_CR1_ARPE)==0u) ||
+        ((ccmr1&TIM_CCMR1_OC1PE)==0u) ||
+        ((ccmr2&(TIM_CCMR2_OC3PE|TIM_CCMR2_OC4PE))!=
+                (TIM_CCMR2_OC3PE|TIM_CCMR2_OC4PE))))
+        return 0u; /* never write an active ARR/CCR in powered operation */
+
+    if(!running)
+    {
+        /* Startup-only: it is safe to configure preload bits here. */
+        TIM1->CR1 |= TIM_CR1_ARPE;
+        TIM1->CCMR1 |= TIM_CCMR1_OC1PE;
+        TIM1->CCMR2 |= TIM_CCMR2_OC3PE | TIM_CCMR2_OC4PE;
+    }
+
+    TIM1->CR1 |= TIM_CR1_UDIS;
+    TIM1->ARR=phase->arr;
+    TIM1->CCR1=phase->ccr1;
+    TIM1->CCR3=phase->ccr3;
+    TIM1->CCR4=phase->ccr4;
+    TIM1->CR1 &= ~TIM_CR1_UDIS;
+    if(!running)
+    {
+        /* With timer stopped, force a one-time load before future start.
+         * This branch is never reached while FD2204 is energized. */
+        TIM1->EGR=TIM_EGR_UG;
+        TIM1->CNT=0u;
+    }
+    return 1u;
+}
+
 void ConvController_SetPhaseDegrees(uint16_t angle_deg)
 {
     ConvPhaseConfig phase;
     uint16_t arr=(uint16_t)TIM1->ARR;
     if(!ConvPhase_Calculate(arr,angle_deg,&phase))return;
-    /* Full 0..180deg phase range is available even during a bench run.
-     * Moving phase does not bypass the PD, temperature or Break guards;
-     * frequency changes, unlike phase changes, require PC6 LOW first. */
     if(s_phase_arr==arr && s_phase_deg==phase.angle_deg)return;
-    /* Enable compare preload BEFORE writing CH3/CH4. UDIS prevents
-     * an intervening update event from loading a mixed phase pair.
-     * At the next natural update both CCR3/4 become active together.
-     * This sequence is for BENCH logic output with PC6 held LOW.
-     * Future energized operation also needs bounded phase slew. */
-    TIM1->CCMR1 |= TIM_CCMR1_OC1PE;
-    TIM1->CCMR2 |= TIM_CCMR2_OC3PE | TIM_CCMR2_OC4PE;
-    TIM1->CR1 |= TIM_CR1_UDIS;
-    TIM1->CCR1=phase.ccr1;
-    TIM1->CCR3=phase.ccr3;
-    TIM1->CCR4=phase.ccr4;
-    TIM1->CR1 &= ~TIM_CR1_UDIS;
+    if(!ConvController_StageTimerPreloads(&phase))
+    {
+        /* Preload unexpectedly disabled or update already inhibited:
+         * fail closed instead of permitting a mixed active waveform. */
+        if(ConvController_OutputEnabled())
+        {
+            ConvController_BenchPowerOff();
+            Heater_Stop();
+        }
+        return;
+    }
     s_phase_deg=phase.angle_deg;
-    s_phase_arr=arr;
+    s_phase_arr=phase.arr;
+    ConvZcd_Invalidate();
+    TIM1->SR=(uint32_t)~(TIM_SR_CC2IF|TIM_SR_CC2OF);
 }
 uint16_t ConvController_GetPhaseDegrees(void)
 {
@@ -115,38 +164,31 @@ uint8_t ConvController_SetFrequencyKhz(uint16_t requested_khz)
     ConvPhaseConfig phase;
     HeaterSnapshot hs;
     uint16_t next_arr;
-    uint8_t was_running;
-    /* Keep the deliberate test range above nominal 150kHz resonance. */
+    /* 128MHz TIM1 clock, PSC=0, 180..300kHz in 10kHz UI steps.
+     * No software power interruption: while running, ARR and CCR1/3/4
+     * become active TOGETHER at the next natural counter overflow.
+     * Repetition counter = 0, so every PWM period has an update event. */
     if(!ConvPhase_ArrFromKHz(requested_khz,&next_arr))return 0u;
     if(TIM1->ARR==next_arr)return 1u;
     Heater_GetSnapshot(&hs);
-    /* Frequency changes are NOT glitch-free with active bridge switches.
-     * Immediately disable FD2204, cancel the RUN request so the 100ms
-     * supervisor cannot rearm it, and only then touch ARR/CCR preload.
-     * The user must explicitly turn PC6 back on after checking frequency. */
-    ConvController_BenchPowerOff();
-    if(hs.state==HEATER_RUN_REQUESTED)Heater_Stop();
-    was_running=(uint8_t)((TIM1->CR1&TIM_CR1_CEN)!=0u);
-    TIM1->CR1 &= ~TIM_CR1_CEN;
     if(!ConvPhase_Calculate(next_arr,hs.target_phase_deg,&phase))return 0u;
-    TIM1->CR1 |= TIM_CR1_UDIS;
-    TIM1->CCMR1 |= TIM_CCMR1_OC1PE;
-    TIM1->CCMR2 |= TIM_CCMR2_OC3PE | TIM_CCMR2_OC4PE;
-    TIM1->ARR=phase.arr;
-    TIM1->CCR1=phase.ccr1;
-    TIM1->CCR3=phase.ccr3;
-    TIM1->CCR4=phase.ccr4;
-    TIM1->CR1 &= ~TIM_CR1_UDIS;
-    TIM1->EGR=TIM_EGR_UG;
-    TIM1->CNT=0u;
+    if(!ConvController_StageTimerPreloads(&phase))
+    {
+        /* Abnormal timer preload configuration must not leave PC6 active. */
+        if(ConvController_OutputEnabled())
+        {
+            ConvController_BenchPowerOff();
+            Heater_Stop();
+        }
+        return 0u;
+    }
     s_phase_deg=phase.angle_deg;
     s_phase_arr=phase.arr;
-    /* Last CCR2 may belong to the former clock period; don't interpret
-     * it using the newly programmed ARR. No DMA and no CC2 interrupt. */
+    /* Discard a captured edge generated under the previous ARR.
+     * The foreground samples again after multiple complete PWM periods. */
     ConvZcd_Invalidate();
     TIM1->SR=(uint32_t)~(TIM_SR_CC2IF|TIM_SR_CC2OF);
-    if(was_running)TIM1->CR1 |= TIM_CR1_CEN;
-    /* Never clear Break BIF or automatically turn PC6 back on here. */
+    /* PC6 / MOE / CEN / CNT are deliberately unchanged. */
     return 1u;
 }
 uint8_t ConvController_LogicPwmRunning(void)

@@ -2,6 +2,27 @@
 
 **版本**：2026-11-03（STM32G071、TIM1 128MHz、ADC VREFBUF 2.5V）
 
+## 在线同步更新原则
+
+当前TIM1初始化为PSC=0、RCR=0、`ARPE=1`，PWM启动前确保
+`OC1PE=1`、`OC3PE=1`、`OC4PE=1`。改频采用如下事务：
+
+```
+UDIS=1
+ARR <- new_arr
+CCR1 <- new_ccr1
+CCR3 <- new_ccr3
+CCR4 <- new_ccr4
+UDIS=0
+// TIM1 CEN=1: 下一次自然 UEV 同步装载所有预装载值
+// TIM1 CEN=0: 仅停机时允许 EGR.UG 一次性初始装载
+```
+
+不在运行中写`EGR.UG`、`CNT`或清`CEN`，也不修改`PC6`。
+原`COMP→TIM1 Break`通路依然有效。若运行中发现预装载
+未使能，则拒绝调频并立即关断PC6、撤销RUN。不要把这个同步更新
+等同于谐振腔的物理换流无尖峰保证。
+
 ## 菜单
 
 根菜单 → Settings → **Heater**，使用 MiaoUI 原生文本数据项，
@@ -10,8 +31,8 @@
 | 项 | 用法 | 实际动作 |
 |---|---|---|
 | PC6 Enable | ENTR 切换开关 | 置 ON → Heater_StartConfirmed() 请求启动；置 OFF → 立即拉低 PC6、Heater_Stop() |
-| Phase deg | ENTR 进入编辑，L/R 每次减/加 1°，再次 ENTR 确认退出 | 0～180°，立即写 TIM1 CCR1/3/4 预装载，继续使用原有硬件 Break |
-| Freq kHz | ENTR 进入编辑，L/R 每次减/加 10kHz，再次 ENTR 退出 | 180～300kHz（默认200kHz）。一旦改频，先 PC6 LOW、取消 RUN，随后停止定时器计数、改 ARR/CCR、UG 装载、恢复逻辑 PWM。**不会自动重新加热** |
+| Phase deg | ENTR 进入编辑，L/R 每次减/加 **10°**，再次 ENTR 确认退出 | 0～180°，CCR1/3/4 预装载，下一次 TIM1 更新事件同步生效 |
+| Freq kHz | ENTR 进入编辑，L/R 每次减/加 10kHz，再次 ENTR 退出 | 180～300kHz（默认200kHz）。**运行中不关闭 PC6、不停 TIM1**，ARR/CCR1/3/4 预装载在下一次自然更新事件同步生效；保护继续工作 |
 | IC2 | 只读 | PA9/TIM1_CH2 上升沿 CCR2 原始计数 |
 | Lag | 只读 | 按 ARR/4 + D/2 和模周期计算带符号角，使用当前 ARR，不使用 DMA |
 | CT_RMS | 只读 | 去零点电流（A，毫安显示精度），ADC 接近满量程显示 SAT |
@@ -21,7 +42,7 @@
 数据项的普通开关使用 MiaoUI `UI_DATA_SWITCH`；调节使用
 `UI_DATA_INT`。数值边界不允许无意回绕（例如180°→0°、
 300kHz→180kHz）。所有配置由后台业务共享，退出 Settings 后保持，
-Main 也读取相同的移相角；Main 仍按每次10°调节。
+Main 也读取相同的移相角；Main 和 Settings 均按每次10°调节。
 
 **PC6 开关不是绕过软件保护的 GPIO 开关**。置 ON 只提交显式
 RUN 请求，由 `ConvController_BenchRunPoll` 核对有效的12V、
@@ -72,8 +93,14 @@ I_mA = round(delta * 250000000 / (4095 * 25253))
 4. 确认用户在 Settings 切换 PC6 ON 后，仍仅在通过原有保护
    许可时使能；OFF 立即关断。加热中空闲超过此前休眠时长
    仍保持屏幕可用；停止后恢复正常睡眠。
-5. **带电改频**必须在 PC6 关闭后进行：改频操作自动撤销 RUN，
-   重新加热需要再次显式操作开关。
+5. 初期保持PC6关闭，用示波器检查180→200→220→200kHz的每次换频。
+   确认PA8/PA10波形没有混合CCR或计数器被强制重置的短周期。
+   再在已经验证的感性低功率工作区尝试小幅带电改频，并同时测量
+   两桥臂VDS、谐振电流、母线电压。出现非ZVS、浪涌或故障立即停止。
+   正常改频**不撤销RUN、PC6保持高**；检测到preload配置异常则拒绝
+   改频并关断PC6。
+6. 需要注意：寄存器同步生效只保证PWM时序一致，不能证明改频瞬间
+   仍符合ZVS要求。保护与电流相关风险必须由示波器/硬件验证。
 
 本轮不修改 PD 默认12V/3A、安全保护门限以及 TP1941 链路极性。
 已登记 Host 纯函数单元测试和 Keil 工程文件；完整 Keil

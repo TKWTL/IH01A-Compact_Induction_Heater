@@ -72,8 +72,9 @@ static void phase_changed(ui_t *ui)
 static void frequency_changed(ui_t *ui)
 {
     (void)ui;
-    /* The user can explore logic PWM while PC6=LOW; a frequency change
-     * while heating immediately stops the gate and cancels RUN. */
+    /* Live frequency edit: TIM1 ARR and CCR1/3/4 preload together at
+     * one natural UEV, without dropping PC6 while timer is healthy.
+     * Hardware Break/ADC protection remains active. */
     if(s_previous_freq==(int)CONV_FREQ_MAX_KHZ &&
        s_freq==(int)CONV_FREQ_MIN_KHZ)
         s_freq=s_previous_freq;
@@ -112,7 +113,7 @@ void HeaterSettings_AddSettings(ui_page_t *settings)
     s_phase_data.functionType=UI_DATA_FUNCTION_STEP_EXECUTE;
     s_phase_data.dataType=UI_DATA_INT;
     s_phase_data.actionType=UI_DATA_ACTION_RW;
-    s_phase_data.min=0;s_phase_data.max=180;s_phase_data.step=1;
+    s_phase_data.min=0;s_phase_data.max=180;s_phase_data.step=10;
     s_phase_elem.data=&s_phase_data;
     Create_element(&s_phase_item,&s_phase_elem);
     AddItem(" Phase deg",UI_ITEM_DATA,0,&s_phase_item,&s_page,0,0);

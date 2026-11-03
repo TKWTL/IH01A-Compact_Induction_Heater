@@ -39,6 +39,20 @@ int main(void)
         assert(ConvPhase_KHzFromArr(arr)==300u);
         assert(ConvPhase_Calculate(arr,91u,&c));
         assert(c.angle_deg==91u && c.ccr4<=arr);
+        /* For every UI frequency and 10deg angle, compare values stay
+         * within the newly loaded ARR, including CH4 internal edge. */
+        for(unsigned khz=180u;khz<=300u;khz+=10u)
+        {
+            assert(ConvPhase_ArrFromKHz((uint16_t)khz,&arr));
+            for(unsigned angle=0u;angle<=180u;angle+=10u)
+            {
+                assert(ConvPhase_Calculate(arr,(uint16_t)angle,&c));
+                assert(c.ccr1==arr/2u);
+                assert(c.ccr3<=arr/2u);
+                assert(c.ccr4==c.ccr3+c.ccr1);
+                assert(c.ccr4<=arr);
+            }
+        }
     }
     printf("phase: PASS\n");
     return 0;
