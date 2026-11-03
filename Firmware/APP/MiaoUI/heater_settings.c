@@ -178,7 +178,8 @@ void HeaterSettings_Poll(void)
         (void)snprintf(s_lag_text,sizeof(s_lag_text),"Lag: --");
     }
 
-    if(protection.zero_status==CONV_ZERO_READY && adc.frames)
+    if(protection.zero_status==CONV_ZERO_READY && adc.frames &&
+       ConvController_GetState()==CONV_STATE_ADC_MONITOR)
     {
         /* ADC low-pass value minus the original no-switching CT_RMS zero.
          * 0.25253 V/A is a channel gain; current is a display estimate.
@@ -207,9 +208,12 @@ void HeaterSettings_Poll(void)
         (void)snprintf(s_status_text,sizeof(s_status_text),
                        "Fault: %08lX",(unsigned long)protection.fault_mask);
     else if(ConvController_OutputEnabled())
-        (void)snprintf(s_status_text,sizeof(s_status_text),"State: HEATING");
+        (void)snprintf(s_status_text,sizeof(s_status_text),
+                       "PC6: Y/%c RUN",
+                       ConvController_OutputPinLevel()?'Y':'n');
     else if(heater.state==HEATER_RUN_REQUESTED)
-        (void)snprintf(s_status_text,sizeof(s_status_text),"State: STARTING");
+        (void)snprintf(s_status_text,sizeof(s_status_text),
+                       "PC6: N STARTING");
     else if(ConvController_BenchBlockReason()!=CONV_BENCH_OK)
         (void)snprintf(s_status_text,sizeof(s_status_text),
                        "Stopped R:%u",(unsigned)ConvController_BenchBlockReason());

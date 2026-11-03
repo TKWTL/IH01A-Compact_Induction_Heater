@@ -16,7 +16,7 @@
 | Lag | 只读 | 按 ARR/4 + D/2 和模周期计算带符号角，使用当前 ARR，不使用 DMA |
 | CT_RMS | 只读 | 去零点电流（A，毫安显示精度），ADC 接近满量程显示 SAT |
 | CT0 / ADC | 只读 | 开机零点原始计数和当前低通后计数，便于复核 |
-| State | 只读 | OFF / STARTING / HEATING / FAULT 或上次 RUN 拒绝代码 |
+| State | 只读 | STOP / STARTING / FAULT 或上次 RUN 拒绝代码；运行时同时显示 PC6 ODR/IDR 引脚实际状态 |
 
 数据项的普通开关使用 MiaoUI `UI_DATA_SWITCH`；调节使用
 `UI_DATA_INT`。数值边界不允许无意回绕（例如180°→0°、
