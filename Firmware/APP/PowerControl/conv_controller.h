@@ -19,6 +19,12 @@ void ConvController_TripISR(void); /* PC6 low FIRST, optional TIM1 MOE clear */
  * Current build remains locked OFF (IH_POWER_STAGE_COMMISSIONED=0). */
 uint8_t ConvController_TryEnableOutput(void);
 uint8_t ConvController_OutputEnabled(void);
+/* Actual PC6 pin level (IDR), not the commanded ODR bit. On a push-pull output
+ * IDR mirrors the driven level, so OutputEnabled()==1 && OutputPinLevel()==0
+ * means an external load holds the pin low. OutputPinIsOutput() reports the
+ * GPIOC MODER setting so a lost output configuration is visible too. */
+uint8_t ConvController_OutputPinLevel(void);
+uint8_t ConvController_OutputPinIsOutput(void);
 /* Bench-only timer PWM: TIM1 CH1 and combined CH3/CH4 run with FD2204 PC6=0.
  * This must not be conflated with ConvController_TryEnableOutput(). */
 void ConvController_SetPhaseDegrees(uint16_t phase_deg);

@@ -202,22 +202,27 @@ void Heater_UI_Page(ui_t *ui)
     }
     Disp_DrawStr(0u,47u,line);
     /* At 128px and ~6px/glyph, keep line <=21 ASCII characters.
-     * P=TIM1 PWM output, E=FD2204 PC6 gate enable.
+     * P=TIM1 PWM output. E shows BOTH PC6 states: first character is the
+     * commanded output latch (ODR), second is the pin actually read back
+     * (IDR). 'E:YN' therefore means the firmware drives PC6 high while the
+     * pin is held low externally; 'E:Y-' would mean MODER is not output.
      * A refused bench RUN replaces the edit-field hint with its reason code so
      * "REQ flashes and drops back to STOP" is never silent. */
     {
         uint8_t why=ConvController_BenchBlockReason();
+        char pin1=ConvController_OutputPinIsOutput()?
+                  (ConvController_OutputPinLevel()?'Y':'n'):'-';
         if(why!=CONV_BENCH_OK && s.state!=HEATER_RUN_REQUESTED)
-            (void)snprintf(line,sizeof(line),"%s P:%c E:%c R:%s",
+            (void)snprintf(line,sizeof(line),"%s P:%c E:%c%c R:%s",
                 state_name(s.state),
                 ConvController_LogicPwmRunning()?'Y':'N',
-                ConvController_OutputEnabled()?'Y':'N',
+                ConvController_OutputEnabled()?'Y':'N',pin1,
                 bench_block_name(why));
         else
-            (void)snprintf(line,sizeof(line),"%s P:%c E:%c >%s",
+            (void)snprintf(line,sizeof(line),"%s P:%c E:%c%c >%s",
                 state_name(s.state),
                 ConvController_LogicPwmRunning()?'Y':'N',
-                ConvController_OutputEnabled()?'Y':'N',
+                ConvController_OutputEnabled()?'Y':'N',pin1,
                 field_name(s_edit_field));
     }
     Disp_DrawStr(0u,59u,line);

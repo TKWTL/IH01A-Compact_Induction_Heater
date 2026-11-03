@@ -278,6 +278,18 @@ uint8_t ConvController_OutputEnabled(void)
 {
     return (uint8_t)((PWM_EN_GPIO_Port->ODR&PWM_EN_Pin)!=0u);
 }
+uint8_t ConvController_OutputPinLevel(void)
+{
+    return (uint8_t)((PWM_EN_GPIO_Port->IDR&PWM_EN_Pin)!=0u);
+}
+uint8_t ConvController_OutputPinIsOutput(void)
+{
+    /* MODER field for the pin: 01 = general purpose output. */
+    uint32_t shift=0u;
+    uint32_t pin=PWM_EN_Pin;
+    while(pin>1u){pin>>=1;shift+=2u;}
+    return (uint8_t)(((PWM_EN_GPIO_Port->MODER>>shift)&3u)==1u);
+}
 uint8_t ConvController_TryEnableOutput(void)
 {
 #if IH_POWER_STAGE_COMMISSIONED
