@@ -28,8 +28,9 @@ int main(void)
     assert(c.ccr3==319u && c.ccr4==638u);
     {
         uint16_t arr;
-        assert(!ConvPhase_ArrFromKHz(150u,&arr));
-        assert(!ConvPhase_ArrFromKHz(185u,&arr));
+        assert(!ConvPhase_ArrFromKHz(149u,&arr));
+        assert(!ConvPhase_ArrFromKHz(401u,&arr));
+        assert(ConvPhase_ArrFromKHz(185u,&arr));
         assert(!ConvPhase_ArrFromKHz(200u,0));
         assert(ConvPhase_ArrFromKHz(200u,&arr) && arr==639u);
         assert(ConvPhase_KHzFromArr(arr)==200u);
@@ -37,11 +38,17 @@ int main(void)
         assert(ConvPhase_KHzFromArr(arr)==180u);
         assert(ConvPhase_ArrFromKHz(300u,&arr) && arr==426u);
         assert(ConvPhase_KHzFromArr(arr)==300u);
+        assert(ConvPhase_ArrFromKHz(150u,&arr) && arr==852u);
+        assert(ConvPhase_KHzFromArr(arr)==150u);
+        assert(ConvPhase_ArrFromKHz(400u,&arr) && arr==319u);
+        assert(ConvPhase_KHzFromArr(arr)==400u);
+        assert(ConvPhase_ArrFromKHz(391u,&arr));
+        assert(ConvPhase_KHzFromArr(arr)==391u);
         assert(ConvPhase_Calculate(arr,91u,&c));
         assert(c.angle_deg==91u && c.ccr4<=arr);
         /* For every UI frequency and 10deg angle, compare values stay
          * within the newly loaded ARR, including CH4 internal edge. */
-        for(unsigned khz=180u;khz<=300u;khz+=10u)
+        for(unsigned khz=150u;khz<=400u;khz+=1u)
         {
             assert(ConvPhase_ArrFromKHz((uint16_t)khz,&arr));
             for(unsigned angle=0u;angle<=180u;angle+=10u)

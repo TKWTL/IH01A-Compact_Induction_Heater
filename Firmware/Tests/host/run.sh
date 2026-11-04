@@ -56,3 +56,6 @@ build_run zcd -DCONV_ZCD_HOST_TEST -I APP/PowerControl \
 
 build_run ct_current -I APP APP/PowerControl/conv_current.c \
  Tests/host/test_conv_current.c
+
+build_run heater_cli_parse -I BSP/Console \
+ BSP/Console/heater_cli_parse.c Tests/host/test_heater_cli_parse.c

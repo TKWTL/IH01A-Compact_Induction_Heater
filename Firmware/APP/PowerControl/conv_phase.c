@@ -24,8 +24,7 @@ uint8_t ConvPhase_Calculate(uint16_t arr,uint16_t angle_deg,
 uint8_t ConvPhase_ArrFromKHz(uint16_t khz,uint16_t *arr)
 {
     uint32_t period;
-    if(!arr || khz<CONV_FREQ_MIN_KHZ || khz>CONV_FREQ_MAX_KHZ ||
-       (khz%CONV_FREQ_STEP_KHZ)!=0u)return 0u;
+    if(!arr || khz<CONV_FREQ_MIN_KHZ || khz>CONV_FREQ_MAX_KHZ)return 0u;
     period=(CONV_TIM1_CLOCK_KHZ+(uint32_t)khz/2u)/khz;
     if(period<4u || period>65536u)return 0u;
     *arr=(uint16_t)(period-1u);
