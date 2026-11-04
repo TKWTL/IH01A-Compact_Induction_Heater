@@ -33,7 +33,8 @@ enum {
     CONV_PROT_BENCH_VBUS=1u<<15,
     /* OBSOLETE (2026-11-02): the bench run has no time budget, so nothing sets
      * this bit any more. Value kept so an old logged mask still decodes. */
-    CONV_PROT_BENCH_TIMEOUT=1u<<16
+    CONV_PROT_BENCH_TIMEOUT=1u<<16,
+    CONV_PROT_AUTO_FREQ=1u<<17 /* auto loop lost valid phase at high current */
 };
 typedef struct {
     ConvZeroStatus zero_status;
