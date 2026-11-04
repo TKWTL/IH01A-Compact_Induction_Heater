@@ -61,6 +61,8 @@ void ConvProtection_SetIbusLimitMa(uint32_t current_ma);
 void ConvProtection_AnalogWatchdogISR(void);
 /* Called on TIM1 BRK IRQ before HAL, disables PC6 and latches fault. */
 void ConvProtection_BreakISR(void);
+/* Latches AUTO_FREQ bit and disables the bridge immediately in DMA ISR. */
+void ConvProtection_AutoFreqTripISR(void);
 uint32_t ConvProtection_FaultMask(void);
 /* COMP1 + COMP2 raw state, PA6 synthesized window output and TIM1 Break.
  * All must agree on "inside window" before any future PC6 HIGH. */
