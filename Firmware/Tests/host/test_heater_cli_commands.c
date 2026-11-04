@@ -12,6 +12,7 @@ static HeaterSnapshot s_heater;
 static ConvADC_Snapshot s_adc;
 static ConvProtectionSnapshot s_protection;
 static ConvZcdSnapshot s_zcd;
+static ConvAutoFreqSnapshot s_af;
 static ConvState s_state=CONV_STATE_ADC_MONITOR;
 static uint8_t s_enabled,s_on_allowed,s_block;
 static HeaterCliMockTim s_timer={639u};
@@ -41,6 +42,20 @@ void ConvADC_CopySnapshot(ConvADC_Snapshot *out){*out=s_adc;}
 void ConvProtection_GetSnapshot(ConvProtectionSnapshot *out){*out=s_protection;}
 void ConvZcd_Poll(uint32_t now){(void)now;}
 void ConvZcd_GetSnapshot(ConvZcdSnapshot *out){*out=s_zcd;}
+void ConvAutoFreq_GetSnapshot(ConvAutoFreqSnapshot *out){*out=s_af;}
+const char *ConvAutoFreq_StateName(ConvAutoFreqState state)
+{
+    return state==CONV_AF_TRACK?"TRACK":
+           state==CONV_AF_SAFE?"SAFE":"OFF";
+}
+uint8_t ConvAutoFreq_Enabled(void){return s_af.enabled;}
+uint8_t ConvAutoFreq_SetEnabled(uint8_t enabled)
+{
+    s_af.enabled=(uint8_t)(enabled!=0u);
+    s_af.state=s_af.enabled?CONV_AF_SAFE:CONV_AF_OFF;
+    if(s_af.enabled)TIM1->ARR=CONV_AF_START_ARR;
+    return 1u;
+}
 ConvZcdCalStatus ConvZcd_CorrectionStatus(const ConvZcdSnapshot *v,
                                            uint32_t ct_ma,uint8_t valid)
 {
@@ -102,16 +117,22 @@ int main(void)
     assert(HeaterCLI_Dispatch("ping")==0u);
     send("heater phase 180","HCLI OK PHASE_DEG=180\r\n");
     send("heater phase 181","HCLI ERR RANGE\r\n");
-    send("heater freq 150","HCLI OK FREQ_KHZ=150\r\n");
-    send("heater freq 400","HCLI OK FREQ_KHZ=400\r\n");
-    send("heater freq 149","HCLI ERR RANGE\r\n");
-    send("heater freq xyz","HCLI ERR SYNTAX\r\n");
+    send("heater auto on","HCLI OK AUTO_FREQ=ON\r\n");
+    send("heater auto off","HCLI OK AUTO_FREQ=OFF\r\n");
+    send("heater freq 150","HCLI ERR MANUAL_FREQ_DISABLED\r\n");
+    send("heater freq 400","HCLI ERR MANUAL_FREQ_DISABLED\r\n");
+    send("heater freq xyz","HCLI ERR MANUAL_FREQ_DISABLED\r\n");
+    send("heater auto 1","HCLI ERR SYNTAX\r\n");
     send("heater on","HCLI ERR HEATER_BLOCK=NO_PD\r\n");
 
     s_now=1100u;
     s_on_allowed=1u;
     send("heater on","HCLI OK HEATER=ON\r\n");
-    send("heater freq 200","HCLI OK FREQ_KHZ=200\r\n");
+    send("heater auto on","HCLI OK AUTO_FREQ=ON\r\n");
+    assert(TIM1->ARR==CONV_AF_START_ARR);
+    TIM1->ARR=639u; /* simulate TRACK stepping after acquisition */
+    s_af.state=CONV_AF_TRACK;
+    s_af.ibus_delta_raw=190u;
     s_zcd.valid=1u;
     s_zcd.last_ms=1090u;
     s_zcd.capture_raw=444u;
@@ -127,6 +148,7 @@ int main(void)
     s_reply[0]='\0';
     assert(HeaterCLI_Dispatch("heater get"));
     assert(strstr(s_reply,"HCLI OK HEATER=ON PHASE_DEG=180 FREQ_KHZ=200 FREQ_HZ=200000 ")==s_reply);
+    assert(strstr(s_reply," AUTO_FREQ=ON AF_STATE=TRACK IBUS_DELTA=190\r\n")!=0);
     assert(strstr(s_reply,"IC2=444 LAG_DEG=+95.0 LAG_RAW_DEG=+114.9 LAG_QUAL=FIT CT_RMS_A=0.699")!=0 ||
            strstr(s_reply,"IC2=444 LAG_DEG=+95.0 LAG_RAW_DEG=+114.9 LAG_QUAL=FIT CT_RMS_A=0.700")!=0);
     s_zcd.last_ms=0u;
