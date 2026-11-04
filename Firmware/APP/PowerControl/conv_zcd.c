@@ -72,18 +72,21 @@ uint8_t ConvZcd_Calculate(uint16_t arr,uint16_t phase_deg,
     out->lag_corr_deci_deg=0;
     if(ConvZcd_CorrectionMilliTicks(arr,&out->delay_milliticks))
     {
-        /* Compensation is applied in count-domain before converting to
-         * tenths of degrees. Both negative and positive biases are valid.
-         * Round signed division symmetrically and wrap to [-180,+180]. */
-        int32_t divisor=1000*(int32_t)(arr+1u);
-        int32_t numerator=out->delay_milliticks*3600;
-        int32_t correction=(numerator>=0) ?
-                            (numerator+divisor/2)/divisor :
-                            (numerator-divisor/2)/divisor;
-        int32_t compensated=(int32_t)out->lag_deci_deg-correction;
-        if(compensated>1800)compensated-=3600;
-        else if(compensated<-1800)compensated+=3600;
-        out->lag_corr_deci_deg=(int16_t)compensated;
+        /* One rounding at the end: delta4 is in quarter timer counts,
+         * so delta4*250 converts it to milli-ticks. Subtract the signed
+         * delay in the SAME time domain, wrap, then scale to 0.1deg.
+         * With 160..330kHz ARR the intermediate fits signed 32-bit. */
+        int32_t period_milli=1000*(int32_t)(arr+1u);
+        int32_t corrected_milli=delta4*250-out->delay_milliticks;
+        int32_t scaled;
+        if(corrected_milli>period_milli/2)
+            corrected_milli-=period_milli;
+        else if(corrected_milli<-(period_milli/2))
+            corrected_milli+=period_milli;
+        scaled=corrected_milli*3600;
+        if(scaled>=0)scaled+=period_milli/2;
+        else scaled-=period_milli/2;
+        out->lag_corr_deci_deg=(int16_t)(scaled/period_milli);
         out->correction_valid=1u;
     }
     out->valid=1u;
