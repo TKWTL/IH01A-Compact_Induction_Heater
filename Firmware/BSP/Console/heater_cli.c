@@ -4,6 +4,7 @@
  */
 #include "heater_cli.h"
 #include "heater_cli_parse.h"
+#ifndef HEATER_CLI_HOST_TEST
 #include "PowerControl/conv_controller.h"
 #include "PowerControl/conv_phase.h"
 #include "PowerControl/conv_zcd.h"
@@ -14,7 +15,13 @@
 #include "framework/pm_api.h"
 #include "main.h"
 #include "tim.h"
+#else
+#include "heater_cli_mock.h"
+#endif
 #include <stdio.h>
+#ifdef HEATER_CLI_HOST_TEST
+#define printf HeaterCLI_MockPrintf
+#endif
 
 static const char *bench_reason(uint8_t code)
 {

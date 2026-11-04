@@ -59,3 +59,8 @@ build_run ct_current -I APP APP/PowerControl/conv_current.c \
 
 build_run heater_cli_parse -I BSP/Console \
  BSP/Console/heater_cli_parse.c Tests/host/test_heater_cli_parse.c
+
+build_run heater_cli_commands -DHEATER_CLI_HOST_TEST -I APP -I BSP/Console -I Tests/host \
+ BSP/Console/heater_cli_parse.c BSP/Console/heater_cli.c \
+ APP/PowerControl/conv_phase.c APP/PowerControl/conv_current.c \
+ Tests/host/test_heater_cli_commands.c
