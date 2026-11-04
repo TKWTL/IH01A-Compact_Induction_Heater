@@ -1,6 +1,6 @@
 /* IH01A MiaoUI root: Main, Settings, Statistics, About.
  * Main is a nonblocking heater control panel. Settings contains the
- * Heater live bench controls (PC6, phase, frequency, CT_RMS/IC2), Display,
+ * Heater live bench controls (PC6, phase, auto frequency, CT_RMS/IC2), Display,
  * PD and System (sleep). Statistics/Source PDO shows SPR/EPR capabilities;
  * Statistics/System displays ADC pin voltages and MCU temperature.
  * The current ASCII font is used until the Chinese glyph port.
