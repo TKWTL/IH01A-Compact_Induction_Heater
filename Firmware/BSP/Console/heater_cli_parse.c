@@ -35,7 +35,6 @@ uint8_t HeaterCli_Parse(const char *line,HeaterCliRequest *out)
 {
     const char *p;
     uint16_t value;
-    uint8_t is_frequency;
     if(!line || !out)return 0u;
     p=skip_space(line);
     if(!token(&p,"heater"))return 0u;
@@ -48,16 +47,24 @@ uint8_t HeaterCli_Parse(const char *line,HeaterCliRequest *out)
     p=skip_space(line);(void)token(&p,"heater");
     if(token(&p,"off") && end(p)){out->op=HEATER_CLI_OFF;return 1u;}
     p=skip_space(line);(void)token(&p,"heater");
-    is_frequency=0u;
-    if(token(&p,"freq"))is_frequency=1u;
-    else if(!token(&p,"phase"))return 1u;
+    if(token(&p,"auto"))
+    {
+        if(token(&p,"on") && end(p))out->op=HEATER_CLI_AUTO_ON;
+        else if(token(&p,"off") && end(p))out->op=HEATER_CLI_AUTO_OFF;
+        return 1u;
+    }
+    if(token(&p,"freq"))
+    {
+        /* Explicit migration error: no hidden numeric tuning bypass. */
+        out->op=HEATER_CLI_FREQ_DISABLED;
+        return 1u;
+    }
+    if(!token(&p,"phase"))return 1u;
     if(!decimal(p,&value))return 1u;
-    if((is_frequency && (value<150u || value>400u)) ||
-       (!is_frequency && value>180u))
-        out->op=HEATER_CLI_OUT_OF_RANGE;
+    if(value>180u)out->op=HEATER_CLI_OUT_OF_RANGE;
     else
     {
-        out->op=is_frequency?HEATER_CLI_FREQ:HEATER_CLI_PHASE;
+        out->op=HEATER_CLI_PHASE;
         out->value=value;
     }
     return 1u;
