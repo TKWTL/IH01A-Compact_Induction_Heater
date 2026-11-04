@@ -39,3 +39,46 @@ policy or enable EPR protocol negotiation.
 - Keil Watch 检查 `g_uart_boot_stage` 和 `g_uart_probe_result`；前者若停在 1 或 2，先定位启动卡点。若到 5 而无后续日志，检查 TX DMA/中断处理。
 - 串口命令 `uart` 能输出 DMA 启动、完成、失败计数。
 - 仅允许 **boot probe** 使用一次短 HAL 轮询发送，所有正常运行期间及 PD 回调都保持无阻塞日志；必要时注释 probe 再检查 PD 首次应答时序。
+
+## 主机侧收发与解析（COM19 / WCH-Link，2026 实测）
+
+主机侧工具：`Tools/serial_cli.py`（pyserial，Windows 独占打开 COM19）。
+
+```text
+python Tools/serial_cli.py --port COM19 --cmd help --cmd ping --cmd pd --cmd uart
+python Tools/serial_cli.py --port COM19 --cmd pd --json
+python Tools/serial_cli.py --port COM19 --listen 5 --hex
+python Tools/serial_cli.py --port COM19 --repeat 10 --cmd pd --retries 8   # 链路压力测试
+```
+
+只读命令为 `help`/`ping`/`pd`/`uart`；`pd on|off|max N|epr|auto` 会真实改变
+USB-PD 协商状态，必须显式加 `--allow-write` 才会发送。
+
+实测要点（均为本机 COM19：`WCH-Link SERIAL`，USB VID:PID=1A86:8012）：
+
+1. MCU 侧正常：干净帧里 `uart` 报告 `rx_drop=0 rx_err=0`，
+   `tx_start` 与 `tx_done` 恒等。
+2. **乱码的根因在主机读法，不在固件、也不在链路。**
+   用 `Serial.read()` 的阻塞读法时，WCH-Link 的接收缓冲会在主机读取
+   的间隙里溢出，解码出来的字节从大约第 45–95 字节开始整体位错位
+   （`[CLI]` 变成 `[\xab\xb1\xc1\xb1`），乱码里甚至夹着 `U1OK`、
+   `Fixed 12.0 20.0V 5.00A` 这类旧内容，很容易误判为固件 TX 环缺陷
+   或 EMI。**改用 `in_waiting` 忙轮询、有数据立刻读走**后，同一批
+   流量逐字节完全复现：
+
+   | 读法 | `heater get`（94 B）|
+   |---|---|
+   | 阻塞 `read()`，timeout=20 ms | 8/8 帧损坏（首坏字节 56–70）|
+   | `in_waiting` 忙轮询 | **8/8 帧干净，长度恒为 94 B** |
+
+   实测前一轮把原因写成"桥接/EMI"是错判，已在此更正。改读法后
+   450 点扫描全程 **0 坏帧、0 次重发**。
+3. 由此产生的两条铁律：
+   - **不要**用阻塞 `read()` 收这条串口的数据，要用
+     `while: n=in_waiting; if n: read(n)`；
+   - **不要**在传输中途调用 `reset_input_buffer()`（会造成失步）。
+4. 仍保留**按帧校验 + 重发**（`--retries`）作为兜底：只接受满足完整
+   报文语法的帧（HCLI 用正则整体匹配），从而连"静默丢字节但仍是
+   ASCII"的帧也能拒掉——只查"是否全为可打印字符"是不够的。
+5. `uart` 的 `idle`（RX 空闲中断）计数会随交互快速增长，属正常现象
+   （每次命令后线路回到空闲都会产生一次 IDLE），不是毛刺证据。
