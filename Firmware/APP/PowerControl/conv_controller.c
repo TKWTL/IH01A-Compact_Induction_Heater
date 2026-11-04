@@ -90,7 +90,8 @@ void ConvController_BenchPowerOff(void)
  * Foreground staging masks IRQ for a few MMIO writes to prevent an ISR
  * transaction from interleaving. Hardware Break remains asynchronous.
  * No UG/CNT/CEN/MOE changes while TIM1 is running. */
-static uint8_t ConvController_StageTimerPreloads(const ConvPhaseConfig *phase)
+static uint8_t ConvController_StageTimerPreloads(const ConvPhaseConfig *phase,
+                                                  uint8_t allow_arr_change)
 {
     uint32_t mask,cr1,ccmr1,ccmr2;
     uint8_t running,ok=0u;
@@ -103,7 +104,8 @@ static uint8_t ConvController_StageTimerPreloads(const ConvPhaseConfig *phase)
     running=(uint8_t)((cr1&TIM_CR1_CEN)!=0u);
     if((!running && ConvController_OutputEnabled()) ||
        (cr1&TIM_CR1_UDIS)!=0u ||
-       (running && phase->arr!=(uint16_t)TIM1->ARR))
+       (running && !allow_arr_change &&
+        phase->arr!=(uint16_t)TIM1->ARR))
         goto done;
     if(running &&
        (((cr1&TIM_CR1_ARPE)==0u) ||
@@ -143,7 +145,7 @@ void ConvController_SetPhaseDegrees(uint16_t angle_deg)
     uint16_t arr=(uint16_t)TIM1->ARR;
     if(!ConvPhase_Calculate(arr,angle_deg,&phase))return;
     if(s_phase_arr==arr && s_phase_deg==phase.angle_deg)return;
-    if(!ConvController_StageTimerPreloads(&phase))
+    if(!ConvController_StageTimerPreloads(&phase,0u))
     {
         /* Preload unexpectedly disabled or update already inhibited:
          * fail closed instead of permitting a mixed active waveform. */
