@@ -266,31 +266,60 @@ void ConvAutoFreq_Init(void)
 }
 uint8_t ConvAutoFreq_SetEnabled(uint8_t enabled)
 {
+    uint32_t mask;
     enabled=(uint8_t)(enabled!=0u);
     if(enabled==s_enabled)return 1u;
 #ifndef CONV_AUTO_FREQ_HOST_TEST
-    /* A manual mode switch cannot change operating frequency by
-     * 130kHz mid-energization. Require a fresh explicit RUN after mode
-     * change; no automatic power-on path is added. */
+    /* Stop the ISR loop BEFORE staging 300kHz. Otherwise an ADC frame
+     * could apply a new ARR after the foreground's manual off request.
+     * Any change of tracking mode requires a fresh explicit RUN. */
+    mask=__get_PRIMASK();
+    __disable_irq();
+    s_enabled=0u;
+    s_frame_div=0u;
+    ConvAutoFreq_CoreReset(&s_core);
+    if((mask&1u)==0u)__enable_irq();
     if(ConvController_OutputEnabled())
     {
         ConvController_BenchPowerOff();
         Heater_Stop();
     }
     if(!ConvController_SetFrequencyArr(CONV_AF_START_ARR))
+    {
+        s_snapshot.enabled=0u;
+        s_snapshot.state=CONV_AF_FAULT;
         return 0u;
+    }
+    mask=__get_PRIMASK();
+    __disable_irq();
+#else
+    mask=0u;
 #endif
-    s_enabled=enabled;
     ConvAutoFreq_CoreReset(&s_core);
+    s_frame_div=0u;
     s_snapshot.state=enabled?CONV_AF_SAFE:CONV_AF_OFF;
     s_snapshot.enabled=enabled;
-    s_frame_div=0u;
+    s_enabled=enabled; /* commit enable LAST */
+#ifndef CONV_AUTO_FREQ_HOST_TEST
+    if((mask&1u)==0u)__enable_irq();
+#endif
     return 1u;
 }
 uint8_t ConvAutoFreq_Enabled(void){return s_enabled;}
 void ConvAutoFreq_GetSnapshot(ConvAutoFreqSnapshot *out)
 {
-    if(out)*out=s_snapshot;
+#ifndef CONV_AUTO_FREQ_HOST_TEST
+    uint32_t mask;
+#endif
+    if(!out)return;
+#ifndef CONV_AUTO_FREQ_HOST_TEST
+    mask=__get_PRIMASK();
+    __disable_irq();
+#endif
+    *out=s_snapshot;
+#ifndef CONV_AUTO_FREQ_HOST_TEST
+    if((mask&1u)==0u)__enable_irq();
+#endif
 }
 /* ADC DMA callback at 20k complete frames/s.
  * First 99 IRQs: a single frame divider branch. Exactly on the 100th
