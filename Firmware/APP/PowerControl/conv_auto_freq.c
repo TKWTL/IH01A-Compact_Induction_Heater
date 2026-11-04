@@ -237,6 +237,17 @@ void ConvAutoFreq_CoreStep(ConvAutoFreqCore *core,
         out->requested_arr=(uint16_t)next;
     }
 }
+uint16_t ConvAutoFreq_SlewArr(uint16_t current,uint16_t requested,
+                               uint8_t output_on)
+{
+    int32_t delta=(int32_t)requested-(int32_t)current;
+    if(!output_on)return requested;
+    /* Even on capture loss or low current, do not jump 170->300kHz in
+     * one energized PWM period. Per 5ms slew: ARR [-8,+4]. */
+    if(delta>4)delta=4;
+    if(delta< -8)delta=-8;
+    return (uint16_t)((int32_t)current+delta);
+}
 const char *ConvAutoFreq_StateName(ConvAutoFreqState state)
 {
     switch(state)
@@ -379,6 +390,8 @@ void ConvAutoFreq_FrameISR(const volatile uint16_t *frame)
     in.phase_fit=valid;
     in.lag_corr_deci_deg=lag;
     ConvAutoFreq_CoreStep(&s_core,&in,&action);
+    action.requested_arr=ConvAutoFreq_SlewArr(in.arr,
+                         action.requested_arr,in.output_on);
     s_snapshot.state=action.state;
     s_snapshot.enabled=s_enabled;
     s_snapshot.ibus_locked=s_core.ibus_locked;
