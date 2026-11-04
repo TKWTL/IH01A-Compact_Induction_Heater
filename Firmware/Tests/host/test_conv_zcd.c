@@ -32,6 +32,17 @@ int main(void)
         unsigned i;
         assert(ConvZcd_CorrectionMilliTicks(639u,&delay));
         assert(delay==35290);
+        /* Negative calibrated bias below 175kHz must add counts rather
+         * than be accidentally clamped to zero. 160kHz => -16.045 ticks. */
+        assert(ConvZcd_CorrectionMilliTicks(799u,&delay));
+        assert(delay==-16045);
+        assert(ConvZcd_Calculate(799u,180u,620u,&v));
+        assert(v.lag_corr_deci_deg>v.lag_deci_deg);
+        /* A near-zero CCR2 is an angle just below -180deg; subtracting
+         * the positive delay must wrap it to a positive near-180 value. */
+        assert(ConvZcd_Calculate(639u,180u,1u,&v));
+        assert(v.lag_deci_deg<-1700);
+        assert(v.lag_corr_deci_deg>1500);
         for(i=0u;i<sizeof(cases)/sizeof(cases[0]);++i)
         {
             assert(ConvPhase_ArrFromKHz(cases[i].khz,&arr));
@@ -45,13 +56,22 @@ int main(void)
         }
         assert(ConvZcd_Calculate(639u,90u,444u,&v));
         assert(ConvZcd_CorrectionStatus(&v,700u,1u)==CONV_ZCD_CAL_PHASE_RANGE);
+        assert(ConvZcd_Calculate(639u,120u,444u,&v));
+        assert(ConvZcd_CorrectionStatus(&v,50u,1u)==CONV_ZCD_CAL_FIT);
+        assert(ConvZcd_Calculate(639u,119u,444u,&v));
+        assert(ConvZcd_CorrectionStatus(&v,50u,1u)==CONV_ZCD_CAL_PHASE_RANGE);
         assert(ConvPhase_ArrFromKHz(150u,&arr));
         assert(!ConvZcd_CorrectionMilliTicks(arr,&delay));
+        /* No silent extrapolation even 1 timer count beyond the band. */
+        assert(ConvZcd_CorrectionMilliTicks(799u,&delay));
+        assert(!ConvZcd_CorrectionMilliTicks(800u,&delay));
         assert(ConvZcd_Calculate(arr,180u,600u,&v));
         assert(!v.correction_valid);
         assert(ConvZcd_CorrectionStatus(&v,700u,1u)==CONV_ZCD_CAL_FREQ_RANGE);
         assert(ConvPhase_ArrFromKHz(400u,&arr));
         assert(!ConvZcd_CorrectionMilliTicks(arr,&delay));
+        assert(ConvZcd_CorrectionMilliTicks(387u,&delay));
+        assert(!ConvZcd_CorrectionMilliTicks(386u,&delay));
         assert(ConvZcd_Calculate(arr,180u,250u,&v));
         assert(ConvZcd_CorrectionStatus(&v,700u,1u)==CONV_ZCD_CAL_FREQ_RANGE);
         /* Early phase, invalid sample and missing output must never be FIT. */

@@ -92,6 +92,9 @@ uint8_t ConvZcd_Calculate(uint16_t arr,uint16_t phase_deg,
 void ConvZcd_Init(void)
 {
     s_result.valid=0u;
+    s_result.correction_valid=0u;
+    s_result.delay_milliticks=0;
+    s_result.lag_corr_deci_deg=0;
     s_result.sequence=0u;
     s_result.overcapture_seen=0u;
     s_result.last_ms=0u;
