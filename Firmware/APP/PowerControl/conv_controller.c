@@ -176,7 +176,7 @@ static uint8_t ConvController_ApplyFrequencyArr(uint16_t next_arr)
     /* ISR must not copy the mutable HeaterSnapshot. Phase is an aligned,
      * staged controller setpoint, updated under the preload lock above. */
     if(!ConvPhase_Calculate(next_arr,s_phase_deg,&phase))return 0u;
-    if(!ConvController_StageTimerPreloads(&phase))
+    if(!ConvController_StageTimerPreloads(&phase,1u))
     {
         /* Hardware must be disabled FIRST; foreground supervisor will
          * latch the corresponding automatic-loop fault. */
