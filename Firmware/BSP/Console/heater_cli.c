@@ -8,6 +8,7 @@
 #include "PowerControl/conv_controller.h"
 #include "PowerControl/conv_phase.h"
 #include "PowerControl/conv_zcd.h"
+#include "PowerControl/conv_auto_freq.h"
 #include "PowerControl/conv_adc.h"
 #include "PowerControl/conv_protection.h"
 #include "PowerControl/conv_current.h"
@@ -64,6 +65,7 @@ static void report_snapshot(void)
     ConvADC_Snapshot adc;
     ConvProtectionSnapshot protection;
     ConvZcdSnapshot zcd;
+    ConvAutoFreqSnapshot af;
     const char *state;
     ConvZcdCalStatus quality=CONV_ZCD_CAL_NO_CAPTURE;
     uint32_t now=HAL_GetTick(),current_ma=0u;
@@ -80,6 +82,7 @@ static void report_snapshot(void)
      * 100ms heater thread. This is a register read, no CC2 DMA/IRQ. */
     ConvZcd_Poll(now);
     ConvZcd_GetSnapshot(&zcd);
+    ConvAutoFreq_GetSnapshot(&af);
 
     if(h.state==HEATER_FAULT || protection.fault_mask)
         state="FAULT";
@@ -142,10 +145,11 @@ static void report_snapshot(void)
     phase=(unsigned)ConvController_GetPhaseDegrees();
     /* Preserve IC2 and raw lag for regression; LAG_DEG is now the
      * fitted corrected angle, or NA whenever the fit gate is invalid. */
-    printf("HCLI OK HEATER=%s PHASE_DEG=%u FREQ_KHZ=%u FREQ_HZ=%lu IC2=%s LAG_DEG=%s LAG_RAW_DEG=%s LAG_QUAL=%s CT_RMS_A=%s\r\n",
+    printf("HCLI OK HEATER=%s PHASE_DEG=%u FREQ_KHZ=%u FREQ_HZ=%lu IC2=%s LAG_DEG=%s LAG_RAW_DEG=%s LAG_QUAL=%s CT_RMS_A=%s AUTO_FREQ=%s AF_STATE=%s IBUS_DELTA=%u\r\n",
            state,phase,(unsigned)ConvController_GetFrequencyKhz(),
            (unsigned long)actual_hz,ic2,lag,lag_raw,
-           lag_quality(quality),current);
+           lag_quality(quality),current,af.enabled?"ON":"OFF",
+           ConvAutoFreq_StateName(af.state),(unsigned)af.ibus_delta_raw);
 }
 uint8_t HeaterCLI_Dispatch(const char *line)
 {
@@ -171,12 +175,17 @@ uint8_t HeaterCLI_Dispatch(const char *line)
         else printf("HCLI ERR APPLY\r\n");
         return 1u;
 
-    case HEATER_CLI_FREQ:
-        if(ConvController_SetFrequencyKhz(req.value))
-            printf("HCLI OK FREQ_KHZ=%u\r\n",
-                   (unsigned)ConvController_GetFrequencyKhz());
+    case HEATER_CLI_AUTO_ON:
+    case HEATER_CLI_AUTO_OFF:
+        if(ConvAutoFreq_SetEnabled(req.op==HEATER_CLI_AUTO_ON))
+            printf("HCLI OK AUTO_FREQ=%s\r\n",
+                   ConvAutoFreq_Enabled()?"ON":"OFF");
         else
             printf("HCLI ERR APPLY\r\n");
+        return 1u;
+
+    case HEATER_CLI_FREQ_DISABLED:
+        printf("HCLI ERR MANUAL_FREQ_DISABLED\r\n");
         return 1u;
 
     case HEATER_CLI_ON:
