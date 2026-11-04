@@ -1,11 +1,11 @@
 /* IH01A Settings -> Heater. Native MiaoUI switch/data items let the user
- * toggle the validated PC6 bench gate and edit phase/frequency directly.
+ * toggle the interlocked PC6 bench gate, phase and auto frequency.
  * All controls are in the cooperative foreground, never an ADC ISR.
  */
 #include "heater_settings.h"
 #include "PowerControl/heater_control.h"
 #include "PowerControl/conv_controller.h"
-#include "PowerControl/conv_phase.h"
+#include "PowerControl/conv_auto_freq.h"
 #include "PowerControl/conv_current.h"
 #include "PowerControl/conv_adc.h"
 #include "PowerControl/conv_protection.h"
@@ -15,13 +15,14 @@
 #include <stdio.h>
 
 static ui_page_t s_page;
-static ui_item_t s_entry,s_back,s_pc6_item,s_phase_item,s_freq_item;
+static ui_item_t s_entry,s_back,s_pc6_item,s_phase_item,s_auto_item,s_freq_item,s_af_item;
 static ui_item_t s_ic2_item,s_lag_item,s_lag_raw_item,s_ct_item,s_zero_item,s_status_item;
-static ui_data_t s_pc6_data,s_phase_data,s_freq_data;
-static ui_element_t s_pc6_elem,s_phase_elem,s_freq_elem;
-static uint8_t s_pc6;
-static int s_phase,s_freq;
-static int s_previous_phase,s_previous_freq;
+static ui_data_t s_pc6_data,s_phase_data,s_auto_data;
+static ui_element_t s_pc6_elem,s_phase_elem,s_auto_elem;
+static uint8_t s_pc6,s_auto;
+static int s_phase;
+static int s_previous_phase;
+static char s_freq_text[26],s_af_text[26];
 static char s_ic2_text[26],s_lag_text[26],s_lag_raw_text[26],s_ct_text[26];
 static char s_zero_text[26],s_status_text[26];
 static uint32_t s_last_poll;
@@ -69,21 +70,11 @@ static void phase_changed(ui_t *ui)
     s_previous_phase=s_phase;
     pm_api_refresh_idle();
 }
-static void frequency_changed(ui_t *ui)
+static void auto_changed(ui_t *ui)
 {
     (void)ui;
-    /* Live frequency edit: TIM1 ARR and CCR1/3/4 preload together at
-     * one natural UEV, without dropping PC6 while timer is healthy.
-     * Hardware Break/ADC protection remains active. */
-    if(s_previous_freq==(int)CONV_FREQ_MAX_KHZ &&
-       s_freq==(int)CONV_FREQ_MIN_KHZ)
-        s_freq=s_previous_freq;
-    else if(s_previous_freq==(int)CONV_FREQ_MIN_KHZ &&
-            s_freq==(int)CONV_FREQ_MAX_KHZ)
-        s_freq=s_previous_freq;
-    if(!ConvController_SetFrequencyKhz((uint16_t)s_freq))
-        s_freq=(int)ConvController_GetFrequencyKhz();
-    s_previous_freq=s_freq;
+    if(!ConvAutoFreq_SetEnabled(s_auto))
+        s_auto=ConvAutoFreq_Enabled();
     pm_api_refresh_idle();
 }
 void HeaterSettings_AddSettings(ui_page_t *settings)
@@ -118,19 +109,19 @@ void HeaterSettings_AddSettings(ui_page_t *settings)
     Create_element(&s_phase_item,&s_phase_elem);
     AddItem(" Phase deg",UI_ITEM_DATA,0,&s_phase_item,&s_page,0,0);
 
-    s_freq=200;s_previous_freq=200;
-    s_freq_data.name="Freq kHz";
-    s_freq_data.ptr=&s_freq;
-    s_freq_data.function=frequency_changed;
-    s_freq_data.functionType=UI_DATA_FUNCTION_STEP_EXECUTE;
-    s_freq_data.dataType=UI_DATA_INT;
-    s_freq_data.actionType=UI_DATA_ACTION_RW;
-    s_freq_data.min=(int)CONV_FREQ_MIN_KHZ;
-    s_freq_data.max=(int)CONV_FREQ_MAX_KHZ;
-    s_freq_data.step=(int)CONV_FREQ_STEP_KHZ;
-    s_freq_elem.data=&s_freq_data;
-    Create_element(&s_freq_item,&s_freq_elem);
-    AddItem(" Freq kHz",UI_ITEM_DATA,0,&s_freq_item,&s_page,0,0);
+    s_auto=ConvAutoFreq_Enabled();
+    s_auto_data.name="Auto Freq";
+    s_auto_data.ptr=&s_auto;
+    s_auto_data.function=auto_changed;
+    s_auto_data.functionType=UI_DATA_FUNCTION_STEP_EXECUTE;
+    s_auto_data.dataType=UI_DATA_SWITCH;
+    s_auto_data.actionType=UI_DATA_ACTION_RW;
+    s_auto_data.min=0;s_auto_data.max=0;s_auto_data.step=0;
+    s_auto_elem.data=&s_auto_data;
+    Create_element(&s_auto_item,&s_auto_elem);
+    AddItem(" Auto Freq",UI_ITEM_DATA,0,&s_auto_item,&s_page,0,0);
+    AddItem(s_freq_text,UI_ITEM_WORD,0,&s_freq_item,&s_page,0,readonly_item);
+    AddItem(s_af_text,UI_ITEM_WORD,0,&s_af_item,&s_page,0,readonly_item);
 
     AddItem(s_ic2_text,UI_ITEM_WORD,0,&s_ic2_item,&s_page,0,readonly_item);
     AddItem(s_lag_text,UI_ITEM_WORD,0,&s_lag_item,&s_page,0,readonly_item);
@@ -148,6 +139,7 @@ void HeaterSettings_Poll(void)
     ConvProtectionSnapshot protection;
     ConvADC_Snapshot adc;
     ConvZcdSnapshot capture;
+    ConvAutoFreqSnapshot af;
     uint32_t now=HAL_GetTick();
     uint32_t current_ma=0u;
     uint8_t ct_valid=0u;
@@ -157,13 +149,18 @@ void HeaterSettings_Poll(void)
     ConvProtection_GetSnapshot(&protection);
     ConvADC_CopySnapshot(&adc);
     ConvZcd_GetSnapshot(&capture);
+    ConvAutoFreq_GetSnapshot(&af);
 
     s_pc6=(uint8_t)((heater.state==HEATER_RUN_REQUESTED) ||
                      ConvController_OutputEnabled());
     s_phase=(int)heater.target_phase_deg;
     s_previous_phase=s_phase;
-    s_freq=(int)ConvController_GetFrequencyKhz();
-    s_previous_freq=s_freq;
+    s_auto=af.enabled;
+    (void)snprintf(s_freq_text,sizeof(s_freq_text),"Freq: %u kHz",
+                   (unsigned)ConvController_GetFrequencyKhz());
+    (void)snprintf(s_af_text,sizeof(s_af_text),"AF:%s IB:%u",
+                   ConvAutoFreq_StateName(af.state),
+                   (unsigned)af.ibus_delta_raw);
     if(protection.zero_status==CONV_ZERO_READY && adc.frames &&
        ConvController_GetState()==CONV_STATE_ADC_MONITOR &&
        adc.raw[CONV_ADC_CT_RMS]<4090u)
@@ -236,7 +233,7 @@ void HeaterSettings_Poll(void)
     }
     if(heater.state==HEATER_FAULT || protection.fault_mask)
         (void)snprintf(s_status_text,sizeof(s_status_text),
-                       "Fault: %08lX",(unsigned long)protection.fault_mask);
+                       "Fault: %08lX",(unsigned long)(protection.fault_mask|heater.fault_mask));
     else if(ConvController_OutputEnabled())
         (void)snprintf(s_status_text,sizeof(s_status_text),
                        "PC6: Y/%c RUN",
