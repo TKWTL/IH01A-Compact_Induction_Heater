@@ -7,6 +7,7 @@
 - All heater replies are **one line** starting with `HCLI OK` or `HCLI ERR` followed by `\r\n`.
   The existing PD debug log can appear at arbitrary times; host must **filter by `HCLI ` prefix**, send only one in-flight command, and wait for a corresponding response.
 - No automatic periodical telemetry: measurements are emitted only on explicit `heater get`. Existing non-heater CLI commands remain unchanged.
+- Commands exceeding the 47-character RX line buffer are discarded entirely until the next terminator and return `HCLI ERR LINE_TOO_LONG`, never a partially interpreted command. Fast repeated queries may legitimately return the same IC2 sample because CH2 capture is polled by the heater foreground at approximately 10Hz; for independent consecutive observations allow >=100ms between `get` calls.
 
 ## Commands
 

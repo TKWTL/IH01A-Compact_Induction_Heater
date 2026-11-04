@@ -8,6 +8,7 @@
 #include <string.h>
 static char s_line[48];
 static uint8_t s_len;
+static uint8_t s_line_overflow; /* discard entire malformed/oversized line */
 static void cli_dispatch(void)
 {
     PD_InputSnapshot pd;
@@ -110,12 +111,24 @@ void ConsoleCLI_Poll(void)
     {
         if(ch=='\r'||ch=='\n')
         {
-            if(s_len)
+            if(s_line_overflow)
+            {
+                /* Never dispatch a suffix of an oversized line. A corrupt
+                 * packet must not accidentally become 'heater on'. */
+                printf("HCLI ERR LINE_TOO_LONG\r\n");
+                s_line_overflow=0u;
+                s_len=0u;
+            }
+            else if(s_len)
             {
                 s_line[s_len]=0;
                 cli_dispatch();
                 s_len=0u;
             }
+        }
+        else if(s_line_overflow)
+        {
+            /* Ignore everything until an end-of-line resynchronizes RX. */
         }
         else if(ch==8u||ch==127u)
         {
@@ -124,7 +137,11 @@ void ConsoleCLI_Poll(void)
         else if(ch>=32u&&ch<=126u)
         {
             if(s_len<(sizeof(s_line)-1u))s_line[s_len++]=(char)ch;
-            else s_len=0u;
+            else
+            {
+                s_line_overflow=1u;
+                s_len=0u;
+            }
         }
     }
 }
