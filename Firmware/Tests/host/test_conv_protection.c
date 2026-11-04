@@ -32,11 +32,6 @@ int main(void)
     ConvProtection_SetIbusLimitMa(0u);
     ConvProtection_GetSnapshot(&s);
     assert(!s.awd2_enabled);
-    ConvProtection_SetIbusTripDeltaRaw(150u);
-    f[CONV_ADC_IBUS]=2100u; /* 200 counts above calibrated 1900 */
-    ConvProtection_FrameISR(f);
-    assert(ConvProtection_FaultMask()&CONV_PROT_IBUS_LIMIT);
-    f[CONV_ADC_IBUS]=1900u;
     ConvProtection_CalcDacWindow(2000u,853u,100u,120u,&low,&high);
     assert(low==1900u && high==2120u);
     ConvProtection_CalcDacWindow(2048u,426u,1966u,1966u,&low,&high);
@@ -49,6 +44,11 @@ int main(void)
     ConvProtection_Service(1000u,&adc,&tmp);
     ConvProtection_GetSnapshot(&s);
     assert(s.dac_profile_ready && s.dac1_code==1900u);
+    ConvProtection_SetIbusTripDeltaRaw(150u);
+    f[CONV_ADC_IBUS]=2100u; /* 200 counts above calibrated 1900 */
+    ConvProtection_FrameISR(f);
+    assert(ConvProtection_FaultMask()&CONV_PROT_IBUS_LIMIT);
+    f[CONV_ADC_IBUS]=1900u;
     f[CONV_ADC_VBUS]=4095u;
     ConvProtection_FrameISR(f);
     ConvProtection_Service(1100u,&adc,&tmp);
