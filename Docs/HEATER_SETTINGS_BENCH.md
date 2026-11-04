@@ -34,7 +34,7 @@ UDIS=0
 | Phase deg | ENTR 进入编辑，L/R 每次减/加 **10°**，再次 ENTR 确认退出 | 0～180°，CCR1/3/4 预装载，下一次 TIM1 更新事件同步生效 |
 | Freq kHz | ENTR 进入编辑，L/R 每次减/加 10kHz，再次 ENTR 退出 | 150～400kHz（默认200kHz）。**运行中不关闭 PC6、不停 TIM1**，ARR/CCR1/3/4 预装载在下一次自然更新事件同步生效；保护继续工作 |
 | IC2 | 只读 | PA9/TIM1_CH2 上升沿 CCR2 原始计数 |
-| Lag | 只读 | 按 ARR/4 + D/2 和模周期计算带符号角，使用当前 ARR，不使用 DMA |
+| LagC / LagR | 只读 | LagC 为最新三段线性补偿角（模型适用时）；LagR 为原始 Lag，均由 TIM1_CH2 捕获换算，不使用 DMA。空载拟合适用范围之外 LagC 显示无效原因 |
 | CT_RMS | 只读 | 去零点电流（A，毫安显示精度），ADC 接近满量程显示 SAT |
 | CT0 / ADC | 只读 | 开机零点原始计数和当前低通后计数，便于复核 |
 | State | 只读 | STOP / STARTING / FAULT 或上次 RUN 拒绝代码；运行时同时显示 PC6 ODR/IDR 引脚实际状态 |
@@ -45,6 +45,12 @@ UDIS=0
 Main 也读取相同的移相角；Main 和 Settings 均按每次10°调节。
 串口 CLI 可按 1° 调整相移、按整数 1kHz 设置 150～400kHz；
 详见 [HEATER_CLI_PROTOCOL.md](HEATER_CLI_PROTOCOL.md)。
+
+**注意：相位检测补偿不修改 TIM1、功率级使能或硬件过流判据。**
+当前 LagC 来自 [ZCD_PHASE_COMPENSATION.md](ZCD_PHASE_COMPENSATION.md) 的
+IC2 计数域三段线性模型，仅在160～330kHz、120～180°和CT_RMS≥0.050A
+（ADC有效）时显示；移相/调频仍支持原有全范围。显示 LagC 并不代表
+带锅负载的相位检测误差或 ZVS 裕量已经经过标定。
 
 **PC6 开关不是绕过软件保护的 GPIO 开关**。置 ON 只提交显式
 RUN 请求，由 `ConvController_BenchRunPoll` 核对有效的12V、

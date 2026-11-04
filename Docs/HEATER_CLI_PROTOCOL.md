@@ -32,7 +32,7 @@
 Example (illustrative values, not measured):
 
 ```text
-HCLI OK HEATER=ON PHASE_DEG=90 FREQ_KHZ=200 FREQ_HZ=200000 IC2=444 LAG_DEG=+114.9 CT_RMS_A=0.700
+HCLI OK HEATER=ON PHASE_DEG=180 FREQ_KHZ=200 FREQ_HZ=200000 IC2=515 LAG_DEG=+90.2 LAG_RAW_DEG=+110.1 LAG_QUAL=FIT CT_RMS_A=0.700
 ```
 
 | Field | Meaning |
@@ -42,12 +42,14 @@ HCLI OK HEATER=ON PHASE_DEG=90 FREQ_KHZ=200 FREQ_HZ=200000 IC2=444 LAG_DEG=+114.
 | `FREQ_KHZ` | realized frequency rounded to nearest kHz |
 | `FREQ_HZ` | frequency from TIM1 ARR, rounded to nearest Hz |
 | `IC2` | latest raw TIM1 CCR2 input capture or `NA` |
-| `LAG_DEG` | signed, **uncorrected** zero-cross time angle from `ARR/4+D/2`, one decimal, or `NA` |
+| `LAG_DEG` | signed, **piecewise-model corrected** lag (degrees, one decimal), or `NA` when outside the accepted fit domain |
+| `LAG_RAW_DEG` | original uncompensated zero-cross angle from `ARR/4 + D/2`, or `NA` when capture is missing |
+| `LAG_QUAL` | `FIT`, `FREQ`, `PHASE`, `LOW_CT`, `ADC` or `NO_IC2`. `FIT` only indicates availability within the *empty-load* model fit, **not verified ZVS** |
 | `CT_RMS_A` | ADC CT_RMS low-pass minus startup zero, 0.25253V/A, formatted amps to three decimals; `NA` while invalid, `SAT` at ADC saturation |
 
-The phase and frequency values are register-setting readbacks, not a promise of instantaneous ZVS; the IC2/LAG capture can report `NA` for up to a heater foreground poll after a command invalidates old capture. `LAG_DEG` is **not corrected** by the experimental empty-coil compensation LUT, which is not valid for arbitrary pans. CT_RMS is an ADC-derived estimate, not a calibrated true-RMS wattmeter.
+The phase and frequency values are register-setting readbacks, not a promise of instantaneous ZVS; the IC2/LAG capture can report `NA` until a fresh captured edge is available. `LAG_DEG` is **now corrected** using the 2026-11-04 count-domain, three-segment model, but **only** for 160..330kHz, 120..180deg phase and zero-corrected CT_RMS >=0.050A with a valid ADC sample. Outside that domain it is `NA`, while `IC2` and `LAG_RAW_DEG` remain available. Loaded workpieces can change measurement error independently of this empty-coil fit; `LAG_QUAL=FIT` must not be interpreted as a validated safe PLL/ZVS phase. See [ZCD_PHASE_COMPENSATION.md](ZCD_PHASE_COMPENSATION.md). CT_RMS is an ADC-derived estimate, not a calibrated true-RMS wattmeter.
 
-A host agent should parse only keys it needs, treat missing/NA/SAT as invalid rather than as zero, and keep source timestamps or a local test-run index for each poll.
+A host agent should parse only keys it needs, treat missing/NA/SAT as invalid rather than as zero, and keep source timestamps or a local test-run index for each poll. In particular, never use `LAG_RAW_DEG` as a fallback for `LAG_DEG=NA` in closed-loop frequency control.
 
 ## Python host example
 
@@ -66,6 +68,7 @@ The client opens the port, sends exactly one requested command, filters legacy l
 
 - `Firmware/Tests/host/test_heater_cli_parse.c` covers exact commands, bounds and malformed inputs.
 - `Firmware/Tests/host/test_conv_phase.c` covers integer ARR mapping 150..400kHz and 0..180° compare bounds.
-- `Firmware/Tests/host/test_heater_cli_commands.c` uses mock ADC/timer/controller to validate complete one-line response formats, guarded start refusal and unavailable/saturated telemetry.
+- `Firmware/Tests/host/test_heater_cli_commands.c` uses mock ADC/timer/controller to validate complete one-line response formats, guarded start refusal, corrected/raw lag and invalidity statuses.
+- `Firmware/Tests/host/test_conv_zcd.c` covers the signed three-segment correction, 180deg empty-coil sweep, CT and phase gating, and rejection outside 160..330kHz.
 - On target: confirm standard 115200 command ACK/ERR, verify ON refuses absent PD, verify OFF removes PC6 immediately, and compare `get` with MiaoUI and oscilloscope.
 - Full Keil Rebuild and physical ZVS/electrical validation are still required.

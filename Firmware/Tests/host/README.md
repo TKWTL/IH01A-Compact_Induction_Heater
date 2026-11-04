@@ -26,3 +26,9 @@ heater CLI with simulated controller, ADC and timer to verify one-line
 ACK/ERR, protected start refusal, ON/OFF transitions, stale IC2 and CT_RMS
 saturation. `test_conv_phase.c` covers integer ARR mapping 150..400kHz.
 None of the host tests proves PWM waveforms, ZVS, or MCU-in-target build.
+
+2026-11-04: `test_conv_zcd.c` adds the 160..330kHz three-segment
+signed milli-tick delay fit, phase 120..180deg and CT>=50mA eligibility,
+zero-cross wrap, and no extrapolation beyond calibration domain. The
+Heater CLI host mock validates `LAG_DEG` corrected, `LAG_RAW_DEG`,
+`LAG_QUAL`, and NA for invalid fit; loaded ZVS calibration is still absent.
