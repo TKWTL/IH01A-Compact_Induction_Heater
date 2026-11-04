@@ -30,6 +30,11 @@ static uint8_t s_bench_block;
 /* ~20k full ADC frames/s. Counted for diagnostics only; the bench run has no
  * time budget, so nothing trips on this counter any more. */
 static volatile uint32_t s_bench_on_adc_frames;
+/* Latest complete foreground observation for immediate CLI start.
+ * Never sampled from IRQ and invalid after 200ms without thread_heater. */
+static HeaterObservation s_last_bench_obs;
+static uint32_t s_last_bench_obs_ms;
+static uint8_t s_last_bench_obs_valid;
 
 void ConvController_Init(void)
 {
@@ -42,6 +47,8 @@ void ConvController_Init(void)
     s_bench_started_ms=0u;
     s_bench_on_adc_frames=0u;
     s_bench_block=CONV_BENCH_OK;
+    s_last_bench_obs_valid=0u;
+    s_last_bench_obs_ms=0u;
     ConvZcd_Init();
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port, PWM_EN_Pin);
     TIM1->BDTR &= ~TIM_BDTR_MOE;
@@ -316,6 +323,12 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
     uint8_t valid_pd;
     uint8_t allow;
     Heater_GetSnapshot(&h);
+    if(observation)
+    {
+        s_last_bench_obs=*observation;
+        s_last_bench_obs_ms=now_ms;
+        s_last_bench_obs_valid=1u;
+    }
     valid_pd=PD_Input_GetActiveContract(&contract);
     allow=(uint8_t)(h.state==HEATER_RUN_REQUESTED &&
                     bench_block_reason(&h,valid_pd,&contract,now_ms,
@@ -365,6 +378,60 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
     (void)now_ms;
     (void)observation;
     ConvController_BenchPowerOff();
+#endif
+}
+
+/* CLI-only synchronous request. Success means the physical enable pin is
+ * HIGH now, not merely that HEATER_RUN_REQUESTED was queued. No direct GPIO
+ * bypass; the SAME BenchRunPoll verifies the latest observation and live
+ * PD/COMP/Break flags. If the heater task has stopped, do not use stale data.
+ * This function is called in APP foreground only, never from IRQ. */
+uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms)
+{
+#if IH_LOW_POWER_BENCH_ENABLE
+    HeaterSnapshot hs;
+    if(ConvController_OutputEnabled())
+    {
+        if(ConvController_OutputPinIsOutput() &&
+           ConvController_OutputPinLevel() &&
+           ConvController_LogicPwmRunning() &&
+           ConvProtection_FaultMask()==0u)
+            return 1u;
+        ConvController_BenchPowerOff();
+        Heater_Stop();
+        s_bench_block=CONV_BENCH_PWM;
+        return 0u;
+    }
+    if(!s_last_bench_obs_valid ||
+       (uint32_t)(now_ms-s_last_bench_obs_ms)>200u)
+    {
+        s_bench_block=CONV_BENCH_AGE;
+        return 0u;
+    }
+    Heater_GetSnapshot(&hs);
+    if(hs.state==HEATER_FAULT || ConvProtection_FaultMask()!=0u)
+    {
+        s_bench_block=CONV_BENCH_FAULT;
+        return 0u;
+    }
+    /* Heater_SetMode cannot energize PC6; no countdown or delayed start. */
+    Heater_SetMode(HEATER_MODE_POWER);
+    Heater_StartConfirmed(now_ms);
+    ConvController_BenchRunPoll(now_ms,&s_last_bench_obs);
+    if(ConvController_OutputEnabled() &&
+       ConvController_OutputPinIsOutput() &&
+       ConvController_OutputPinLevel() &&
+       ConvController_LogicPwmRunning() &&
+       ConvProtection_FaultMask()==0u)
+        return 1u;
+
+    ConvController_BenchPowerOff();
+    Heater_Stop();
+    if(s_bench_block==CONV_BENCH_OK)s_bench_block=CONV_BENCH_PWM;
+    return 0u;
+#else
+    (void)now_ms;
+    return 0u;
 #endif
 }
 uint8_t ConvController_OutputEnabled(void)

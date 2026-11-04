@@ -65,5 +65,7 @@ typedef enum {
 uint8_t ConvController_BenchBlockReason(void);
 void ConvController_BenchRunPoll(uint32_t now_ms,
                                  const HeaterObservation *observation);
+/* Synchronous CLI start, reports success only if PC6 is physically HIGH. */
+uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms);
 uint8_t ConvController_BenchAdcFrameWatchdogISR(void);
 #endif
