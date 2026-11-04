@@ -13,13 +13,33 @@
 typedef struct {
     uint16_t capture_raw;
     uint16_t phase_deg;
-    int16_t lag_deci_deg;  /* [-1800,+1800], positive means later */
+    int16_t lag_deci_deg;  /* raw [-1800,+1800], uncorrected */
+    int16_t lag_corr_deci_deg; /* model-corrected, use only if status == FIT */
+    int32_t delay_milliticks; /* modeled bias in TIM1 ticks * 1000; signed */
     int32_t lag_quarter_ticks;
     uint32_t sequence;
     uint32_t last_ms;
     uint8_t valid;
+    uint8_t correction_valid; /* frequency in calibrated 160..330kHz band */
     uint8_t overcapture_seen; /* expected when UI polls slower than 200kHz */
 } ConvZcdSnapshot;
+/* FIT means only that the requested sample is within the *empty-coil*
+ * regression domain, NOT that loaded ZVS timing has been validated. */
+typedef enum {
+    CONV_ZCD_CAL_FIT=0,
+    CONV_ZCD_CAL_NO_CAPTURE,
+    CONV_ZCD_CAL_FREQ_RANGE,
+    CONV_ZCD_CAL_PHASE_RANGE,
+    CONV_ZCD_CAL_ADC_INVALID,
+    CONV_ZCD_CAL_LOW_CURRENT
+} ConvZcdCalStatus;
+/* Signed IC2-count bias, scaled by 1000, from actual ARR (128MHz timer).
+ * No LUT, floats or ADC dependence. Returns 0 outside 160..330kHz. */
+uint8_t ConvZcd_CorrectionMilliTicks(uint16_t arr,int32_t *out);
+/* Policy gate: model's empty-coil phase range 120..180deg and CT>=50mA.
+ * Never use this provisional phase fit alone for ZVS/PLL safety. */
+ConvZcdCalStatus ConvZcd_CorrectionStatus(const ConvZcdSnapshot *sample,
+                                           uint32_t ct_ma,uint8_t ct_valid);
 uint8_t ConvZcd_Calculate(uint16_t arr,uint16_t phase_deg,
                            uint16_t ccr2,ConvZcdSnapshot *out);
 void ConvZcd_Init(void);
