@@ -41,6 +41,17 @@ void ConvADC_CopySnapshot(ConvADC_Snapshot *out){*out=s_adc;}
 void ConvProtection_GetSnapshot(ConvProtectionSnapshot *out){*out=s_protection;}
 void ConvZcd_Poll(uint32_t now){(void)now;}
 void ConvZcd_GetSnapshot(ConvZcdSnapshot *out){*out=s_zcd;}
+ConvZcdCalStatus ConvZcd_CorrectionStatus(const ConvZcdSnapshot *v,
+                                           uint32_t ct_ma,uint8_t valid)
+{
+    if(!v || !v->valid)return CONV_ZCD_CAL_NO_CAPTURE;
+    if(!v->correction_valid)return CONV_ZCD_CAL_FREQ_RANGE;
+    if(v->phase_deg<120u || v->phase_deg>180u)
+        return CONV_ZCD_CAL_PHASE_RANGE;
+    if(!valid)return CONV_ZCD_CAL_ADC_INVALID;
+    if(ct_ma<50u)return CONV_ZCD_CAL_LOW_CURRENT;
+    return CONV_ZCD_CAL_FIT;
+}
 uint8_t ConvController_OutputEnabled(void){return s_enabled;}
 uint8_t ConvController_OutputPinLevel(void){return s_enabled;}
 uint16_t ConvController_GetPhaseDegrees(void){return s_phase;}
@@ -129,6 +140,19 @@ int main(void)
     assert(strstr(s_reply,"LAG_QUAL=ADC")!=0);
     assert(strstr(s_reply,"LAG_DEG=NA LAG_RAW_DEG=+114.9") != 0);
     assert(strstr(s_reply,"CT_RMS_A=SAT")!=0);
+    /* With a valid capture, low CT level suppresses correction only.
+     * Raw capture and raw phase must remain observable to the agent. */
+    s_adc.raw[CONV_ADC_CT_RMS]=1110u;
+    s_adc.filtered[CONV_ADC_CT_RMS]=1110u;
+    s_reply[0]='\0';
+    assert(HeaterCLI_Dispatch("heater get"));
+    assert(strstr(s_reply,"LAG_DEG=NA LAG_RAW_DEG=+114.9 LAG_QUAL=LOW_CT")!=0);
+    s_adc.raw[CONV_ADC_CT_RMS]=1389u;
+    s_adc.filtered[CONV_ADC_CT_RMS]=1389u;
+    s_zcd.correction_valid=0u; /* outside calibrated frequency band */
+    s_reply[0]='\0';
+    assert(HeaterCLI_Dispatch("heater get"));
+    assert(strstr(s_reply,"LAG_QUAL=FREQ")!=0);
     send("heater off","HCLI OK HEATER=OFF\r\n");
     puts("heater CLI command: PASS");
     return 0;
