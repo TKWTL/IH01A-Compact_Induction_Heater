@@ -7,6 +7,9 @@
 #include "PowerControl/conv_controller.h"
 #include "PowerControl/conv_phase.h"
 #include "PowerControl/conv_zcd.h"
+#include "PowerControl/conv_adc.h"
+#include "PowerControl/conv_current.h"
+#include "PowerControl/conv_protection.h"
 #include "tim.h"
 #include "display/dispDriver.h"
 #include "framework/pm_api.h"
@@ -189,16 +192,36 @@ void Heater_UI_Page(ui_t *ui)
     {
         ConvZcdSnapshot z;
         ConvZcd_GetSnapshot(&z);
-        if(z.valid)
+        if(z.valid && (uint32_t)(now-z.last_ms)<=250u)
         {
-            int16_t mag=z.lag_deci_deg<0?(int16_t)-z.lag_deci_deg:
-                                              z.lag_deci_deg;
-            (void)snprintf(line,sizeof(line),"IC2:%u L:%c%d.%d",
+            ConvADC_Snapshot adc;
+            ConvProtectionSnapshot protection;
+            ConvZcdCalStatus status;
+            uint32_t ct_ma=0u;
+            uint8_t ct_ok=0u;
+            uint8_t fitted;
+            int16_t lag,mag;
+            ConvADC_CopySnapshot(&adc);
+            ConvProtection_GetSnapshot(&protection);
+            if(adc.frames && ConvController_GetState()==CONV_STATE_ADC_MONITOR &&
+               protection.zero_status==CONV_ZERO_READY &&
+               adc.raw[CONV_ADC_CT_RMS]<4090u)
+            {
+                ct_ma=ConvCurrent_CtRmsMilliAmp(
+                            adc.filtered[CONV_ADC_CT_RMS],
+                            protection.ct_zero_raw);
+                ct_ok=1u;
+            }
+            status=ConvZcd_CorrectionStatus(&z,ct_ma,ct_ok);
+            fitted=(uint8_t)(status==CONV_ZCD_CAL_FIT);
+            lag=fitted?z.lag_corr_deci_deg:z.lag_deci_deg;
+            mag=(int16_t)(lag<0?-lag:lag);
+            (void)snprintf(line,sizeof(line),"IC2:%u %c:%c%d.%d",
                            (unsigned)z.capture_raw,
-                           z.lag_deci_deg<0?'-':'+',
+                           fitted?'C':'R',lag<0?'-':'+',
                            (int)(mag/10),(int)(mag%10));
         }
-        else (void)snprintf(line,sizeof(line),"IC2:-- L:--");
+        else (void)snprintf(line,sizeof(line),"IC2:-- C:--");
     }
     Disp_DrawStr(0u,47u,line);
     /* At 128px and ~6px/glyph, keep line <=21 ASCII characters.
