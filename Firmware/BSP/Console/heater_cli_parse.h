@@ -10,7 +10,9 @@ typedef enum {
     HEATER_CLI_ON,
     HEATER_CLI_OFF,
     HEATER_CLI_PHASE,
-    HEATER_CLI_FREQ,
+    HEATER_CLI_AUTO_ON,
+    HEATER_CLI_AUTO_OFF,
+    HEATER_CLI_FREQ_DISABLED,
     HEATER_CLI_OUT_OF_RANGE
 } HeaterCliOp;
 typedef struct {
