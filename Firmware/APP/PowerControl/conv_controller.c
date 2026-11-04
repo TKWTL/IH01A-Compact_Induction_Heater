@@ -169,23 +169,16 @@ uint16_t ConvController_GetFrequencyKhz(void)
 {
     return ConvPhase_KHzFromArr((uint16_t)TIM1->ARR);
 }
-uint8_t ConvController_SetFrequencyKhz(uint16_t requested_khz)
+/* Shared synchronous ARR/CCR staging path (TIM1 natural update only). */
+static uint8_t ConvController_ApplyFrequencyArr(uint16_t next_arr)
 {
     ConvPhaseConfig phase;
     HeaterSnapshot hs;
-    uint16_t next_arr;
-    /* 128MHz TIM1 clock, PSC=0, 150..400kHz integer CLI targets.
-     * MiaoUI independently uses 10kHz increments within this range.
-     * No software power interruption: while running, ARR and CCR1/3/4
-     * become active TOGETHER at the next natural counter overflow.
-     * Repetition counter = 0, so every PWM period has an update event. */
-    if(!ConvPhase_ArrFromKHz(requested_khz,&next_arr))return 0u;
     if(TIM1->ARR==next_arr)return 1u;
     Heater_GetSnapshot(&hs);
     if(!ConvPhase_Calculate(next_arr,hs.target_phase_deg,&phase))return 0u;
     if(!ConvController_StageTimerPreloads(&phase))
     {
-        /* Abnormal timer preload configuration must not leave PC6 active. */
         if(ConvController_OutputEnabled())
         {
             ConvController_BenchPowerOff();
@@ -195,12 +188,23 @@ uint8_t ConvController_SetFrequencyKhz(uint16_t requested_khz)
     }
     s_phase_deg=phase.angle_deg;
     s_phase_arr=phase.arr;
-    /* Discard a captured edge generated under the previous ARR.
-     * The foreground samples again after multiple complete PWM periods. */
     ConvZcd_Invalidate();
     TIM1->SR=(uint32_t)~(TIM_SR_CC2IF|TIM_SR_CC2OF);
-    /* PC6 / MOE / CEN / CNT are deliberately unchanged. */
     return 1u;
+}
+uint8_t ConvController_SetFrequencyKhz(uint16_t requested_khz)
+{
+    uint16_t next_arr;
+    if(!ConvPhase_ArrFromKHz(requested_khz,&next_arr))return 0u;
+    return ConvController_ApplyFrequencyArr(next_arr);
+}
+uint8_t ConvController_SetFrequencyArr(uint16_t arr)
+{
+    uint16_t high_arr,low_arr;
+    if(!ConvPhase_ArrFromKHz(300u,&high_arr) ||
+       !ConvPhase_ArrFromKHz(170u,&low_arr) ||
+       arr<high_arr || arr>low_arr)return 0u;
+    return ConvController_ApplyFrequencyArr(arr);
 }
 uint8_t ConvController_LogicPwmRunning(void)
 {
