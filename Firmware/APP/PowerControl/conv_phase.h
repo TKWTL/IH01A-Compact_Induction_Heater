@@ -22,6 +22,9 @@ typedef struct {
 /* 0<=angle<=180; clamps larger requests. Returns 0 only if invalid ARR. */
 uint8_t ConvPhase_Calculate(uint16_t arr,uint16_t angle_deg,
                              ConvPhaseConfig *out);
+/* Division-free exact fast path for ISR automatic ARR=426..752. */
+uint8_t ConvPhase_CalculateAuto(uint16_t arr,uint16_t angle_deg,
+                                ConvPhaseConfig *out);
 uint8_t ConvPhase_ArrFromKHz(uint16_t requested_khz,uint16_t *arr);
 uint16_t ConvPhase_KHzFromArr(uint16_t arr);
 #endif

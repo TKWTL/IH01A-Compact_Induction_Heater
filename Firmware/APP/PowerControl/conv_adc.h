@@ -17,6 +17,8 @@ void ConvADC_Reset(void);
 uint8_t ConvADC_Start(void);
 const volatile uint16_t *ConvADC_DmaFrame(uint8_t second_half);
 void ConvADC_ProcessFrameISR(const volatile uint16_t *frame);
+/* ISR-only: latest Q4 IIR result, no interrupt masking or struct copy. */
+uint16_t ConvADC_FilteredChannelISR(ConvADC_Channel channel);
 void ConvADC_CopySnapshot(ConvADC_Snapshot *out);
 uint16_t ConvADC_PinMillivolts(uint16_t raw);
 uint8_t ConvADC_TempFromCalibration(uint16_t raw, uint16_t cal1,

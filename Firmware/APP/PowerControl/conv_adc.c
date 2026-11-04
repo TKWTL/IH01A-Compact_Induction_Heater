@@ -56,6 +56,11 @@ IH_RAMFUNC void ConvADC_ProcessFrameISR(const volatile uint16_t *frame)
     ++s_adc.frames;
 }
 
+uint16_t ConvADC_FilteredChannelISR(ConvADC_Channel channel)
+{
+    return channel<CONV_ADC_COUNT?s_adc.filtered[channel]:0u;
+}
+
 void ConvADC_CopySnapshot(ConvADC_Snapshot *out)
 {
     uint32_t mask;

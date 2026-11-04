@@ -35,3 +35,28 @@ uint16_t ConvPhase_KHzFromArr(uint16_t arr)
     uint32_t period=(uint32_t)arr+1u;
     return (uint16_t)((CONV_TIM1_CLOCK_KHZ+period/2u)/period);
 }
+
+/* Quantized auto-loop fast path for ARR=426..752, 0..180deg.
+ * floor(x/360) is estimated by x*2913/2^20, then corrected by one
+ * multiply/compare. x<=135540, so no 32-bit product overflows.
+ * Unlike generic ConvPhase_Calculate(), there is NO software divide.
+ * All outputs exactly match the generic implementation. */
+uint8_t ConvPhase_CalculateAuto(uint16_t arr,uint16_t angle_deg,
+                                ConvPhaseConfig *out)
+{
+    uint32_t x,d;
+    uint16_t half;
+    if(!out || arr<426u || arr>752u || angle_deg>180u)return 0u;
+    half=(uint16_t)(arr/2u);
+    x=(uint32_t)angle_deg*arr+180u;
+    d=(x*2913u)>>20;
+    if((d+1u)*360u<=x)++d;
+    else if(d*360u>x)--d;
+    if(d>half)d=half;
+    out->arr=arr;
+    out->ccr1=half;
+    out->ccr3=(uint16_t)d;
+    out->ccr4=(uint16_t)(d+half);
+    out->angle_deg=angle_deg;
+    return 1u;
+}

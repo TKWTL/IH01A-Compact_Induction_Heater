@@ -34,6 +34,8 @@ uint16_t ConvController_GetPhaseDegrees(void);
  * While timer is running, PC6/MOE/CEN/CNT are NOT changed; hardware Break
  * stays active. Missing preload bits fail closed (power gate OFF). */
 uint8_t ConvController_SetFrequencyKhz(uint16_t requested_khz);
+/* Auto loop uses exact ARR steps in 170..300kHz, same preload transaction. */
+uint8_t ConvController_SetFrequencyArr(uint16_t arr);
 uint16_t ConvController_GetFrequencyKhz(void);
 uint8_t ConvController_StartLogicPwm(void);
 uint8_t ConvController_LogicPwmRunning(void);

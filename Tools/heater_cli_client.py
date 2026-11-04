@@ -49,17 +49,20 @@ def main() -> int:
     parser.add_argument("--port", required=True, help="COM4 / /dev/ttyUSB0")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--timeout", type=float, default=3.0)
-    parser.add_argument("command", choices=["get", "on", "off", "phase", "freq"])
-    parser.add_argument("value", nargs="?", type=int)
+    parser.add_argument("command", choices=["get", "on", "off", "phase", "auto"])
+    parser.add_argument("value", nargs="?")
     args = parser.parse_args()
-    if args.command in ("phase", "freq"):
-        lo, hi = (0, 180) if args.command == "phase" else (150, 400)
-        if args.value is None or not lo <= args.value <= hi:
-            parser.error(f"{args.command} requires {lo}..{hi}")
-        line = f"heater {args.command} {args.value}"
+    if args.command == "phase":
+        if args.value is None or not args.value.isdecimal() or not 0 <= int(args.value) <= 180:
+            parser.error("phase requires 0..180 degrees")
+        line = f"heater phase {args.value}"
+    elif args.command == "auto":
+        if args.value not in ("on", "off"):
+            parser.error("auto requires on or off")
+        line = f"heater auto {args.value}"
     else:
         if args.value is not None:
-            parser.error("Only phase/freq accept values")
+            parser.error("Only phase and auto accept a value")
         line = f"heater {args.command}"
     try:
         exchange(args.port, args.baud, line, args.timeout)

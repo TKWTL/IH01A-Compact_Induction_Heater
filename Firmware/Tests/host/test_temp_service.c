@@ -10,6 +10,8 @@ static ConvADC_Snapshot g_frame;
 static uint32_t g_mcu_calls;
 uint32_t HAL_GetTick(void) { return g_now; }
 ConvState ConvController_GetState(void) { return g_state; }
+void ConvProtection_Init(void) {}
+void ConvController_Init(void) {}
 void ConvADC_CopySnapshot(ConvADC_Snapshot *out) { *out=g_frame; }
 uint8_t ConvADC_McuTempDeciC(uint16_t raw,int32_t *out)
 {
@@ -25,7 +27,8 @@ int main(void)
     g_frame.filtered[CONV_ADC_NTC_POT]=2064u; /* 90C */
     g_frame.filtered[CONV_ADC_MCU_TEMP]=333u;
     g_frame.raw[CONV_ADC_NTC_SYS]=3500u; /* prove filtered used */
-    TempService_Poll();
+    TempService_Poll(); /* first call: protection/ADC bootstrap */
+    TempService_Poll(); /* second call: first completed ADC frame */
     TempService_GetSnapshot(&s);
     assert(s.valid==(TEMP_VALID_SYS|TEMP_VALID_POT|TEMP_VALID_MCU));
     assert(s.sys_deci_c==200&&s.pot_deci_c==900&&s.mcu_deci_c==333);
