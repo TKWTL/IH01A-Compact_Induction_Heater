@@ -48,6 +48,9 @@ void ConvAutoFreq_CoreReset(ConvAutoFreqCore *core);
 void ConvAutoFreq_CoreStep(ConvAutoFreqCore *core,
                            const ConvAutoFreqInput *input,
                            ConvAutoFreqDecision *decision);
+/* Limit transitions while PC6 is high; fast reset permitted with PC6 low. */
+uint16_t ConvAutoFreq_SlewArr(uint16_t current,uint16_t requested,
+                               uint8_t output_on);
 
 /* ISR path updates the 5ms loop every 100 complete ADC frames.
  * The ENABLE setting is foreground-owned; mode changes stop PC6 before
