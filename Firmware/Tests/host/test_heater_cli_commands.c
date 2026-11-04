@@ -39,6 +39,7 @@ void Heater_Stop(void)
 }
 void ConvADC_CopySnapshot(ConvADC_Snapshot *out){*out=s_adc;}
 void ConvProtection_GetSnapshot(ConvProtectionSnapshot *out){*out=s_protection;}
+void ConvZcd_Poll(uint32_t now){(void)now;}
 void ConvZcd_GetSnapshot(ConvZcdSnapshot *out){*out=s_zcd;}
 uint8_t ConvController_OutputEnabled(void){return s_enabled;}
 uint8_t ConvController_OutputPinLevel(void){return s_enabled;}
