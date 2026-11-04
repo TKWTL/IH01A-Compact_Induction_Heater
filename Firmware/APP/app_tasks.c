@@ -178,19 +178,6 @@ THRD_DECLARE(thread_heater)
     THRD_END;
 }
 
-/* Independent 5ms frequency tracker, even while OLED/PM UI is sleeping.
- * No timer register update or frequency computation in the ADC ISR. */
-THRD_DECLARE(thread_auto_freq)
-{
-    THRD_BEGIN;
-    while(1)
-    {
-        ConvAutoFreq_Poll(TIME_Millis());
-        THRD_DELAY(CONV_AF_INTERVAL_MS);
-    }
-    THRD_END;
-}
-
 /* Last task, after all useful foreground work. SysTick interrupts at 1ms.
  * Keep PM in this idle thread, even while MiaoUI is not running. A WFI
  * returns on any enabled interrupt and THRD_YIELD resumes the scheduler. */
@@ -222,8 +209,7 @@ THRD_DECLARE(thread_idle)
     THRD_END;
 }
 static const coro_thread_fn_t s_threads[]={
-    thread_input_pm,thread_ui,thread_beep,thread_heater,
-    thread_auto_freq,thread_idle
+    thread_input_pm,thread_ui,thread_beep,thread_heater,thread_idle
 };
 static coro_pt_t s_states[sizeof(s_threads)/sizeof(s_threads[0])];
 
