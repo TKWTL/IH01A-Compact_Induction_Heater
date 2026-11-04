@@ -13,7 +13,8 @@
 #define CONV_AF_DEADBAND_DECI   20    /* +/-2.0deg */
 #define CONV_AF_LOCK_RAW       175u  /* IBUS ~0.50A over calibrated zero */
 #define CONV_AF_RELEASE_RAW    140u  /* hysteresis ~0.40A */
-#define CONV_AF_INTERVAL_MS      5u
+#define CONV_AF_INTERVAL_MS      5u /* telemetry only; ISR uses frame count */
+#define CONV_AF_FRAMES_PER_UPDATE 100u /* 20kHz ADC DMA => fixed 5ms */
 
 typedef enum {
     CONV_AF_OFF=0, CONV_AF_SAFE, CONV_AF_ACQUIRE,
@@ -48,13 +49,16 @@ void ConvAutoFreq_CoreStep(ConvAutoFreqCore *core,
                            const ConvAutoFreqInput *input,
                            ConvAutoFreqDecision *decision);
 
-/* All hardware operations run in the cooperative foreground, never in ISR.
- * Toggling auto always returns the bridge to the conservative 300kHz end.
- * No function below grants permission to assert PC6. */
+/* ISR path updates the 5ms loop every 100 complete ADC frames.
+ * The ENABLE setting is foreground-owned; mode changes stop PC6 before
+ * returning to 300kHz and must be followed by a fresh explicit RUN. */
 void ConvAutoFreq_Init(void);
 uint8_t ConvAutoFreq_SetEnabled(uint8_t enabled);
 uint8_t ConvAutoFreq_Enabled(void);
-void ConvAutoFreq_Poll(uint32_t now_ms);
+void ConvAutoFreq_FrameISR(const volatile uint16_t *frame);
+/* Q12 phase quantization, no division in ISR, returns 0 out of ARR band. */
+uint8_t ConvAutoFreq_CorrectLagFast(uint16_t arr,uint16_t ccr3,
+                                    uint16_t ic2,int16_t *lag_deci);
 void ConvAutoFreq_GetSnapshot(ConvAutoFreqSnapshot *out);
 const char *ConvAutoFreq_StateName(ConvAutoFreqState state);
 #endif
