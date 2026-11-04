@@ -19,3 +19,10 @@ clamp, RDO object position/units and rejection of EPR/PPS/invalid bytes in SPR, 
 interpolation and disconnected-sensor bounds; `test_temp_service.c`
 uses mocked time/ADC/control to ensure 100ms cadence, filtered samples,
 ADC fault invalidation and independent sensor validity.
+
+2026-11-04: `test_heater_cli_parse.c` validates exact command grammar,
+invalid/range handling, and `test_heater_cli_commands.c` links the real
+heater CLI with simulated controller, ADC and timer to verify one-line
+ACK/ERR, protected start refusal, ON/OFF transitions, stale IC2 and CT_RMS
+saturation. `test_conv_phase.c` covers integer ARR mapping 150..400kHz.
+None of the host tests proves PWM waveforms, ZVS, or MCU-in-target build.

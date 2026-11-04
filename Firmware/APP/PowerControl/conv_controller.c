@@ -174,7 +174,8 @@ uint8_t ConvController_SetFrequencyKhz(uint16_t requested_khz)
     ConvPhaseConfig phase;
     HeaterSnapshot hs;
     uint16_t next_arr;
-    /* 128MHz TIM1 clock, PSC=0, 180..300kHz in 10kHz UI steps.
+    /* 128MHz TIM1 clock, PSC=0, 150..400kHz integer CLI targets.
+     * MiaoUI independently uses 10kHz increments within this range.
      * No software power interruption: while running, ARR and CCR1/3/4
      * become active TOGETHER at the next natural counter overflow.
      * Repetition counter = 0, so every PWM period has an update event. */

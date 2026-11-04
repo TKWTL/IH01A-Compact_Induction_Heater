@@ -65,5 +65,6 @@ The client opens the port, sends exactly one requested command, filters legacy l
 
 - `Firmware/Tests/host/test_heater_cli_parse.c` covers exact commands, bounds and malformed inputs.
 - `Firmware/Tests/host/test_conv_phase.c` covers integer ARR mapping 150..400kHz and 0..180° compare bounds.
+- `Firmware/Tests/host/test_heater_cli_commands.c` uses mock ADC/timer/controller to validate complete one-line response formats, guarded start refusal and unavailable/saturated telemetry.
 - On target: confirm standard 115200 command ACK/ERR, verify ON refuses absent PD, verify OFF removes PC6 immediately, and compare `get` with MiaoUI and oscilloscope.
 - Full Keil Rebuild and physical ZVS/electrical validation are still required.

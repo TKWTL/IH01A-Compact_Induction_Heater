@@ -1,3 +1,10 @@
+> **Heater automation (2026-11-04):** `heater phase N` (0..180°),
+> `heater freq K` (150..400kHz), `heater on/off`, `heater get`.
+> All heater replies use one `HCLI OK/ERR ...` line; `get` returns
+> IC2/Lag/CT_RMS and effective timer frequency. Full protocol:
+> [Docs/HEATER_CLI_PROTOCOL.md](../../../Docs/HEATER_CLI_PROTOCOL.md).
+> Shared USART1 DMA+IDLE transport is unchanged.
+>
 # IH01A USART1 DMA diagnostics (2026-11-01)
 
 Reference: PB02B `firmware/Bootstrap/src/bsp_usart.c` (DMA TX ring),

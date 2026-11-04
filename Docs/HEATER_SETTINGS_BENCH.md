@@ -32,7 +32,7 @@ UDIS=0
 |---|---|---|
 | PC6 Enable | ENTR 切换开关 | 置 ON → Heater_StartConfirmed() 请求启动；置 OFF → 立即拉低 PC6、Heater_Stop() |
 | Phase deg | ENTR 进入编辑，L/R 每次减/加 **10°**，再次 ENTR 确认退出 | 0～180°，CCR1/3/4 预装载，下一次 TIM1 更新事件同步生效 |
-| Freq kHz | ENTR 进入编辑，L/R 每次减/加 10kHz，再次 ENTR 退出 | 180～300kHz（默认200kHz）。**运行中不关闭 PC6、不停 TIM1**，ARR/CCR1/3/4 预装载在下一次自然更新事件同步生效；保护继续工作 |
+| Freq kHz | ENTR 进入编辑，L/R 每次减/加 10kHz，再次 ENTR 退出 | 150～400kHz（默认200kHz）。**运行中不关闭 PC6、不停 TIM1**，ARR/CCR1/3/4 预装载在下一次自然更新事件同步生效；保护继续工作 |
 | IC2 | 只读 | PA9/TIM1_CH2 上升沿 CCR2 原始计数 |
 | Lag | 只读 | 按 ARR/4 + D/2 和模周期计算带符号角，使用当前 ARR，不使用 DMA |
 | CT_RMS | 只读 | 去零点电流（A，毫安显示精度），ADC 接近满量程显示 SAT |
@@ -43,6 +43,8 @@ UDIS=0
 `UI_DATA_INT`。数值边界不允许无意回绕（例如180°→0°、
 300kHz→180kHz）。所有配置由后台业务共享，退出 Settings 后保持，
 Main 也读取相同的移相角；Main 和 Settings 均按每次10°调节。
+串口 CLI 可按 1° 调整相移、按整数 1kHz 设置 150～400kHz；
+详见 [HEATER_CLI_PROTOCOL.md](HEATER_CLI_PROTOCOL.md)。
 
 **PC6 开关不是绕过软件保护的 GPIO 开关**。置 ON 只提交显式
 RUN 请求，由 `ConvController_BenchRunPoll` 核对有效的12V、
