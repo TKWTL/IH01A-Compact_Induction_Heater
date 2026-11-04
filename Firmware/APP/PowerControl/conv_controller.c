@@ -85,44 +85,38 @@ void ConvController_BenchPowerOff(void)
     __DSB();
     pm_api_set_sleep_block(PM_BLOCK_HEATER,0u);
 }
-/* Called only from the cooperative foreground (never from an ISR).
- * With ARPE/OCxPE enabled, the CPU writes ARR and CCR1/3/4 preloads.
- * UDIS prevents a counter-overflow UEV from transferring only a subset.
- * Once cleared, the NEXT NATURAL UEV loads all four active registers.
- *
- * IMPORTANT: NO EGR.UG / CNT reset / CEN toggle while TIM1 is running.
- * The hardware Break path remains active throughout the transaction.
- * This guarantees a coherent timer-register update, NOT ZVS under changing
- * frequency or load; that must be checked on the power stage.
- */
+/* TIM1 ARR and CCR1/3/4 are staged as one coherent preload transaction.
+ * Callers include the 5ms ADC DMA control divider and foreground UI.
+ * Foreground staging masks IRQ for a few MMIO writes to prevent an ISR
+ * transaction from interleaving. Hardware Break remains asynchronous.
+ * No UG/CNT/CEN/MOE changes while TIM1 is running. */
 static uint8_t ConvController_StageTimerPreloads(const ConvPhaseConfig *phase)
 {
-    uint8_t running;
-    uint32_t cr1,ccmr1,ccmr2;
+    uint32_t mask,cr1,ccmr1,ccmr2;
+    uint8_t running,ok=0u;
     if(!phase)return 0u;
+    mask=__get_PRIMASK();
+    __disable_irq();
     cr1=TIM1->CR1;
     ccmr1=TIM1->CCMR1;
     ccmr2=TIM1->CCMR2;
     running=(uint8_t)((cr1&TIM_CR1_CEN)!=0u);
-    /* A high driver EN with a stopped timer is an abnormal state:
-     * never issue UG/CNT reset while the physical bridge is enabled. */
-    if(!running && ConvController_OutputEnabled())return 0u;
-    if((cr1&TIM_CR1_UDIS)!=0u)return 0u;
+    if((!running && ConvController_OutputEnabled()) ||
+       (cr1&TIM_CR1_UDIS)!=0u ||
+       (running && phase->arr!=(uint16_t)TIM1->ARR))
+        goto done;
     if(running &&
        (((cr1&TIM_CR1_ARPE)==0u) ||
         ((ccmr1&TIM_CCMR1_OC1PE)==0u) ||
         ((ccmr2&(TIM_CCMR2_OC3PE|TIM_CCMR2_OC4PE))!=
-                (TIM_CCMR2_OC3PE|TIM_CCMR2_OC4PE))))
-        return 0u; /* never write an active ARR/CCR in powered operation */
-
+                 (TIM_CCMR2_OC3PE|TIM_CCMR2_OC4PE))))
+        goto done;
     if(!running)
     {
-        /* Startup-only: it is safe to configure preload bits here. */
         TIM1->CR1 |= TIM_CR1_ARPE;
         TIM1->CCMR1 |= TIM_CCMR1_OC1PE;
-        TIM1->CCMR2 |= TIM_CCMR2_OC3PE | TIM_CCMR2_OC4PE;
+        TIM1->CCMR2 |= TIM_CCMR2_OC3PE|TIM_CCMR2_OC4PE;
     }
-
     TIM1->CR1 |= TIM_CR1_UDIS;
     TIM1->ARR=phase->arr;
     TIM1->CCR1=phase->ccr1;
@@ -131,12 +125,16 @@ static uint8_t ConvController_StageTimerPreloads(const ConvPhaseConfig *phase)
     TIM1->CR1 &= ~TIM_CR1_UDIS;
     if(!running)
     {
-        /* With timer stopped, force a one-time load before future start.
-         * This branch is never reached while FD2204 is energized. */
-        TIM1->EGR=TIM_EGR_UG;
+        TIM1->EGR=TIM_EGR_UG; /* startup only, power gate LOW */
         TIM1->CNT=0u;
     }
-    return 1u;
+    /* Cache coherency is protected by the SAME short critical section. */
+    s_phase_deg=phase->angle_deg;
+    s_phase_arr=phase->arr;
+    ok=1u;
+done:
+    if((mask&1u)==0u)__enable_irq();
+    return ok;
 }
 
 void ConvController_SetPhaseDegrees(uint16_t angle_deg)
@@ -156,8 +154,6 @@ void ConvController_SetPhaseDegrees(uint16_t angle_deg)
         }
         return;
     }
-    s_phase_deg=phase.angle_deg;
-    s_phase_arr=phase.arr;
     ConvZcd_Invalidate();
     TIM1->SR=(uint32_t)~(TIM_SR_CC2IF|TIM_SR_CC2OF);
 }
@@ -173,21 +169,17 @@ uint16_t ConvController_GetFrequencyKhz(void)
 static uint8_t ConvController_ApplyFrequencyArr(uint16_t next_arr)
 {
     ConvPhaseConfig phase;
-    HeaterSnapshot hs;
     if(TIM1->ARR==next_arr)return 1u;
-    Heater_GetSnapshot(&hs);
-    if(!ConvPhase_Calculate(next_arr,hs.target_phase_deg,&phase))return 0u;
+    /* ISR must not copy the mutable HeaterSnapshot. Phase is an aligned,
+     * staged controller setpoint, updated under the preload lock above. */
+    if(!ConvPhase_Calculate(next_arr,s_phase_deg,&phase))return 0u;
     if(!ConvController_StageTimerPreloads(&phase))
     {
-        if(ConvController_OutputEnabled())
-        {
-            ConvController_BenchPowerOff();
-            Heater_Stop();
-        }
+        /* Hardware must be disabled FIRST; foreground supervisor will
+         * latch the corresponding automatic-loop fault. */
+        if(ConvController_OutputEnabled())ConvController_TripISR();
         return 0u;
     }
-    s_phase_deg=phase.angle_deg;
-    s_phase_arr=phase.arr;
     ConvZcd_Invalidate();
     TIM1->SR=(uint32_t)~(TIM_SR_CC2IF|TIM_SR_CC2OF);
     return 1u;
@@ -200,10 +192,7 @@ uint8_t ConvController_SetFrequencyKhz(uint16_t requested_khz)
 }
 uint8_t ConvController_SetFrequencyArr(uint16_t arr)
 {
-    uint16_t high_arr,low_arr;
-    if(!ConvPhase_ArrFromKHz(300u,&high_arr) ||
-       !ConvPhase_ArrFromKHz(170u,&low_arr) ||
-       arr<high_arr || arr>low_arr)return 0u;
+    if(arr<426u || arr>752u)return 0u;
     return ConvController_ApplyFrequencyArr(arr);
 }
 uint8_t ConvController_LogicPwmRunning(void)
