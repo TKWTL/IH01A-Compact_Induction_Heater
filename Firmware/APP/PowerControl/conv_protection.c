@@ -116,6 +116,13 @@ void ConvProtection_AnalogWatchdogISR(void)
     ConvController_TripISR();
 #endif
 }
+PROT_RAMFUNC void ConvProtection_AutoFreqTripISR(void)
+{
+    s_fast_faults|=CONV_PROT_AUTO_FREQ;
+#ifndef CONV_PROTECTION_HOST_TEST
+    ConvController_TripISR();
+#endif
+}
 PROT_RAMFUNC void ConvProtection_BreakISR(void)
 {
 #ifndef CONV_PROTECTION_HOST_TEST
