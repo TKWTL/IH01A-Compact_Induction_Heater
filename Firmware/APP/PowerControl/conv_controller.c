@@ -58,6 +58,12 @@ void ConvController_Init(void)
                         LL_GPIO_SPEED_FREQ_VERY_HIGH);
     /* Preload the 0deg waveform with PC6 low and MOE disabled. */
     ConvController_SetPhaseDegrees(0u);
+    /* Fixed-frequency fallback when auto is OFF; never start at 200kHz. */
+    if(!ConvController_SetFrequencyArr(426u))
+    {
+        ConvController_FaultISR();
+        return;
+    }
     ConvADC_Reset();
     if(ConvADC_Start()!=0u) s_state=CONV_STATE_ADC_MONITOR;
     else ConvController_FaultISR();
@@ -143,22 +149,29 @@ done:
 void ConvController_SetPhaseDegrees(uint16_t angle_deg)
 {
     ConvPhaseConfig phase;
-    uint16_t arr=(uint16_t)TIM1->ARR;
-    if(!ConvPhase_Calculate(arr,angle_deg,&phase))return;
-    if(s_phase_arr==arr && s_phase_deg==phase.angle_deg)return;
-    if(!ConvController_StageTimerPreloads(&phase,0u))
+    uint32_t mask=__get_PRIMASK();
+    uint16_t arr;
+    uint8_t ok=1u;
+    /* Lock the ARR read AND subsequent staged write as one operation.
+     * Without this, an ISR tick could change ARR after calculating
+     * phase CCRs but before the foreground enters StageTimerPreloads. */
+    __disable_irq();
+    arr=(uint16_t)TIM1->ARR;
+    if(!ConvPhase_Calculate(arr,angle_deg,&phase))
+        ok=0u;
+    else if(s_phase_arr!=arr || s_phase_deg!=phase.angle_deg)
+        ok=ConvController_StageTimerPreloads(&phase,0u);
+    if(ok)
     {
-        /* Preload unexpectedly disabled or update already inhibited:
-         * fail closed instead of permitting a mixed active waveform. */
-        if(ConvController_OutputEnabled())
-        {
-            ConvController_BenchPowerOff();
-            Heater_Stop();
-        }
-        return;
+        ConvZcd_Invalidate();
+        TIM1->SR=(uint32_t)~(TIM_SR_CC2IF|TIM_SR_CC2OF);
     }
-    ConvZcd_Invalidate();
-    TIM1->SR=(uint32_t)~(TIM_SR_CC2IF|TIM_SR_CC2OF);
+    if((mask&1u)==0u)__enable_irq();
+    if(!ok && ConvController_OutputEnabled())
+    {
+        ConvController_BenchPowerOff();
+        Heater_Stop();
+    }
 }
 uint16_t ConvController_GetPhaseDegrees(void)
 {
@@ -292,6 +305,8 @@ static uint8_t bench_block_reason(const HeaterSnapshot *h,
 {
     if(o==0)                              return CONV_BENCH_SOURCE;
     if(h->mode!=HEATER_MODE_POWER)        return CONV_BENCH_MODE;
+    if(ConvAutoFreq_Enabled() && h->target_phase_deg<120u)
+                                          return CONV_BENCH_PHASE;
     /* Any 0..180 deg phase is allowed: the angle is a manual scope setting,
      * not a watt request, so it no longer gates RUN. */
     if(ConvController_GetPhaseDegrees()!=h->target_phase_deg)
