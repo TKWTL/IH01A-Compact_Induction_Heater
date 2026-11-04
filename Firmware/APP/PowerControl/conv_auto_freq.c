@@ -232,8 +232,8 @@ void ConvAutoFreq_CoreStep(ConvAutoFreqCore *core,
         if(step>4)step=4;
         if(step< -8)step=-8;
         next=(int32_t)in->arr+step;
-        if(next<CONV_AF_START_ARR)next=CONV_AF_START_ARR;
-        if(next>CONV_AF_MIN_ARR)next=CONV_AF_MIN_ARR;
+        if(next<(int32_t)CONV_AF_START_ARR)next=CONV_AF_START_ARR;
+        if(next>(int32_t)CONV_AF_MIN_ARR)next=CONV_AF_MIN_ARR;
         out->requested_arr=(uint16_t)next;
     }
 }
