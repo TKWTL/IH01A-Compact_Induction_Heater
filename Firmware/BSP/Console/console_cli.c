@@ -3,6 +3,7 @@
 #include "usart.h"
 #include "algorithm/pd_input.h"
 #include "algorithm/pd_epr_policy.h"
+#include "heater_cli.h"
 #include <stdio.h>
 #include <string.h>
 static char s_line[48];
@@ -12,8 +13,9 @@ static void cli_dispatch(void)
     PD_InputSnapshot pd;
     PD_InputContract active;
     DebugUART_Stats stats;
+    if(HeaterCLI_Dispatch(s_line))return;
     if(!strcmp(s_line,"help"))
-        printf("[CLI] help, ping, pd, pd on, pd off, pd max N, pd epr, pd auto, uart\r\n");
+        printf("[CLI] help, ping, pd, pd on/off/max N/epr/auto, uart; heater get/on/off/phase N/freq K\r\n");
     else if(!strcmp(s_line,"ping"))
         printf("[CLI] pong\r\n");
     else if(!strcmp(s_line,"pd"))
