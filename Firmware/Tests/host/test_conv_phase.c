@@ -61,6 +61,21 @@ int main(void)
             }
         }
     }
+    /* Exact against generic division for every permitted auto ARR/phase. */
+    for(unsigned auto_arr=426u;auto_arr<=752u;++auto_arr)
+        for(unsigned deg=0u;deg<=180u;++deg)
+        {
+            ConvPhaseConfig generic,fast;
+            assert(ConvPhase_Calculate((uint16_t)auto_arr,
+                                       (uint16_t)deg,&generic));
+            assert(ConvPhase_CalculateAuto((uint16_t)auto_arr,
+                                           (uint16_t)deg,&fast));
+            assert(fast.arr==generic.arr && fast.ccr1==generic.ccr1);
+            assert(fast.ccr3==generic.ccr3 && fast.ccr4==generic.ccr4);
+            assert(fast.angle_deg==generic.angle_deg);
+        }
+    assert(!ConvPhase_CalculateAuto(425u,180u,&c));
+    assert(!ConvPhase_CalculateAuto(753u,180u,&c));
     printf("phase: PASS\n");
     return 0;
 }
