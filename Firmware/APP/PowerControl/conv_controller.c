@@ -6,6 +6,7 @@
 #include "conv_adc.h"
 #include "conv_phase.h"
 #include "conv_zcd.h"
+#include "conv_auto_freq.h"
 #include "conv_protection.h"
 #include "heater_control.h"
 #include "algorithm/pd_input.h"
@@ -516,8 +517,14 @@ IH_RAMFUNC void DMA1_Channel2_3_IRQHandler(void)
                (DMA_ISR_HTIF2|DMA_ISR_TCIF2))
                 ConvController_FaultISR();
             else
-                ConvADC_ProcessFrameISR(
-                  ConvADC_DmaFrame((flags & DMA_ISR_TCIF2)!=0u));
+            {
+                const volatile uint16_t *frame=
+                  ConvADC_DmaFrame((flags & DMA_ISR_TCIF2)!=0u);
+                ConvADC_ProcessFrameISR(frame);
+                /* Exact 100-frame decimation: deterministic TIM6 clock,
+                 * no coroOS latency, no HAL/heap/float in controller. */
+                ConvAutoFreq_FrameISR(frame);
+            }
         }
     }
     LL_GPIO_ResetOutputPin(ISR_TIME_GPIO_Port, ISR_TIME_Pin);
