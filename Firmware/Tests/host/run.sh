@@ -54,8 +54,10 @@ build_run zcd -DCONV_ZCD_HOST_TEST -I APP/PowerControl \
  APP/PowerControl/conv_phase.c APP/PowerControl/conv_zcd.c \
  Tests/host/test_conv_zcd.c
 
-build_run auto_frequency -DCONV_AUTO_FREQ_HOST_TEST -I APP/PowerControl \
- APP/PowerControl/conv_auto_freq.c Tests/host/test_conv_auto_freq.c
+build_run auto_frequency -DCONV_AUTO_FREQ_HOST_TEST -DCONV_ZCD_HOST_TEST \
+ -I APP/PowerControl -I APP \
+ APP/PowerControl/conv_auto_freq.c APP/PowerControl/conv_phase.c \
+ APP/PowerControl/conv_zcd.c Tests/host/test_conv_auto_freq.c
 
 build_run ct_current -I APP APP/PowerControl/conv_current.c \
  Tests/host/test_conv_current.c
