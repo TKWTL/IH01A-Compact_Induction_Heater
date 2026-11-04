@@ -2,7 +2,7 @@
  * The ST non-RTOS USBPD_DPM_Run() loop does not return. Each pass calls
  * APP_Tasks_RunOnce() through USBPD_DPM_UserExecute() after CAD/PE.
  * TIM1 logic PWM runs independently. FD2204 PC6 can be enabled only by
- * explicit, interlocked low-power RUN for up to 10 seconds.
+ * explicit, interlocked low-power RUN (no fixed time budget).
  */
 #include "app_tasks.h"
 #include "main.h"
@@ -24,6 +24,7 @@
 #include "conv_adc.h"
 #include "conv_controller.h"
 #include "conv_zcd.h"
+#include "conv_auto_freq.h"
 #include "conv_protection.h"
 #include "PowerControl/heater_control.h"
 #include "PowerControl/heater_budget.h"
@@ -167,12 +168,25 @@ THRD_DECLARE(thread_heater)
             Heater_GetSnapshot(&hs);
             ConvController_SetPhaseDegrees(hs.target_phase_deg);
             (void)ConvController_StartLogicPwm();
-            /* Explicit RUN, validated 12V/3A source, 10..20deg, <=10s.
+            /* Explicit RUN, validated 12V/3A source, 0..180deg.
              * Stop always pulls PC6 LOW, never auto-restart on later PD. */
             ConvController_BenchRunPoll(TIME_Millis(),&observation);
             ConvZcd_Poll(TIME_Millis()); /* no UI-page dependency */
         }
         THRD_DELAY(100u);
+    }
+    THRD_END;
+}
+
+/* Independent 5ms frequency tracker, even while OLED/PM UI is sleeping.
+ * No timer register update or frequency computation in the ADC ISR. */
+THRD_DECLARE(thread_auto_freq)
+{
+    THRD_BEGIN;
+    while(1)
+    {
+        ConvAutoFreq_Poll(TIME_Millis());
+        THRD_DELAY(CONV_AF_INTERVAL_MS);
     }
     THRD_END;
 }
@@ -208,7 +222,8 @@ THRD_DECLARE(thread_idle)
     THRD_END;
 }
 static const coro_thread_fn_t s_threads[]={
-    thread_input_pm,thread_ui,thread_beep,thread_heater,thread_idle
+    thread_input_pm,thread_ui,thread_beep,thread_heater,
+    thread_auto_freq,thread_idle
 };
 static coro_pt_t s_states[sizeof(s_threads)/sizeof(s_threads[0])];
 
@@ -218,6 +233,7 @@ void APP_Tasks_Init(void)
     pm_api_init();
     beep_init();
     Heater_Init();
+    ConvAutoFreq_Init();
     CoroOS_Init(&s_scheduler,s_threads,s_states,
                 (uint8_t)(sizeof(s_threads)/sizeof(s_threads[0])));
 }
