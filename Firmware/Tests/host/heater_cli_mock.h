@@ -4,6 +4,7 @@
 #include "PowerControl/conv_controller.h"
 #include "PowerControl/conv_phase.h"
 #include "PowerControl/conv_zcd.h"
+#include "PowerControl/conv_auto_freq.h"
 #include "PowerControl/conv_adc.h"
 #include "PowerControl/conv_protection.h"
 #include "PowerControl/conv_current.h"
