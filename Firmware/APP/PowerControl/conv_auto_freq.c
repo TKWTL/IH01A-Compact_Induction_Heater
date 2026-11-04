@@ -266,7 +266,9 @@ void ConvAutoFreq_Init(void)
 }
 uint8_t ConvAutoFreq_SetEnabled(uint8_t enabled)
 {
+#ifndef CONV_AUTO_FREQ_HOST_TEST
     uint32_t mask;
+#endif
     enabled=(uint8_t)(enabled!=0u);
     if(enabled==s_enabled)return 1u;
 #ifndef CONV_AUTO_FREQ_HOST_TEST
@@ -292,8 +294,6 @@ uint8_t ConvAutoFreq_SetEnabled(uint8_t enabled)
     }
     mask=__get_PRIMASK();
     __disable_irq();
-#else
-    mask=0u;
 #endif
     ConvAutoFreq_CoreReset(&s_core);
     s_frame_div=0u;
