@@ -61,6 +61,9 @@ static void report_snapshot(void)
     Heater_GetSnapshot(&h);
     ConvADC_CopySnapshot(&adc);
     ConvProtection_GetSnapshot(&protection);
+    /* Active GET obtains the latest CCR2 instead of waiting for the
+     * 100ms heater thread. This is a register read, no CC2 DMA/IRQ. */
+    ConvZcd_Poll(now);
     ConvZcd_GetSnapshot(&zcd);
 
     if(h.state==HEATER_FAULT || protection.fault_mask)
