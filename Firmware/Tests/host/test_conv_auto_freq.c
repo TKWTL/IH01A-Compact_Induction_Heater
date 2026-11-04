@@ -66,6 +66,9 @@ int main(void)
     ConvAutoFreq_CoreReset(&loop);
     in.hardware_ok=0u;
     tick();assert(out.state==CONV_AF_FAULT && out.trip);
+    assert(ConvAutoFreq_SlewArr(752u,426u,1u)==744u);
+    assert(ConvAutoFreq_SlewArr(426u,752u,1u)==430u);
+    assert(ConvAutoFreq_SlewArr(752u,426u,0u)==426u);
     /* Q12 LUT against the original milli-tick corrected phase math:
      * <=0.3 electrical degrees throughout the guarded 170..300kHz band.
      * Check wrap boundaries modulo a full 360deg as well. */
