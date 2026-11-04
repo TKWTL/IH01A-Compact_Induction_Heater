@@ -1,0 +1,14 @@
+name: Firmware host regression tests
+on:
+  pull_request:
+    paths:
+      - 'Firmware/**'
+      - '.github/workflows/host-tests.yml'
+  workflow_dispatch:
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: C99 host tests
+        run: bash Firmware/Tests/host/run.sh
