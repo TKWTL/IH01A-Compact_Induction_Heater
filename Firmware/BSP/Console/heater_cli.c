@@ -45,6 +45,19 @@ static const char *bench_reason(uint8_t code)
     default:              return "NOT_READY";
     }
 }
+static const char *lag_quality(ConvZcdCalStatus quality)
+{
+    switch(quality)
+    {
+    case CONV_ZCD_CAL_FIT:          return "FIT";
+    case CONV_ZCD_CAL_NO_CAPTURE:   return "NO_IC2";
+    case CONV_ZCD_CAL_FREQ_RANGE:   return "FREQ";
+    case CONV_ZCD_CAL_PHASE_RANGE:  return "PHASE";
+    case CONV_ZCD_CAL_ADC_INVALID:  return "ADC";
+    case CONV_ZCD_CAL_LOW_CURRENT:  return "LOW_CT";
+    default:                        return "NO_IC2";
+    }
+}
 static void report_snapshot(void)
 {
     HeaterSnapshot h;
@@ -52,11 +65,13 @@ static void report_snapshot(void)
     ConvProtectionSnapshot protection;
     ConvZcdSnapshot zcd;
     const char *state;
-    uint32_t now=HAL_GetTick(),current_ma;
+    ConvZcdCalStatus quality=CONV_ZCD_CAL_NO_CAPTURE;
+    uint32_t now=HAL_GetTick(),current_ma=0u;
     uint32_t actual_hz;
     uint16_t arr=(uint16_t)TIM1->ARR;
-    char ic2[12],lag[16],current[18];
+    char ic2[12],lag[16],lag_raw[16],current[18];
     unsigned phase,lag_abs;
+    uint8_t ct_valid=0u;
 
     Heater_GetSnapshot(&h);
     ConvADC_CopySnapshot(&adc);
@@ -76,23 +91,6 @@ static void report_snapshot(void)
     else
         state="OFF";
 
-    if(ConvController_OutputEnabled() &&
-       zcd.valid && (uint32_t)(now-zcd.last_ms)<=250u &&
-       zcd.phase_deg==ConvController_GetPhaseDegrees() &&
-       zcd.capture_raw<=arr)
-    {
-        int val=(int)zcd.lag_deci_deg;
-        lag_abs=(unsigned)(val<0?-val:val);
-        (void)snprintf(ic2,sizeof(ic2),"%u",(unsigned)zcd.capture_raw);
-        (void)snprintf(lag,sizeof(lag),"%c%u.%u",
-                       val<0?'-':'+',lag_abs/10u,lag_abs%10u);
-    }
-    else
-    {
-        (void)snprintf(ic2,sizeof(ic2),"NA");
-        (void)snprintf(lag,sizeof(lag),"NA");
-    }
-
     if(adc.frames && ConvController_GetState()==CONV_STATE_ADC_MONITOR &&
        protection.zero_status==CONV_ZERO_READY)
     {
@@ -103,6 +101,7 @@ static void report_snapshot(void)
             current_ma=ConvCurrent_CtRmsMilliAmp(
                           adc.filtered[CONV_ADC_CT_RMS],
                           protection.ct_zero_raw);
+            ct_valid=1u;
             (void)snprintf(current,sizeof(current),"%lu.%03lu",
                          (unsigned long)(current_ma/1000u),
                          (unsigned long)(current_ma%1000u));
@@ -111,11 +110,42 @@ static void report_snapshot(void)
     else
         (void)snprintf(current,sizeof(current),"NA");
 
+    if(ConvController_OutputEnabled() &&
+       zcd.valid && (uint32_t)(now-zcd.last_ms)<=250u &&
+       zcd.phase_deg==ConvController_GetPhaseDegrees() &&
+       zcd.capture_raw<=arr)
+    {
+        int raw=(int)zcd.lag_deci_deg;
+        lag_abs=(unsigned)(raw<0?-raw:raw);
+        (void)snprintf(ic2,sizeof(ic2),"%u",(unsigned)zcd.capture_raw);
+        (void)snprintf(lag_raw,sizeof(lag_raw),"%c%u.%u",
+                       raw<0?'-':'+',lag_abs/10u,lag_abs%10u);
+        quality=ConvZcd_CorrectionStatus(&zcd,current_ma,ct_valid);
+        if(quality==CONV_ZCD_CAL_FIT)
+        {
+            int corr=(int)zcd.lag_corr_deci_deg;
+            lag_abs=(unsigned)(corr<0?-corr:corr);
+            (void)snprintf(lag,sizeof(lag),"%c%u.%u",
+                            corr<0?'-':'+',lag_abs/10u,lag_abs%10u);
+        }
+        else
+            (void)snprintf(lag,sizeof(lag),"NA");
+    }
+    else
+    {
+        (void)snprintf(ic2,sizeof(ic2),"NA");
+        (void)snprintf(lag_raw,sizeof(lag_raw),"NA");
+        (void)snprintf(lag,sizeof(lag),"NA");
+    }
+
     actual_hz=(CONV_TIM1_CLOCK_KHZ*1000u+(arr+1u)/2u)/(arr+1u);
     phase=(unsigned)ConvController_GetPhaseDegrees();
-    printf("HCLI OK HEATER=%s PHASE_DEG=%u FREQ_KHZ=%u FREQ_HZ=%lu IC2=%s LAG_DEG=%s CT_RMS_A=%s\r\n",
+    /* Preserve IC2 and raw lag for regression; LAG_DEG is now the
+     * fitted corrected angle, or NA whenever the fit gate is invalid. */
+    printf("HCLI OK HEATER=%s PHASE_DEG=%u FREQ_KHZ=%u FREQ_HZ=%lu IC2=%s LAG_DEG=%s LAG_RAW_DEG=%s LAG_QUAL=%s CT_RMS_A=%s\r\n",
            state,phase,(unsigned)ConvController_GetFrequencyKhz(),
-           (unsigned long)actual_hz,ic2,lag,current);
+           (unsigned long)actual_hz,ic2,lag,lag_raw,
+           lag_quality(quality),current);
 }
 uint8_t HeaterCLI_Dispatch(const char *line)
 {

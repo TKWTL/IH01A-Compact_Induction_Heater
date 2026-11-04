@@ -104,7 +104,9 @@ int main(void)
     s_zcd.valid=1u;
     s_zcd.last_ms=1090u;
     s_zcd.capture_raw=444u;
-    s_zcd.lag_deci_deg=1149;
+    s_zcd.lag_deci_deg=1149; /* raw */
+    s_zcd.lag_corr_deci_deg=950; /* 95.0deg host-injected correction */
+    s_zcd.correction_valid=1u;
     s_zcd.phase_deg=180u;
     s_adc.frames=1u;
     s_adc.raw[CONV_ADC_CT_RMS]=1389u;
@@ -114,15 +116,18 @@ int main(void)
     s_reply[0]='\0';
     assert(HeaterCLI_Dispatch("heater get"));
     assert(strstr(s_reply,"HCLI OK HEATER=ON PHASE_DEG=180 FREQ_KHZ=200 FREQ_HZ=200000 ")==s_reply);
-    assert(strstr(s_reply,"IC2=444 LAG_DEG=+114.9 CT_RMS_A=0.699")!=0 ||
-           strstr(s_reply,"IC2=444 LAG_DEG=+114.9 CT_RMS_A=0.700")!=0);
+    assert(strstr(s_reply,"IC2=444 LAG_DEG=+95.0 LAG_RAW_DEG=+114.9 LAG_QUAL=FIT CT_RMS_A=0.699")!=0 ||
+           strstr(s_reply,"IC2=444 LAG_DEG=+95.0 LAG_RAW_DEG=+114.9 LAG_QUAL=FIT CT_RMS_A=0.700")!=0);
     s_zcd.last_ms=0u;
     s_reply[0]='\0';
     assert(HeaterCLI_Dispatch("heater get"));
-    assert(strstr(s_reply,"IC2=NA LAG_DEG=NA")!=0);
+    assert(strstr(s_reply,"IC2=NA LAG_DEG=NA LAG_RAW_DEG=NA LAG_QUAL=NO_IC2")!=0);
     s_adc.raw[CONV_ADC_CT_RMS]=4095u;
+    s_zcd.last_ms=1090u; /* valid capture, but CT ADC is saturated */
     s_reply[0]='\0';
     assert(HeaterCLI_Dispatch("heater get"));
+    assert(strstr(s_reply,"LAG_QUAL=ADC")!=0);
+    assert(strstr(s_reply,"LAG_DEG=NA LAG_RAW_DEG=+114.9") != 0);
     assert(strstr(s_reply,"CT_RMS_A=SAT")!=0);
     send("heater off","HCLI OK HEATER=OFF\r\n");
     puts("heater CLI command: PASS");
