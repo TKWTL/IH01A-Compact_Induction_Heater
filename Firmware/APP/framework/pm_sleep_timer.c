@@ -73,3 +73,4 @@ uint8_t pm_sleep_timer_expired(void)
 }
 
 uint8_t pm_sleep_timer_is_disabled(void) { return s_disabled ? 1u : 0u; }
+uint8_t pm_sleep_timer_is_forced(void) { return s_forced ? 1u : 0u; }

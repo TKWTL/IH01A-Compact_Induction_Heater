@@ -18,6 +18,11 @@ build_run() {
 build_run pm_timer -I Tests/host/stubs -I APP/framework \
  APP/framework/pm_sleep_timer.c Tests/host/test_pm_timer.c
 
+build_run pm_manual -I Tests/host/stubs -I APP/framework -I APP \
+ APP/framework/pm_sleep_timer.c APP/framework/pm_policy.c \
+ APP/framework/pm_controller.c APP/framework/pm_api.c \
+ Tests/host/test_pm_manual.c
+
 build_run mini_format -I BSP/Console \
  BSP/Console/mini_format.c Tests/host/test_mini_format.c
 

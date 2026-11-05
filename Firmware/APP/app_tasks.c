@@ -89,7 +89,9 @@ THRD_DECLARE(thread_input_pm)
             {
                 /* Do not forward the wake key or its release to MiaoUI. */
                 Buttons_SuppressHeld();
-                pm_api_refresh_idle();
+                /* Key-initiated wake may cancel explicit manual UI_OFF.
+                 * Unrelated PM activity must not turn the OLED back on. */
+                pm_api_wake_from_key();
             }
             else
                 Buttons_ClearActions();

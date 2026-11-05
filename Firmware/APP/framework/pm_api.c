@@ -10,12 +10,10 @@
  *  - the "No Auto Sleep" timeout uses pm_sleep_timer_disable() (countdown
  *    stopped) instead of the old magic maximum timeout value.
  *
- * Force-flag lifetime (differs from Pocket by design): the reference clears
- * the latch inside its DEEPSLEEP/STANDBY branches, which are unreachable here
- * because PM_MAX_SLEEP_DEPTH is PM_SLEEP_DEPTH_UI_OFF.  The latch must stay
- * set for as long as UI_OFF lasts - otherwise "manual sleep + No Auto Sleep"
- * would bounce back to RUN on the next poll (idle_timeout would read 0) - so
- * it is cleared exactly on the UI_OFF -> RUN wake transition. */
+ * The force latch persists throughout UI_OFF, including while automatic
+ * sleep is blocked by a frozen timer (e.g. heater active). Ordinary activity
+ * never cancels an explicit manual sleep; a debounced physical key explicitly
+ * requests wake. The latch clears only on UI_OFF -> RUN. */
 #include "pm_api.h"
 
 #include "pm_controller.h"
@@ -53,21 +51,31 @@ void pm_api_init(void)
 
 void pm_api_refresh_idle(void)
 {
+    /* Generic activity and periodic source/power refreshes must not undo a
+     * user-requested screen off. Only pm_api_wake_from_key() can do so. */
+    if(pm_sleep_timer_is_forced())return;
+    s_pm_refresh_req = 1u;
+}
+
+void pm_api_wake_from_key(void)
+{
+    /* The input thread calls this ONLY for a debounced wake key while the
+     * display is off. Do not clear the force latch until RUN is reached. */
     s_pm_refresh_req = 1u;
 }
 
 void pm_api_force_sleep(void)
 {
     pm_api_init();
-    /* A long-press on the root menu cannot blank the screen while
-     * the heater driver is energized. Other sleep settings are unchanged. */
-    if((s_pm_block_mask & PM_BLOCK_HEATER)!=0u)return;
-
-    /* Drop a refresh queued in the same pass (key/menu edge) - otherwise the
-     * state machine would return to RUN immediately. */
+    /* Manual screen-off is independent of idle blocking and timer pause.
+     * This port stops at UI_OFF: PWM/PD/monitoring tasks KEEP RUNNING.
+     * Drop a queued key refresh before forcing countdown expiry. */
     s_pm_refresh_req = 0u;
     pm_sleep_timer_force_expire();
     pm_controller_mark_ui_active(&s_pm_ctrl, 0u);
+    /* This is called from cooperative MiaoUI, not an interrupt. Enter
+     * UI_OFF immediately instead of awaiting the next 50ms PM heartbeat. */
+    pm_api_poll();
 }
 
 void pm_api_set_sleep_timeout(int timeout_sec)
@@ -132,15 +140,17 @@ void pm_api_poll(void)
             pm_controller_pause_idle(&s_pm_ctrl);
             s_pm_sleep_blocked = 1u;
         }
-        pm_controller_notify_wake(&s_pm_ctrl);
+        /* The block mask prevents AUTOMATIC sleep only. Its periodic wake
+         * notification must not re-enable a manually darkened display. */
+        if(!pm_sleep_timer_is_forced())
+            pm_controller_notify_wake(&s_pm_ctrl);
     } else if (s_pm_sleep_blocked != 0u) {
         pm_controller_resume_idle(&s_pm_ctrl);
         s_pm_sleep_blocked = 0u;
     }
 
-    /* Idle timeout: clear the UI-active flag so the state machine may leave
-     * RUN (expired() already short-circuits to 0 while No Auto Sleep is set,
-     * and to 1 after pm_api_force_sleep()). */
+    /* A forced manual zero is considered expired even when the automatic
+     * countdown is paused or disabled; the controller handles that override. */
     if ((s_pm_refresh_req == 0u) && (pm_sleep_timer_expired() != 0u)) {
         pm_controller_mark_ui_active(&s_pm_ctrl, 0u);
     }

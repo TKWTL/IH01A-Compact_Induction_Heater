@@ -1090,6 +1090,14 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action)
                     break;
                 case UI_ACTION_BACK:
                     if(ui->nowItem != NULL){
+                        /* Root BACK means explicit screen-off, NOT navigation.
+                         * Do it before the eight-frame fade/Draw_UI. The PM
+                         * task will enter UI_OFF at its next 50ms poll, even
+                         * if automatic sleep is blocked by active hardware. */
+                        if(ui->nowItem->page.location->parentPage == NULL){
+                            pm_api_force_sleep();
+                            break;
+                        }
                         // 避免重复状态改变
                         if(ui->action != UI_ACTION_BACK) Change_UIState(ui, UI_PAGE_RUNING);
 
@@ -1100,13 +1108,6 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action)
                             Draw_UI(ui, ui->nowItem->page.location->parentPage->item.lastJumpItem->page.location, ui->nowItem->page.location->item.head, ui->nowItem->page.location->parentPage->item.lastJumpItem);
                             ui->oldItem = ui->nowItem->page.location->item.head;
                             ui->nowItem = ui->nowItem->page.location->parentPage->item.lastJumpItem;
-                        }
-                        else{
-                            /* 根菜单按 BACK(K2 长按) → 立即休眠/关屏:独立的
-                             * "-Sleep" 图标已删,这里是菜单里关屏的唯一入口。
-                             * 电源框架在下一次 poll(≤50 ms)进入 UI_OFF,随后
-                             * thread_ui 停画(coroOS 下无需挂起任务)。 */
-                            pm_api_force_sleep();
                         }
                     }
                     else{ // 否则进入应用绘制状态

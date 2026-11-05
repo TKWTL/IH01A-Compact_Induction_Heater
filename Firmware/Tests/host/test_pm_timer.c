@@ -20,7 +20,9 @@ int main(void)
     pm_sleep_timer_disable();assert(!pm_sleep_timer_expired());
     assert(pm_sleep_timer_left_ms()==PM_SLEEP_INFINITE);
     pm_sleep_timer_force_expire();assert(pm_sleep_timer_expired());
+    assert(pm_sleep_timer_is_forced());
     pm_sleep_timer_clear_force();assert(!pm_sleep_timer_expired());
+    assert(!pm_sleep_timer_is_forced());
     now=0xfffffff0u;pm_sleep_timer_init(100u);
     now=0x20u;assert(pm_sleep_timer_left_ms()==52u);
     puts("PM timer checks passed");

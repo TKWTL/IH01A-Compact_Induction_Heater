@@ -162,7 +162,11 @@ pm_power_state_t pm_controller_step(pm_controller_t *ctx)
     }
 
     in.ui_active = ctx->ui_active;
-    in.idle_timeout = (ctx->idle_timer_paused != 0) ? 0 : pm_sleep_timer_expired();
+    /* Auto idle expiry must respect the frozen countdown. The explicit
+     * manual-expiry latch intentionally overrides pause/No Auto Sleep. */
+    in.idle_timeout = (ctx->idle_timer_paused != 0 &&
+                       pm_sleep_timer_is_forced() == 0u) ?
+                      0u : pm_sleep_timer_expired();
     in.usb_or_dc_attached = ctx->usb_or_dc_attached;
     in.low_battery = ctx->low_battery;
     in.force_standby = ctx->force_standby;

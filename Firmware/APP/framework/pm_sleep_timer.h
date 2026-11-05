@@ -17,6 +17,8 @@ void pm_sleep_timer_pause(void);
 void pm_sleep_timer_resume(void);
 void pm_sleep_timer_force_expire(void);
 void pm_sleep_timer_clear_force(void);
+/* Manual sleep latch: overrides frozen countdown and No Auto Sleep. */
+uint8_t pm_sleep_timer_is_forced(void);
 uint32_t pm_sleep_timer_left_ms(void);
 uint8_t pm_sleep_timer_expired(void);
 uint8_t pm_sleep_timer_is_disabled(void);
