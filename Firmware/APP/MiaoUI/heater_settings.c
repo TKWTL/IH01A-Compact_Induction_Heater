@@ -5,6 +5,7 @@
 #include "heater_settings.h"
 #include "PowerControl/heater_control.h"
 #include "PowerControl/conv_controller.h"
+#include "PowerControl/conv_phase.h"
 #include "PowerControl/conv_auto_freq.h"
 #include "PowerControl/conv_current.h"
 #include "PowerControl/conv_adc.h"
@@ -17,12 +18,12 @@
 static ui_page_t s_page;
 static ui_item_t s_entry,s_back,s_pc6_item,s_phase_item,s_auto_item,s_freq_item,s_af_item;
 static ui_item_t s_ic2_item,s_lag_item,s_lag_raw_item,s_ct_item,s_zero_item,s_status_item;
-static ui_data_t s_pc6_data,s_phase_data,s_auto_data;
-static ui_element_t s_pc6_elem,s_phase_elem,s_auto_elem;
+static ui_data_t s_pc6_data,s_phase_data,s_auto_data,s_freq_data;
+static ui_element_t s_pc6_elem,s_phase_elem,s_auto_elem,s_freq_elem;
 static uint8_t s_pc6,s_auto;
-static int s_phase;
-static int s_previous_phase;
-static char s_freq_text[26],s_af_text[26];
+static int s_phase,s_freq;
+static int s_previous_phase,s_previous_freq;
+static char s_af_text[26];
 static char s_ic2_text[26],s_lag_text[26],s_lag_raw_text[26],s_ct_text[26];
 static char s_zero_text[26],s_status_text[26];
 static uint32_t s_last_poll;
@@ -70,6 +71,30 @@ static void phase_changed(ui_t *ui)
     s_previous_phase=s_phase;
     pm_api_refresh_idle();
 }
+static void frequency_changed(ui_t *ui)
+{
+    (void)ui;
+    /* Prevent numeric-widget endpoint wrap 400->150 or 150->400.
+     * Auto mode owns ARR, so a manual edit is immediately reverted. */
+    if(ConvAutoFreq_Enabled())
+    {
+        s_freq=(int)ConvController_GetFrequencyKhz();
+        s_previous_freq=s_freq;
+        return;
+    }
+    if(s_previous_freq==(int)CONV_FREQ_MAX_KHZ &&
+       s_freq==(int)CONV_FREQ_MIN_KHZ)
+        s_freq=s_previous_freq;
+    else if(s_previous_freq==(int)CONV_FREQ_MIN_KHZ &&
+            s_freq==(int)CONV_FREQ_MAX_KHZ)
+        s_freq=s_previous_freq;
+    if(s_freq<(int)CONV_FREQ_MIN_KHZ)s_freq=(int)CONV_FREQ_MIN_KHZ;
+    if(s_freq>(int)CONV_FREQ_MAX_KHZ)s_freq=(int)CONV_FREQ_MAX_KHZ;
+    if(!ConvController_SetFrequencyKhz((uint16_t)s_freq))
+        s_freq=(int)ConvController_GetFrequencyKhz();
+    s_previous_freq=s_freq;
+    pm_api_refresh_idle();
+}
 static void auto_changed(ui_t *ui)
 {
     (void)ui;
@@ -97,7 +122,7 @@ void HeaterSettings_AddSettings(ui_page_t *settings)
     Create_element(&s_pc6_item,&s_pc6_elem);
     AddItem(" PC6 Enable",UI_ITEM_DATA,0,&s_pc6_item,&s_page,0,0);
 
-    s_phase=0;s_previous_phase=0;
+    s_phase=180;s_previous_phase=180;
     s_phase_data.name="Phase deg";
     s_phase_data.ptr=&s_phase;
     s_phase_data.function=phase_changed;
@@ -120,7 +145,21 @@ void HeaterSettings_AddSettings(ui_page_t *settings)
     s_auto_elem.data=&s_auto_data;
     Create_element(&s_auto_item,&s_auto_elem);
     AddItem(" Auto Freq",UI_ITEM_DATA,0,&s_auto_item,&s_page,0,0);
-    AddItem(s_freq_text,UI_ITEM_WORD,0,&s_freq_item,&s_page,0,readonly_item);
+
+    s_freq=(int)ConvController_GetFrequencyKhz();
+    s_previous_freq=s_freq;
+    s_freq_data.name="Freq kHz";
+    s_freq_data.ptr=&s_freq;
+    s_freq_data.function=frequency_changed;
+    s_freq_data.functionType=UI_DATA_FUNCTION_STEP_EXECUTE;
+    s_freq_data.dataType=UI_DATA_INT;
+    s_freq_data.actionType=UI_DATA_ACTION_RW;
+    s_freq_data.min=(int)CONV_FREQ_MIN_KHZ;
+    s_freq_data.max=(int)CONV_FREQ_MAX_KHZ;
+    s_freq_data.step=(int)CONV_FREQ_STEP_KHZ;
+    s_freq_elem.data=&s_freq_data;
+    Create_element(&s_freq_item,&s_freq_elem);
+    AddItem(" Freq kHz",UI_ITEM_DATA,0,&s_freq_item,&s_page,0,0);
     AddItem(s_af_text,UI_ITEM_WORD,0,&s_af_item,&s_page,0,readonly_item);
 
     AddItem(s_ic2_text,UI_ITEM_WORD,0,&s_ic2_item,&s_page,0,readonly_item);
@@ -156,8 +195,8 @@ void HeaterSettings_Poll(void)
     s_phase=(int)heater.target_phase_deg;
     s_previous_phase=s_phase;
     s_auto=af.enabled;
-    (void)snprintf(s_freq_text,sizeof(s_freq_text),"Freq: %u kHz",
-                   (unsigned)ConvController_GetFrequencyKhz());
+    s_freq=(int)ConvController_GetFrequencyKhz();
+    s_previous_freq=s_freq;
     (void)snprintf(s_af_text,sizeof(s_af_text),"AF:%s IB:%u",
                    ConvAutoFreq_StateName(af.state),
                    (unsigned)af.ibus_delta_raw);
@@ -194,6 +233,7 @@ void HeaterSettings_Poll(void)
         {
             const char *reason=
                 quality==CONV_ZCD_CAL_FREQ_RANGE?"FREQ":
+                quality==CONV_ZCD_CAL_RECAL_REQUIRED?"RECAL":
                 quality==CONV_ZCD_CAL_PHASE_RANGE?"PHASE":
                 quality==CONV_ZCD_CAL_LOW_CURRENT?"LOW CT":
                 quality==CONV_ZCD_CAL_ADC_INVALID?"ADC":"IC2";
@@ -212,7 +252,8 @@ void HeaterSettings_Poll(void)
        ConvController_GetState()==CONV_STATE_ADC_MONITOR)
     {
         /* ADC low-pass value minus the original no-switching CT_RMS zero.
-         * 0.25253 V/A is a channel gain; current is a display estimate.
+         * 0.1893975 V/A is a nominal gain after CT modification.
+         * The value is an estimate until bench calibration.
          * Near ADC saturation the ampere estimate would under-report. */
         if(adc.raw[CONV_ADC_CT_RMS]>=4090u)
             (void)snprintf(s_ct_text,sizeof(s_ct_text),"CT_RMS: SAT");

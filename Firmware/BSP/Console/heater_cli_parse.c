@@ -55,8 +55,10 @@ uint8_t HeaterCli_Parse(const char *line,HeaterCliRequest *out)
     }
     if(token(&p,"freq"))
     {
-        /* Explicit migration error: no hidden numeric tuning bypass. */
-        out->op=HEATER_CLI_FREQ_DISABLED;
+        if(!decimal(p,&value))return 1u;
+        out->op=(value>=150u && value<=400u)?
+                 HEATER_CLI_FREQ:HEATER_CLI_OUT_OF_RANGE;
+        if(out->op==HEATER_CLI_FREQ)out->value=value;
         return 1u;
     }
     if(!token(&p,"phase"))return 1u;

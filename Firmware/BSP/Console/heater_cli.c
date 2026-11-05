@@ -53,6 +53,7 @@ static const char *lag_quality(ConvZcdCalStatus quality)
     case CONV_ZCD_CAL_FIT:          return "FIT";
     case CONV_ZCD_CAL_NO_CAPTURE:   return "NO_IC2";
     case CONV_ZCD_CAL_FREQ_RANGE:   return "FREQ";
+    case CONV_ZCD_CAL_RECAL_REQUIRED: return "RECAL";
     case CONV_ZCD_CAL_PHASE_RANGE:  return "PHASE";
     case CONV_ZCD_CAL_ADC_INVALID:  return "ADC";
     case CONV_ZCD_CAL_LOW_CURRENT:  return "LOW_CT";
@@ -177,6 +178,11 @@ uint8_t HeaterCLI_Dispatch(const char *line)
 
     case HEATER_CLI_AUTO_ON:
     case HEATER_CLI_AUTO_OFF:
+        if(req.op==HEATER_CLI_AUTO_ON && !CONV_ZCD_CT75_CALIBRATED)
+        {
+            printf("HCLI ERR CT_ZCD_RECAL_REQUIRED\r\n");
+            return 1u;
+        }
         if(ConvAutoFreq_SetEnabled(req.op==HEATER_CLI_AUTO_ON))
             printf("HCLI OK AUTO_FREQ=%s\r\n",
                    ConvAutoFreq_Enabled()?"ON":"OFF");
@@ -184,8 +190,14 @@ uint8_t HeaterCLI_Dispatch(const char *line)
             printf("HCLI ERR APPLY\r\n");
         return 1u;
 
-    case HEATER_CLI_FREQ_DISABLED:
-        printf("HCLI ERR MANUAL_FREQ_DISABLED\r\n");
+    case HEATER_CLI_FREQ:
+        if(ConvAutoFreq_Enabled())
+            printf("HCLI ERR AUTO_FREQ_ENABLED\r\n");
+        else if(ConvController_SetFrequencyKhz(req.value))
+            printf("HCLI OK FREQ_KHZ=%u\r\n",
+                   (unsigned)ConvController_GetFrequencyKhz());
+        else
+            printf("HCLI ERR APPLY\r\n");
         return 1u;
 
     case HEATER_CLI_ON:

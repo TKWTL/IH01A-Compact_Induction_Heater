@@ -38,7 +38,11 @@ ConvZcdCalStatus ConvZcd_CorrectionStatus(const ConvZcdSnapshot *sample,
         return CONV_ZCD_CAL_PHASE_RANGE;
     if(!ct_valid)return CONV_ZCD_CAL_ADC_INVALID;
     if(ct_ma<50u)return CONV_ZCD_CAL_LOW_CURRENT;
+#if !CONV_ZCD_CT75_CALIBRATED
+    return CONV_ZCD_CAL_RECAL_REQUIRED;
+#else
     return CONV_ZCD_CAL_FIT;
+#endif
 }
 
 uint8_t ConvZcd_Calculate(uint16_t arr,uint16_t phase_deg,

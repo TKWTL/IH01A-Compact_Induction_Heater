@@ -71,7 +71,9 @@ uint8_t ConvProtection_WindowSafe(void);
 uint8_t ConvProtection_CompArmed(void);
 /* Pure logic for host tests: lower comparator must be HIGH and upper LOW. */
 uint8_t ConvProtection_WithinWindow(uint8_t above_low,uint8_t above_high);
-/* COMP1/2 window uses 0.1V/A centered on measured VBIAS, ±12A.
+/* COMP1/2 window uses revised 0.075V/A centered on VBIAS.
+ * For ±12A peak, DAC window is ±1474 codes at VREF=2.5V.
+ * Do not silently extend to ±16A; requalify hardware first.
  * DAC1 CH1 is lower, CH2 upper. Hardware starts only after valid zero
  * calibration and voltage bounds; TIM1 MOE stays prohibited. */
 /* Optional future calibration override: DAC deltas are raw counts,

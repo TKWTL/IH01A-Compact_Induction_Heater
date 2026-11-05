@@ -50,14 +50,14 @@ int main(void)
             assert(v.valid && v.correction_valid);
             assert(v.capture_raw==cases[i].ic2);
             assert(v.lag_corr_deci_deg>=860 && v.lag_corr_deci_deg<=920);
-            assert(ConvZcd_CorrectionStatus(&v,700u,1u)==CONV_ZCD_CAL_FIT);
+            assert(ConvZcd_CorrectionStatus(&v,700u,1u)==CONV_ZCD_CAL_RECAL_REQUIRED);
             assert(ConvZcd_CorrectionStatus(&v,49u,1u)==CONV_ZCD_CAL_LOW_CURRENT);
             assert(ConvZcd_CorrectionStatus(&v,700u,0u)==CONV_ZCD_CAL_ADC_INVALID);
         }
         assert(ConvZcd_Calculate(639u,90u,444u,&v));
         assert(ConvZcd_CorrectionStatus(&v,700u,1u)==CONV_ZCD_CAL_PHASE_RANGE);
         assert(ConvZcd_Calculate(639u,120u,444u,&v));
-        assert(ConvZcd_CorrectionStatus(&v,50u,1u)==CONV_ZCD_CAL_FIT);
+        assert(ConvZcd_CorrectionStatus(&v,50u,1u)==CONV_ZCD_CAL_RECAL_REQUIRED);
         assert(ConvZcd_Calculate(639u,119u,444u,&v));
         assert(ConvZcd_CorrectionStatus(&v,50u,1u)==CONV_ZCD_CAL_PHASE_RANGE);
         assert(ConvPhase_ArrFromKHz(150u,&arr));

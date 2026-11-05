@@ -45,7 +45,7 @@ void Heater_Init(void)
     s.state=HEATER_OFF;
     s_proposed_target_mw=0u;
     s.target_temp_deci_c=800u;
-    s.target_phase_deg=0u; /* two logic waveforms initially in phase */
+    s.target_phase_deg=180u; /* default maximum bridge phase-shift */
     s_stop_timer_armed=0u;
     s_stop_deadline_ms=0u;
 }

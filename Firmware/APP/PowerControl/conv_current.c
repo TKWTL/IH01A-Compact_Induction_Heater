@@ -6,9 +6,9 @@ uint32_t ConvCurrent_CtRmsMilliAmp(uint16_t filtered_raw,uint16_t zero_raw)
     if(zero_raw>4095u)zero_raw=4095u;
     if(filtered_raw<=zero_raw)return 0u;
     delta=(uint32_t)(filtered_raw-zero_raw);
-    /* I_mA = delta * (2500mV/4095) * (1000mA/A)/(252.53mV/A)
-     *       = delta * 250000000 / (4095 * 25253).
-     * Intermediate must be uint64_t. No floats, no absolute-current offset. */
-    den=4095u*25253u;
-    return (uint32_t)(((uint64_t)delta*250000000u+den/2u)/den);
+    /* CT_OUT 0.100 -> 0.075 V/A (3/4). Unchanged rectifier gain implies
+     * CT_RMS 0.25253*3/4 = 0.1893975 V/A. Bench recalibration required.
+     * I[mA] = delta * 1,000,000,000 / (4095 * 25253 * 3). */
+    den=4095u*25253u*3u;
+    return (uint32_t)(((uint64_t)delta*1000000000u+den/2u)/den);
 }

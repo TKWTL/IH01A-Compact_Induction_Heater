@@ -28,7 +28,7 @@ int main(void)
     Heater_Init();
     assert(Heater_GetProposedTargetMw()==0u);
     Heater_GetSnapshot(&s);
-    assert(s.mode==HEATER_MODE_POWER && s.target_phase_deg==0u);
+    assert(s.mode==HEATER_MODE_POWER && s.target_phase_deg==180u);
     Heater_SetPhaseDegrees(90u);
     Heater_GetSnapshot(&s);
     assert(s.target_phase_deg==90u);

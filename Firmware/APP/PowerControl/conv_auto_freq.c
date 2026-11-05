@@ -4,6 +4,7 @@
  * experimental 12V bench controller, NOT a validated ZVS interlock.
  * Low current holds 300kHz; no blind frequency descent is permitted. */
 #include "conv_auto_freq.h"
+#include "conv_zcd.h"
 #ifndef CONV_AUTO_FREQ_HOST_TEST
 #include "conv_controller.h"
 #include "conv_adc.h"
@@ -281,6 +282,10 @@ uint8_t ConvAutoFreq_SetEnabled(uint8_t enabled)
     uint32_t mask;
 #endif
     enabled=(uint8_t)(enabled!=0u);
+    /* Revised CT gain invalidates the original empty-coil CT_ZERO fit.
+     * Keep the loop compiled for future qualification, but fail closed
+     * on ON until fresh calibration confirms current timing. */
+    if(enabled && !CONV_ZCD_CT75_CALIBRATED)return 0u;
     if(enabled==s_enabled)return 1u;
 #ifndef CONV_AUTO_FREQ_HOST_TEST
     /* Stop the ISR loop BEFORE staging 300kHz. Otherwise an ADC frame
@@ -374,8 +379,8 @@ void ConvAutoFreq_FrameISR(const volatile uint16_t *frame)
         (TIM1->SR&TIM_SR_BIF)==0u);
     /* CC2IF is observed even though 200kHz edges cause overcapture.
      * No aged result is reused, and low/saturated CT disables feedback.
-     * 50mA corresponds to ceil(0.25253V/A*.05A/2.5V*4095)=21
-     * post-zero ADC counts. */
+     * Revised nominal 0.1893975V/A gives ceil(0.05A*0.1893975
+     * /2.5V*4095)=16 post-zero ADC counts. */
     capture_flags=TIM1->SR;
     raw_ic2=(uint16_t)TIM1->CCR2;
     if((capture_flags&TIM_SR_CC2OF)!=0u)
@@ -384,7 +389,7 @@ void ConvAutoFreq_FrameISR(const volatile uint16_t *frame)
         in.output_on && in.hardware_ok &&
         (capture_flags&TIM_SR_CC2IF)!=0u &&
         raw_ct<4090u &&
-        ct>=(uint16_t)(protection.ct_zero_raw+21u) &&
+        ct>=(uint16_t)(protection.ct_zero_raw+16u) &&
         ConvAutoFreq_CorrectLagFast(in.arr,(uint16_t)TIM1->CCR3,
                                     raw_ic2,&lag));
     in.phase_fit=valid;

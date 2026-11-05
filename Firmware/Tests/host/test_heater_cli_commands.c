@@ -65,7 +65,7 @@ ConvZcdCalStatus ConvZcd_CorrectionStatus(const ConvZcdSnapshot *v,
         return CONV_ZCD_CAL_PHASE_RANGE;
     if(!valid)return CONV_ZCD_CAL_ADC_INVALID;
     if(ct_ma<50u)return CONV_ZCD_CAL_LOW_CURRENT;
-    return CONV_ZCD_CAL_FIT;
+    return CONV_ZCD_CAL_RECAL_REQUIRED; /* revised CT not yet refitted */
 }
 uint8_t ConvController_OutputEnabled(void){return s_enabled;}
 uint8_t ConvController_OutputPinLevel(void){return s_enabled;}
@@ -117,22 +117,25 @@ int main(void)
     assert(HeaterCLI_Dispatch("ping")==0u);
     send("heater phase 180","HCLI OK PHASE_DEG=180\r\n");
     send("heater phase 181","HCLI ERR RANGE\r\n");
-    send("heater auto on","HCLI OK AUTO_FREQ=ON\r\n");
+    send("heater auto on","HCLI ERR CT_ZCD_RECAL_REQUIRED\r\n");
     send("heater auto off","HCLI OK AUTO_FREQ=OFF\r\n");
-    send("heater freq 150","HCLI ERR MANUAL_FREQ_DISABLED\r\n");
-    send("heater freq 400","HCLI ERR MANUAL_FREQ_DISABLED\r\n");
-    send("heater freq xyz","HCLI ERR MANUAL_FREQ_DISABLED\r\n");
+    send("heater freq 150","HCLI OK FREQ_KHZ=150\r\n");
+    send("heater freq 400","HCLI OK FREQ_KHZ=400\r\n");
+    send("heater freq 149","HCLI ERR RANGE\r\n");
+    send("heater freq xyz","HCLI ERR SYNTAX\r\n");
+    s_af.enabled=1u; /* simulate auto mode: manual tuning is prohibited */
+    send("heater freq 200","HCLI ERR AUTO_FREQ_ENABLED\r\n");
+    s_af.enabled=0u;
     send("heater auto 1","HCLI ERR SYNTAX\r\n");
     send("heater on","HCLI ERR HEATER_BLOCK=NO_PD\r\n");
 
     s_now=1100u;
     s_on_allowed=1u;
     send("heater on","HCLI OK HEATER=ON\r\n");
-    send("heater auto on","HCLI OK AUTO_FREQ=ON\r\n");
-    assert(TIM1->ARR==CONV_AF_START_ARR);
-    TIM1->ARR=639u; /* simulate TRACK stepping after acquisition */
-    s_af.state=CONV_AF_TRACK;
-    s_af.ibus_delta_raw=190u;
+    send("heater freq 200","HCLI OK FREQ_KHZ=200\r\n");
+    assert(TIM1->ARR==639u);
+    s_af.state=CONV_AF_OFF;
+    s_af.ibus_delta_raw=0u;
     s_zcd.valid=1u;
     s_zcd.last_ms=1090u;
     s_zcd.capture_raw=444u;
@@ -148,9 +151,8 @@ int main(void)
     s_reply[0]='\0';
     assert(HeaterCLI_Dispatch("heater get"));
     assert(strstr(s_reply,"HCLI OK HEATER=ON PHASE_DEG=180 FREQ_KHZ=200 FREQ_HZ=200000 ")==s_reply);
-    assert(strstr(s_reply," AUTO_FREQ=ON AF_STATE=TRACK IBUS_DELTA=190\r\n")!=0);
-    assert(strstr(s_reply,"IC2=444 LAG_DEG=+95.0 LAG_RAW_DEG=+114.9 LAG_QUAL=FIT CT_RMS_A=0.699")!=0 ||
-           strstr(s_reply,"IC2=444 LAG_DEG=+95.0 LAG_RAW_DEG=+114.9 LAG_QUAL=FIT CT_RMS_A=0.700")!=0);
+    assert(strstr(s_reply," AUTO_FREQ=OFF AF_STATE=OFF IBUS_DELTA=0\r\n")!=0);
+    assert(strstr(s_reply,"IC2=444 LAG_DEG=NA LAG_RAW_DEG=+114.9 LAG_QUAL=RECAL CT_RMS_A=0.932")!=0);
     s_zcd.last_ms=0u;
     s_reply[0]='\0';
     assert(HeaterCLI_Dispatch("heater get"));

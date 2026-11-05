@@ -34,10 +34,16 @@ int main(void)
     assert(!s.awd2_enabled);
     ConvProtection_CalcDacWindow(2000u,853u,100u,120u,&low,&high);
     assert(low==1900u && high==2120u);
-    ConvProtection_CalcDacWindow(2048u,426u,1966u,1966u,&low,&high);
-    assert(low==82u && high==4014u); /* 300kHz still ±12A */
-    ConvProtection_CalcDacWindow(2048u,853u,1966u,1966u,&low,&high);
-    assert(low==82u && high==4014u); /* independent of ARR */
+    ConvProtection_CalcDacWindow(2048u,426u,1474u,1474u,&low,&high);
+    assert(low==574u && high==3522u); /* revised ±12A */
+    ConvProtection_CalcDacWindow(2048u,853u,1474u,1474u,&low,&high);
+    assert(low==574u && high==3522u); /* independent of frequency */
+    adc.frames=1u;
+    adc.filtered[CONV_ADC_VBIAS]=2048u;
+    ConvProtection_Service(900u,&adc,&tmp);
+    ConvProtection_GetSnapshot(&s);
+    assert(s.dac_profile_ready && s.dac1_code==574u &&
+           s.dac2_code==3522u); /* actual default profile, ±12A */
     ConvProtection_SetDacProfile(100u,120u,1u);
     adc.frames=1u;
     adc.filtered[CONV_ADC_VBIAS]=2000u;

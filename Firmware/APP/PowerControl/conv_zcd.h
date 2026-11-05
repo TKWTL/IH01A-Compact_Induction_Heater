@@ -23,12 +23,16 @@ typedef struct {
     uint8_t correction_valid; /* frequency in calibrated 160..330kHz band */
     uint8_t overcapture_seen; /* expected when UI polls slower than 200kHz */
 } ConvZcdSnapshot;
-/* FIT means only that the requested sample is within the *empty-coil*
- * regression domain, NOT that loaded ZVS timing has been validated. */
+/* Old CT_ZERO empirical timing fit was characterized at 0.100V/A.
+ * Revised 0.075V/A changes comparator input slew and overdrive.
+ * Keep historical fit math for comparison but require new calibration. */
+#define CONV_ZCD_CT75_CALIBRATED 0u
+/* FIT only establishes that the empty-coil model applies, not ZVS. */
 typedef enum {
     CONV_ZCD_CAL_FIT=0,
     CONV_ZCD_CAL_NO_CAPTURE,
     CONV_ZCD_CAL_FREQ_RANGE,
+    CONV_ZCD_CAL_RECAL_REQUIRED,
     CONV_ZCD_CAL_PHASE_RANGE,
     CONV_ZCD_CAL_ADC_INVALID,
     CONV_ZCD_CAL_LOW_CURRENT

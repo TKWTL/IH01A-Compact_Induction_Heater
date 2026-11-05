@@ -8,6 +8,7 @@
  * and analog gain must still be validated with an oscilloscope.
  */
 #include "conv_protection.h"
+#include "conv_current.h"
 #ifndef CONV_PROTECTION_HOST_TEST
 #include "conv_controller.h"
 #include "heater_control.h"
@@ -53,7 +54,9 @@ void ConvProtection_Init(void)
     s_ct_min=s_ib_min=4095u;
     s_ct_max=s_ib_max=0u;
     s_dac1=s_dac2=0u;
-    /* TEST-ONLY current window: ±12A at 0.1V/A => 1966 DAC counts.
+    /* TEST-ONLY window: preserve ±12A at revised 0.075V/A =>
+     * 0.900V = 1474 DAC counts. Keeping 1966 would silently increase the
+     * trip to ±16A, which the revised coils/MOSFETs have NOT qualified.
      *
      * PROPOSED FUTURE PROTECTION: limit resonant-capacitor voltage to
      * |V_C,peak| <= 1000V by adapting the allowed sinusoidal CT_OCP
@@ -71,7 +74,7 @@ void ConvProtection_Init(void)
      * sensor delay and resonant overvoltage invalidate that simple
      * estimate; retain independent fast HW trip and margin.
      * This revision intentionally DOES NOT implement the dynamic rule. */
-    s_low=s_high=1966u;
+    s_low=s_high=(uint16_t)((CONV_CT_OUT_MV_PER_A*12u*4095u+1250u)/2500u);
     s_profile_ready=1u;
     s_notified=0u;
     s_faults=s_fault_at=0u;
@@ -86,7 +89,7 @@ void ConvProtection_CalcDacWindow(uint16_t vbias_raw,uint16_t arr,
                                   uint16_t low_delta,uint16_t high_delta,
                                   uint16_t *dac1,uint16_t *dac2)
 {
-    /* Physical CT_OCP amplifier is 0.1 V/A, independent of switching
+    /* Revised CT_OCP amplifier is 0.075 V/A, independent of switching
      * frequency. ARR is retained only for source/API compatibility. */
     (void)arr;
     if(dac1)*dac1=clamp12((int32_t)vbias_raw-(int32_t)low_delta);

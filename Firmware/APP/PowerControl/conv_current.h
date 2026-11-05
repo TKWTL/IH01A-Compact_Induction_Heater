@@ -1,9 +1,10 @@
 #ifndef IH01A_CONV_CURRENT_H
 #define IH01A_CONV_CURRENT_H
 #include <stdint.h>
-/* CT_RMS analog voltage rises 0.25253V per ampere from the measured
- * no-switching startup zero. Input values are 12-bit ADC samples at 2.5V.
- * Returns 0 for readings <=zero; conversion is a display estimate,
- * NOT a fast current trip and NOT proof of a calibrated true-RMS detector. */
+/* Revised CT_OUT nominal 0.075V/A. Assuming unchanged rectifier gain,
+ * CT_RMS is nominally 0.1893975V/A after startup-zero subtraction.
+ * Input is 12-bit at 2.5V. This is NOT yet a calibrated true-RMS
+ * measurement or a fast overcurrent protection path. */
+#define CONV_CT_OUT_MV_PER_A 75u
 uint32_t ConvCurrent_CtRmsMilliAmp(uint16_t filtered_raw,uint16_t zero_raw);
 #endif

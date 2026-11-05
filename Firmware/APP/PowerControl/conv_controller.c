@@ -43,7 +43,7 @@ void ConvController_Init(void)
     s_errors=0u;
     s_logic_pwm_started=0u;
     s_logic_pwm_start_attempted=0u;
-    s_phase_deg=0u;
+    s_phase_deg=180u;
     s_phase_arr=0u;
     s_bench_started_ms=0u;
     s_bench_on_adc_frames=0u;
@@ -56,8 +56,8 @@ void ConvController_Init(void)
     LL_GPIO_ResetOutputPin(ISR_TIME_GPIO_Port, ISR_TIME_Pin);
     LL_GPIO_SetPinSpeed(ISR_TIME_GPIO_Port, ISR_TIME_Pin,
                         LL_GPIO_SPEED_FREQ_VERY_HIGH);
-    /* Preload the 0deg waveform with PC6 low and MOE disabled. */
-    ConvController_SetPhaseDegrees(0u);
+    /* Default bridge phase to 180deg with PC6 LOW and MOE disabled. */
+    ConvController_SetPhaseDegrees(180u);
     /* Fixed-frequency fallback when auto is OFF; never start at 200kHz. */
     if(!ConvController_SetFrequencyArr(426u))
     {
@@ -205,6 +205,8 @@ static uint8_t ConvController_ApplyFrequencyArr(uint16_t next_arr)
 uint8_t ConvController_SetFrequencyKhz(uint16_t requested_khz)
 {
     uint16_t next_arr;
+    /* This public manual API cannot contend with the automatic ISR. */
+    if(ConvAutoFreq_Enabled())return 0u;
     if(!ConvPhase_ArrFromKHz(requested_khz,&next_arr))return 0u;
     return ConvController_ApplyFrequencyArr(next_arr);
 }
