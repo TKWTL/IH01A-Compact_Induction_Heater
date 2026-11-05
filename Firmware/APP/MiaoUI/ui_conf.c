@@ -2,7 +2,7 @@
  * Main is a nonblocking heater control panel. Settings contains the
  * Heater live bench controls (PC6, phase, auto frequency, CT_RMS/IC2), Display,
  * PD and System (sleep). Statistics/Source PDO shows SPR/EPR capabilities;
- * Statistics/System displays ADC pin voltages and MCU temperature.
+ * Statistics/System shows other ADC voltages (IBUS moved to Heater) and MCU temperature.
  * The current ASCII font is used until the Chinese glyph port.
  */
 #include "ui_conf.h"

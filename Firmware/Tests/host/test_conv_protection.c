@@ -9,6 +9,16 @@ int main(void)
     ConvADC_Snapshot adc={0};
     TempService_Snapshot tmp={0};
     ConvProtection_Init();
+    /* Operator may re-acknowledge transient trips, but may never
+     * bypass failed startup zero calibration or comparator setup. */
+    assert(ConvProtection_RearmableMask(CONV_PROT_AWD_IBUS |
+                                       CONV_PROT_TIM1_BREAK));
+    assert(ConvProtection_RearmableMask(CONV_PROT_NTC_SYS |
+                                       CONV_PROT_IBUS_LIMIT));
+    assert(!ConvProtection_RearmableMask(CONV_PROT_ZERO_UNSTABLE));
+    assert(!ConvProtection_RearmableMask(CONV_PROT_COMP_SETUP));
+    assert(!ConvProtection_RearmableMask(CONV_PROT_AUTO_FREQ));
+    assert(!ConvProtection_ManualRearm(0u)); /* no fake host hardware */
     assert(!ConvProtection_ZeroReady());
     /* HAL raw CSR.VALUE for COMP1 alone cannot establish a safe window. */
     assert(ConvProtection_WithinWindow(1u,0u));

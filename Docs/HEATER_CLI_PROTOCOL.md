@@ -23,6 +23,19 @@ Malformed frequency input returns `HCLI ERR SYNTAX`; outside 150..400 returns `H
 - `Freq kHz`: editable with **10 kHz** steps when Auto Freq is OFF; endpoint wrapping is rejected. When Auto Freq is ON, edits are reverted.
 - `CT_RMS`, `IC2` and `LagR` remain available for bench characterization.
 
+
+## 手动故障恢复（2026-11-05）
+
+`heater on` 和 MiaoUI 的 PC6 ON / Heater RUN 均走相同的同步安全门控：
+
+- 保护事件立即拉低 PC6、禁止 TIM1 MOE，并在故障弹窗保留最近的故障码；**不会自行重启**。
+- 下一次人工 ON 才尝试确认先前的**瞬态故障**：重新检查最新的 12V/≤3A PD 合约、VBUS、零点有效性、IBUS 原始和滤波采样、NTC、COMP1/2/PA6 窗口以及至少约 100ms 的故障冷却。
+- 校验通过后重新启用 ADC AWD1/AWD2/AWD3 的中断；如果之前 TIM1 Break 清除了 MOE，则在 PC6 保持低电平的前提下重新确认模拟窗、清除旧 BIF，并恢复 TIM1 Break 中断和逻辑 PWM，最后才允许再次使能 PC6。
+- 仍在过流/过温、PD 合约不符、采样失效，或零点校准/COMP 初始化失败时，手动 ON 仍返回阻止原因；不把“人工确认”视为禁用硬件保护的许可。
+- `0x00000400` 是 `CONV_PROT_AWD_IBUS`，即 IBUS 模拟看门狗 2 越界（不是 CT 槽路电流）；ADC 一次性告警经过确认恢复后会重新使能，下一次真实越界仍会触发。
+
+Main Heater 页和 Settings → Heater 均显示 **IBUS（A）**：使用采样零点作差，标称灵敏度 0.2134V/A，单位显示至 0.01A。这是低通滤波诊断值，而非 AWD2 用于保护的原始瞬时采样。Statistics → System 不再列出独立的 IBUS 引脚电压行，仍保留启动零点及 AWD2 门限等故障诊断项。
+
 ## Measurement calibration
 
 The proposed CT_OUT hardware gain changes **0.100 → 0.075 V/A**. Assuming the existing downstream full-wave rectifier and RC filter gains stay unchanged, nominal CT_RMS transfer is **0.25253 × 0.75 = 0.1893975 V/A**, relative to the startup zero. This is an estimated display conversion until measured.

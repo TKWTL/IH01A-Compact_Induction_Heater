@@ -35,7 +35,6 @@ static void readonly_item(ui_t *ui)
 }
 static void pc6_clicked(ui_t *ui)
 {
-    HeaterSnapshot hs;
     (void)ui;
     if(!s_pc6)
     {
@@ -44,16 +43,9 @@ static void pc6_clicked(ui_t *ui)
     }
     else
     {
-        Heater_GetSnapshot(&hs);
-        /* The switch is an explicit RUN request, NOT an unsafe GPIO write.
-         * All 12V PD / NTC / COMP / Break checks remain in BenchRunPoll. */
-        if(hs.state==HEATER_FAULT)
-        {
-            s_pc6=0u;
-            return;
-        }
-        Heater_SetMode(HEATER_MODE_POWER);
-        Heater_StartConfirmed(HAL_GetTick());
+        /* Manual ON acknowledges only cleared transient trips, then
+         * synchronously executes the same safe gate as 'heater on'. */
+        if(!ConvController_RequestBenchRunNow(HAL_GetTick()))s_pc6=0u;
     }
     pm_api_refresh_idle();
 }

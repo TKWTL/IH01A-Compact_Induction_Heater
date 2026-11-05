@@ -52,6 +52,14 @@ int main(void)
     Heater_Stop(); /* fault must remain latched */
     Heater_GetSnapshot(&s);
     assert(s.state==HEATER_FAULT);
+    Heater_AcknowledgeFault(); /* only called by verified controller path */
+    Heater_GetSnapshot(&s);
+    assert(s.state==HEATER_OFF && s.fault_mask==0u);
+    assert(s.target_phase_deg==0u); /* preserves the user setpoint */
+    Heater_StartConfirmed(2u);
+    Heater_GetSnapshot(&s);
+    assert(s.state==HEATER_RUN_REQUESTED);
+    Heater_Stop();
     Heater_Init();
     assert(Heater_GetProposedTargetMw()==0u);
     /* No reservation / countdown start: RUN enters RUN_REQUESTED at once. */

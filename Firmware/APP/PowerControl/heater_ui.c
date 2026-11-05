@@ -102,9 +102,9 @@ static void edit_value(uint8_t field,UI_ACTION action,uint32_t now)
     case EDIT_RUN:
         if(up)
         {
-            /* Manual start OR confirmation after appointment expiry.
-             * The power stage is still hardware-locked OFF at this stage. */
-            Heater_StartConfirmed(now);
+            /* Explicit RUN also acknowledges a previous transient fault,
+             * but only through the shared PC6/ADC/COMP/PD safety gate. */
+            (void)ConvController_RequestBenchRunNow(now);
         }
         else
         {

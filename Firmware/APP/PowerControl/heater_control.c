@@ -104,6 +104,14 @@ void Heater_LatchFault(uint32_t reason_mask)
     s_stop_timer_armed=0u;
     clear_output();
 }
+void Heater_AcknowledgeFault(void)
+{
+    /* Keep user setpoints; clear only the fault state and run proposal. */
+    s.fault_mask=0u;
+    if(s.state==HEATER_FAULT)s.state=HEATER_OFF;
+    s_stop_timer_armed=0u;
+    clear_output();
+}
 void Heater_Stop(void)
 {
     if(s.state==HEATER_FAULT)

@@ -1,5 +1,6 @@
 /* Statistics -> System: static PAGE_TEXT ADC readings, no heap.
- * Voltage channels report ADC pin voltage (VBUS scaled x16).
+ * IBUS current is shown on Heater pages, not duplicated as pin voltage.
+ * Other voltage channels report ADC pin voltage (VBUS scaled x16).
  * ISR_LOAD reports filtered duty percentage from 0..3.3V PWM average;
  * its 2.5V ADC reference inherently limits measurable duty to ~75.8%.
  * The STM32G071 internal temperature uses two-point factory calibration.
@@ -21,7 +22,7 @@ static char s_labels[CONV_ADC_COUNT][POWER_DASHBOARD_ROW_BYTES];
 static ui_item_t s_prot_items[PROTECTION_ROWS];
 static char s_prot_text[PROTECTION_ROWS][POWER_DASHBOARD_ROW_BYTES];
 static const char *const s_names[CONV_ADC_COUNT] = {
-    "CT_RMS", "IBUS", "NTC_POT", "VBUS",
+    "CT_RMS", "", "NTC_POT", "VBUS",
     "NTC_SYS", "VBIAS", "ISR_LOAD", "MCU"
 };
 static uint32_t s_last_update;
@@ -103,6 +104,7 @@ void PowerDashboard_Poll(void)
 
     for(i=0u;i<CONV_ADC_COUNT;++i)
     {
+        if(i==CONV_ADC_IBUS)continue; /* IBUS moved to Heater page. */
         if(i==CONV_ADC_MCU_TEMP)
         {
             PowerDashboard_Temp(s_labels[i],sizeof(s_labels[i]),"MCU",
@@ -148,6 +150,7 @@ void PowerDashboard_AddItems(ui_page_t *page)
     for(i=0u;i<CONV_ADC_COUNT;++i)
     {
         s_labels[i][0]='\0';
+        if(i==CONV_ADC_IBUS)continue;
         AddItem(s_labels[i],UI_ITEM_WORD,0,&s_rows[i],
                 page,0,PowerDashboard_ReadOnly);
     }

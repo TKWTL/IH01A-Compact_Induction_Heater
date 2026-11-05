@@ -64,6 +64,12 @@ void ConvProtection_BreakISR(void);
 /* Latches AUTO_FREQ bit and disables the bridge immediately in DMA ISR. */
 void ConvProtection_AutoFreqTripISR(void);
 uint32_t ConvProtection_FaultMask(void);
+/* Operator acknowledgment only. Active sensor faults and uncalibrated
+ * startup/setup faults cannot be cleared by a RUN toggle. */
+uint8_t ConvProtection_RearmableMask(uint32_t mask);
+uint8_t ConvProtection_ManualRearm(uint32_t now_ms);
+/* Compare COMP1/2 and PA6 while the old Break latch may still be set. */
+uint8_t ConvProtection_AnalogInputsSafe(void);
 /* COMP1 + COMP2 raw state, PA6 synthesized window output and TIM1 Break.
  * All must agree on "inside window" before any future PC6 HIGH. */
 uint8_t ConvProtection_WindowSafe(void);

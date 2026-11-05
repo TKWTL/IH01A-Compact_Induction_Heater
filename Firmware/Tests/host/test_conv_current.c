@@ -11,6 +11,14 @@ int main(void)
     assert(ConvCurrent_CtRmsMilliAmp(zero+310u,zero)==999u);
     assert(ConvCurrent_CtRmsMilliAmp(zero+311u,zero)==1002u);
     assert(ConvCurrent_CtRmsMilliAmp(4095u,0u)==13200u);
-    puts("CT_RMS current scale: PASS");
+    /* IBUS 0.2134V/A, VREF 2.5V, 350 codes = ~1.001A.
+     * Signed result makes reverse sensor offsets observable. */
+    assert(ConvCurrent_IbusMilliAmp(2048u,2048u)==0);
+    assert(ConvCurrent_IbusMilliAmp(2398u,2048u)==1001);
+    assert(ConvCurrent_IbusMilliAmp(1698u,2048u)==-1001);
+    assert(ConvCurrent_IbusMilliAmp(100u,0u)==286);
+    assert(ConvCurrent_IbusMilliAmp(4095u,0u)==11715);
+    assert(ConvCurrent_IbusMilliAmp(4096u,0u)==0);
+    puts("CT_RMS / IBUS current scale: PASS");
     return 0;
 }

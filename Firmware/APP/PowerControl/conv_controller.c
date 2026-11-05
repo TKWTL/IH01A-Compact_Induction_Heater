@@ -298,23 +298,21 @@ uint8_t ConvController_BenchBlockReason(void)
 {
     return s_bench_block;
 }
-/* Evaluate the RUN gate and remember WHICH clause refused it. Same conditions
- * as the original single AND-expression, in the same order, only expanded so
- * a refusal can be shown on the OLED instead of silently reverting to STOP. */
-static uint8_t bench_block_reason(const HeaterSnapshot *h,
-                                  uint8_t valid_pd,
-                                  const PD_InputContract *c,
-                                  uint32_t now_ms,
-                                  const HeaterObservation *o)
+/* Source and thermal preflight contains no historical fault or PWM-latch
+ * checks. Manual RUN must pass this BEFORE attempting to acknowledge any
+ * previous trip; transient faults never authorize an unsafe source. */
+static uint8_t bench_preflight_reason(const HeaterSnapshot *h,
+                                     uint8_t valid_pd,
+                                     const PD_InputContract *c,
+                                     uint32_t now_ms,
+                                     const HeaterObservation *o)
 {
     if(o==0)                              return CONV_BENCH_SOURCE;
     if(h->mode!=HEATER_MODE_POWER)        return CONV_BENCH_MODE;
     if(ConvAutoFreq_Enabled() && h->target_phase_deg<120u)
-                                          return CONV_BENCH_PHASE;
-    /* Any 0..180 deg phase is allowed: the angle is a manual scope setting,
-     * not a watt request, so it no longer gates RUN. */
+                                           return CONV_BENCH_PHASE;
     if(ConvController_GetPhaseDegrees()!=h->target_phase_deg)
-                                          return CONV_BENCH_PHASE;
+                                           return CONV_BENCH_PHASE;
     if(!valid_pd)                         return CONV_BENCH_NOPD;
     if(c->voltage_mv!=12000u)             return CONV_BENCH_VOLT;
     if(c->current_ma==0u || c->current_ma>3000u) return CONV_BENCH_CURR;
@@ -323,7 +321,19 @@ static uint8_t bench_block_reason(const HeaterSnapshot *h,
     if(!o->zero_calibrated)               return CONV_BENCH_ZERO;
     if(!o->pot_valid || !o->sys_valid)    return CONV_BENCH_NTC;
     if(o->pot_deci_c>=700 || o->sys_deci_c>=600) return CONV_BENCH_HOT;
-    if((uint32_t)(now_ms-o->temperature_updated_ms)>250u) return CONV_BENCH_AGE;
+    if((uint32_t)(now_ms-o->temperature_updated_ms)>250u)
+                                           return CONV_BENCH_AGE;
+    return CONV_BENCH_OK;
+}
+/* Evaluate the complete RUN gate; all explicit commands share it. */
+static uint8_t bench_block_reason(const HeaterSnapshot *h,
+                                  uint8_t valid_pd,
+                                  const PD_InputContract *c,
+                                  uint32_t now_ms,
+                                  const HeaterObservation *o)
+{
+    uint8_t reason=bench_preflight_reason(h,valid_pd,c,now_ms,o);
+    if(reason!=CONV_BENCH_OK)return reason;
     if(!ConvController_LogicPwmRunning()) return CONV_BENCH_PWM;
     if(!ConvProtection_CompArmed())       return CONV_BENCH_COMP;
     if(ConvProtection_FaultMask()!=0u)    return CONV_BENCH_FAULT;
@@ -397,6 +407,41 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
 #endif
 }
 
+/* Restore TIM1 logic PWM only on a manually validated retry, keeping PC6
+ * LOW while clearing its stale hardware Break flag and re-arming BIE. */
+static uint8_t ConvController_ManualRearmLogicPwm(void)
+{
+    if(ConvController_LogicPwmRunning())return 1u;
+    if(!s_logic_pwm_started)
+        return (uint8_t)(!s_logic_pwm_start_attempted &&
+                         ConvController_StartLogicPwm());
+    if(ConvController_OutputEnabled() ||
+       s_state!=CONV_STATE_ADC_MONITOR ||
+       ConvProtection_FaultMask()!=0u ||
+       !ConvProtection_CompArmed() ||
+       !ConvProtection_AnalogInputsSafe() ||
+       (TIM1->CR1&TIM_CR1_CEN)==0u ||
+       (TIM1->CCER&(TIM_CCER_CC1E|TIM_CCER_CC3E))!=
+                     (TIM_CCER_CC1E|TIM_CCER_CC3E))
+        return 0u;
+    /* The old Break is history, not evidence of a currently active input.
+     * Raw COMP1/COMP2 and PA6 were checked immediately above; the hardware
+     * Break remains enabled and can still clear MOE asynchronously. */
+    TIM1->SR=(uint32_t)~TIM_SR_BIF;
+    __DSB();
+    if((TIM1->SR&TIM_SR_BIF)!=0u)return 0u;
+    TIM1->DIER |= TIM_DIER_BIE;
+    TIM1->BDTR |= TIM_BDTR_MOE;
+    __DSB();
+    if(!ConvController_LogicPwmRunning() ||
+       (TIM1->SR&TIM_SR_BIF)!=0u ||
+       ConvProtection_FaultMask()!=0u)
+    {
+        ConvController_TripISR();
+        return 0u;
+    }
+    return 1u;
+}
 /* CLI-only synchronous request. Success means the physical enable pin is
  * HIGH now, not merely that HEATER_RUN_REQUESTED was queued. No direct GPIO
  * bypass; the SAME BenchRunPoll verifies the latest observation and live
@@ -406,6 +451,9 @@ uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms)
 {
 #if IH_LOW_POWER_BENCH_ENABLE
     HeaterSnapshot hs;
+    PD_InputContract contract;
+    ConvProtectionSnapshot protection;
+    uint8_t reason,valid_pd;
     if(ConvController_OutputEnabled())
     {
         if(ConvController_OutputPinIsOutput() &&
@@ -424,14 +472,42 @@ uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms)
         s_bench_block=CONV_BENCH_AGE;
         return 0u;
     }
+    /* User action is an acknowledgment, NOT an interlock bypass.
+     * Check fresh PD/NTC/voltage/phase inputs before any fault is cleared. */
+    Heater_SetMode(HEATER_MODE_POWER);
     Heater_GetSnapshot(&hs);
-    if(hs.state==HEATER_FAULT || ConvProtection_FaultMask()!=0u)
+    valid_pd=PD_Input_GetActiveContract(&contract);
+    reason=bench_preflight_reason(&hs,valid_pd,&contract,now_ms,
+                                  &s_last_bench_obs);
+    if(reason!=CONV_BENCH_OK)
+    {
+        s_bench_block=reason;
+        return 0u;
+    }
+    /* Ensure the current PD contract is programmed in AWD2 before any
+     * restart. While a fault is latched SetIbusLimitMa keeps it disarmed;
+     * ManualRearm clears the latch only after safe live measurements. */
+    ConvProtection_SetIbusLimitMa(contract.current_ma);
+    if(!ConvProtection_ManualRearm(now_ms))
     {
         s_bench_block=CONV_BENCH_FAULT;
         return 0u;
     }
-    /* Heater_SetMode cannot energize PC6; no countdown or delayed start. */
-    Heater_SetMode(HEATER_MODE_POWER);
+    ConvProtection_GetSnapshot(&protection);
+    if(!protection.awd2_enabled ||
+       protection.ibus_limit_ma!=contract.current_ma)
+    {
+        s_bench_block=CONV_BENCH_FAULT;
+        return 0u;
+    }
+    if(!ConvController_ManualRearmLogicPwm())
+    {
+        s_bench_block=CONV_BENCH_PWM;
+        return 0u;
+    }
+    /* Clear the Heater policy latch only after all hardware watchdogs
+     * and TIM1 logic PWM have been restored. */
+    if(hs.state==HEATER_FAULT)Heater_AcknowledgeFault();
     Heater_StartConfirmed(now_ms);
     ConvController_BenchRunPoll(now_ms,&s_last_bench_obs);
     if(ConvController_OutputEnabled() &&
@@ -440,7 +516,6 @@ uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms)
        ConvController_LogicPwmRunning() &&
        ConvProtection_FaultMask()==0u)
         return 1u;
-
     ConvController_BenchPowerOff();
     Heater_Stop();
     if(s_bench_block==CONV_BENCH_OK)s_bench_block=CONV_BENCH_PWM;

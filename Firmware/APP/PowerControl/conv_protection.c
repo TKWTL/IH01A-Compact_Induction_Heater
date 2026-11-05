@@ -283,6 +283,108 @@ uint32_t ConvProtection_FaultMask(void)
 {
     return s_faults|s_fast_faults;
 }
+
+/* Only transient protection events are eligible for operator acknowledgment.
+ * Failed zero calibration, comparator/DAC setup and auto-frequency validation
+ * are NOT cleared by a manual start. */
+#define CONV_REARMABLE_FAULTS ( \
+    CONV_PROT_VBUS_RAIL | CONV_PROT_IBUS_RAIL | \
+    CONV_PROT_NTC_POT | CONV_PROT_NTC_SYS | CONV_PROT_VBUS_LOW | \
+    CONV_PROT_ADC_STALE | CONV_PROT_IBUS_LIMIT | \
+    CONV_PROT_AWD_VBUS | CONV_PROT_AWD_IBUS | CONV_PROT_AWD_SYS | \
+    CONV_PROT_TIM1_BREAK | CONV_PROT_BENCH_VBUS )
+uint8_t ConvProtection_RearmableMask(uint32_t fault_mask)
+{
+    return (uint8_t)((fault_mask&~((uint32_t)CONV_REARMABLE_FAULTS))==0u);
+}
+uint8_t ConvProtection_AnalogInputsSafe(void)
+{
+#ifndef CONV_PROTECTION_HOST_TEST
+    if(!s_comp_armed ||
+       (COMP1->CSR&COMP_CSR_EN)==0u ||
+       (COMP2->CSR&COMP_CSR_EN)==0u)
+        return 0u;
+    if(!ConvProtection_WithinWindow(
+            (COMP1->CSR&COMP_CSR_VALUE)!=0u,
+            (COMP2->CSR&COMP_CSR_VALUE)!=0u))
+        return 0u;
+    return (uint8_t)((GPIOA->IDR&LL_GPIO_PIN_6)!=0u);
+#else
+    return 0u;
+#endif
+}
+/* Called only after a user RUN gesture with PC6 LOW.
+ * Clearing the old diagnostic latch MUST also re-arm all one-shot
+ * hardware ADC watchdog IRQs. Persistent electrical faults are rejected. */
+uint8_t ConvProtection_ManualRearm(uint32_t now_ms)
+{
+#ifndef CONV_PROTECTION_HOST_TEST
+    ConvADC_Snapshot adc;
+    uint16_t lo,hi,raw,filtered,delta;
+    uint32_t faults,primask;
+    faults=ConvProtection_FaultMask();
+    if(!faults)return 1u;
+    if(!ConvProtection_RearmableMask(faults) ||
+       s_zero_status!=CONV_ZERO_READY ||
+       !s_profile_ready || !s_comp_armed ||
+       s_ibus_limit_ma==0u ||
+       (uint32_t)(now_ms-s_fault_at)<100u ||
+       (PWM_EN_GPIO_Port->ODR&PWM_EN_Pin)!=0u ||
+       !ConvProtection_AnalogInputsSafe())
+        return 0u;
+    ConvADC_CopySnapshot(&adc);
+    if(!adc.frames ||
+       adc.raw[CONV_ADC_IBUS]<=5u ||
+       adc.raw[CONV_ADC_IBUS]>=CONV_PROT_IBUS_RAIL_RAW ||
+       adc.raw[CONV_ADC_VBUS]<1050u || adc.raw[CONV_ADC_VBUS]>1400u ||
+       adc.filtered[CONV_ADC_VBUS]<1050u ||
+       adc.filtered[CONV_ADC_VBUS]>1400u ||
+       adc.raw[CONV_ADC_NTC_SYS]<640u ||
+       adc.filtered[CONV_ADC_NTC_SYS]<640u ||
+       adc.raw[CONV_ADC_VBIAS]<s_low ||
+       (uint32_t)adc.raw[CONV_ADC_VBIAS]+s_high>4095u)
+        return 0u;
+    ibus_window_codes(s_ibus_zero,s_ibus_limit_ma,&lo,&hi);
+    raw=adc.raw[CONV_ADC_IBUS];
+    filtered=adc.filtered[CONV_ADC_IBUS];
+    /* AWD2 compares the 8 MSBs. Stay at least 16 ADC codes inside
+     * its actual window to prevent immediate quantization-edge retrips. */
+    if(hi<=lo+32u ||
+       raw<=lo+16u || raw>=hi-16u ||
+       filtered<=lo+16u || filtered>=hi-16u)
+        return 0u;
+    delta=(uint16_t)(raw>s_ibus_zero?raw-s_ibus_zero:s_ibus_zero-raw);
+    if(s_ibus_trip_delta_raw && delta>=s_ibus_trip_delta_raw)
+        return 0u;
+
+    primask=__get_PRIMASK();
+    __disable_irq();
+    /* Do not clear an IRQ fault if any fresh interrupt appeared between
+     * the ADC copy and this critical section. */
+    if(ConvProtection_FaultMask()!=faults ||
+       (PWM_EN_GPIO_Port->ODR&PWM_EN_Pin)!=0u ||
+       !ConvProtection_AnalogInputsSafe())
+    {
+        if((primask&1u)==0u)__enable_irq();
+        return 0u;
+    }
+    ADC1->IER &= ~(ADC_IER_AWD1IE|ADC_IER_AWD2IE|ADC_IER_AWD3IE);
+    ADC1->ISR=ADC_ISR_AWD1|ADC_ISR_AWD2|ADC_ISR_AWD3;
+    s_fast_faults=0u;
+    s_faults=0u;
+    s_notified=0u; /* allow a new alarm on a genuine second trip */
+    s_fault_at=0u; /* remove the old fault overlay */
+    s_awd2_enabled=0u;
+    ConvProtection_SetIbusLimitMa(s_ibus_limit_ma);
+    ADC1->IER |= ADC_IER_AWD1IE|ADC_IER_AWD3IE;
+    if((primask&1u)==0u)__enable_irq();
+    return (uint8_t)(ConvProtection_FaultMask()==0u && s_awd2_enabled);
+#else
+    (void)now_ms;
+    return 0u;
+#endif
+}
+
 uint8_t ConvProtection_WithinWindow(uint8_t above_low,uint8_t above_high)
 {
     /* At positive comparator inputs shared from CT_OCP:
@@ -306,17 +408,10 @@ uint8_t ConvProtection_CompArmed(void)
 uint8_t ConvProtection_WindowSafe(void)
 {
 #ifndef CONV_PROTECTION_HOST_TEST
-    if(!s_comp_armed || !ConvProtection_ZeroReady() ||
-       ConvProtection_FaultMask()!=0u)return 0u;
-    if(!(COMP1->CSR&COMP_CSR_EN) || !(COMP2->CSR&COMP_CSR_EN))
-        return 0u;
-    /* PA6 is configured as AF7 COMP1_OUT; IDR reads the physical
-     * synthesized window output (HIGH=inside window). Confirm independently
-     * against the two raw comparator values and TIM1 Break latch. */
-    if(!ConvProtection_WithinWindow((COMP1->CSR&COMP_CSR_VALUE)!=0u,
-                                     (COMP2->CSR&COMP_CSR_VALUE)!=0u))
-        return 0u;
-    if((GPIOA->IDR&LL_GPIO_PIN_6)==0u || (TIM1->SR&TIM_SR_BIF)!=0u)
+    if(!ConvProtection_ZeroReady() ||
+       ConvProtection_FaultMask()!=0u ||
+       !ConvProtection_AnalogInputsSafe() ||
+       (TIM1->SR&TIM_SR_BIF)!=0u)
         return 0u;
     return 1u;
 #else
@@ -386,7 +481,7 @@ void ConvProtection_Service(uint32_t now,const ConvADC_Snapshot *adc,
 #endif
     if(adc && adc->frames)
     {
-        /* For ±12A at 0.1V/A, both DAC codes must be inside 0..4095.
+        /* For ±12A at revised 0.075V/A, both DAC codes must be legal.
          * An out-of-range VBIAS would invalidate the two-sided trip window. */
         if(s_profile_ready && ConvProtection_ZeroReady() &&
            !ConvProtection_FaultMask())

@@ -34,7 +34,7 @@ typedef struct {
     uint32_t budget_mw;
     uint32_t requested_power_mw; /* supervisory controller proposal only */
     uint32_t isr_target_mw;      /* hard-gated to zero during bring-up */
-    uint32_t fault_mask;         /* retained until reset / explicit recovery */
+    uint32_t fault_mask;         /* retained until explicit manual acknowledgment */
     uint16_t target_temp_deci_c;
     uint16_t target_phase_deg; /* manual 0..180deg, not watts */
     int16_t pot_deci_c,sys_deci_c;
@@ -51,6 +51,9 @@ void Heater_SetOffMinutes(uint16_t minutes,uint32_t now_ms);
 void Heater_StartConfirmed(uint32_t now_ms);
 void Heater_Stop(void);
 void Heater_LatchFault(uint32_t reason_mask);
+/* Only after controller verifies live fault-source recovery.
+ * This does not itself arm hardware or authorize PC6. */
+void Heater_AcknowledgeFault(void);
 void Heater_Poll(uint32_t now_ms,const HeaterObservation *obs);
 void Heater_GetSnapshot(HeaterSnapshot *out);
 /* Atomic 32-bit proposal mailbox readable by the future electrical ISR.
