@@ -38,6 +38,7 @@
 #include "framework/time_service.h"
 #include "conv_controller.h"
 #include "usart.h"
+#include "ih_reset_diag.h"
 #include <stdio.h>
 
 /* USER CODE END Includes */
@@ -85,6 +86,11 @@ void SystemClock_Config(void);
  * 64 vector entries = 256 bytes, and the destination is 256-aligned. */
 static uint32_t s_sram_vectors[64]
     __attribute__((section(".ih_vectors"), aligned(256), used));
+/* The scatter file reserves a separate 32-byte UNINIT SRAM region within
+ * the 0x20008E00..0x20008EFF gap (away from RAM ISR, stack and VTOR).
+ * C startup must never erase this marker on an NVIC_SystemReset(). */
+static volatile IH_ResetDiagRecord s_reset_diag
+    __attribute__((section(".ih_reset_diag"), aligned(4), used));
 extern const uint32_t __Vectors[];
 extern const uint32_t __Vectors_End[];
 
@@ -113,8 +119,15 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  /* Capture reset flags before HAL or RCC initialization touches them. */
+  /* Capture/reset evidence BEFORE any HAL, RTC or RCC initialization.
+   * Only a validated RAM marker together with SFTRSTF (and no PWRRSTF)
+   * may identify our own emergency software reset. */
   uint32_t boot_reset_flags=RCC->CSR;
+  uint32_t boot_reset_stage=0u;
+  uint32_t boot_reset_cause=IH_ResetDiag_PriorCause(
+      boot_reset_flags,&s_reset_diag,&boot_reset_stage);
+  s_reset_diag.magic=0u; /* consume evidence exactly once */
+  __DSB();
   __HAL_RCC_CLEAR_RESET_FLAGS();
 
   /* USER CODE END 1 */
@@ -161,7 +174,7 @@ int main(void)
   /* Debug UART ring/DMA layer: ours, not CubeMX's - keep it inside USER CODE so a
    * regeneration cannot delete the call (that is what killed the console once). */
   g_uart_boot_stage=2u;
-  DebugUART_Init(boot_reset_flags);
+  DebugUART_Init(boot_reset_flags,boot_reset_cause,boot_reset_stage);
   g_uart_boot_stage=3u;
   /* USB-PD FULL stack: the whole Firmware/USBPD tree is hand-maintained (USBPD is
    * unchecked in CubeMX), so this call has to live here as well. */
@@ -249,23 +262,29 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-/* This function must work even when called before MX_GPIO_Init(), from a
- * hard fault, or with all interrupts masked. Do not use HAL delays, logs,
- * malloc, peripheral locks or any scheduler dependency here. */
-void IH_EmergencyReset(void)
+/* Fatal path: PC6 LOW first; do not use UART, HAL delays, locks, heap or
+ * scheduler. A four-word retained SRAM marker lets the NEXT boot separate
+ * our own NVIC_SystemReset from a different software-reset caller. */
+void IH_EmergencyResetReason(uint32_t cause)
 {
     __disable_irq();
-    /* Safe default for FD2204 enable: PC6 LOW is always the first action.
-     * GPIOC clock and output mode are forced even if CubeMX GPIO init failed.
-     * BSRR reset is atomic and does not alter other GPIOC output states. */
     LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOC);
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
     LL_GPIO_SetPinMode(PWM_EN_GPIO_Port,PWM_EN_Pin,LL_GPIO_MODE_OUTPUT);
     __DSB();
-    /* Do not depend on TIM1 registers: the gate-driver EN pin is the final
-     * physical shutoff, even if the timer clock or state is corrupted.
-     * Trigger a system reset immediately, retry if it somehow returns. */
+    /* Two-phase record: invalidate old data first, commit MAGIC last. */
+    s_reset_diag.magic=0u;
+    s_reset_diag.cause=cause;
+    s_reset_diag.inverted_cause=~cause;
+    s_reset_diag.stage=g_uart_boot_stage;
+    __DSB();
+    s_reset_diag.magic=IH_RESET_DIAG_MAGIC;
+    __DSB();
     for(;;)NVIC_SystemReset();
+}
+void IH_EmergencyReset(void)
+{
+    IH_EmergencyResetReason(IH_RESET_CAUSE_EMERGENCY);
 }
 /* USER CODE END 4 */
 
@@ -277,7 +296,7 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* Hardware/clock/ADC failures must never leave the FD2204 gate enabled. */
-  IH_EmergencyReset();
+  IH_EmergencyResetReason(IH_RESET_CAUSE_ERROR_HANDLER);
   /* USER CODE END Error_Handler_Debug */
 }
 #ifdef USE_FULL_ASSERT
@@ -293,7 +312,7 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE BEGIN 6 */
   (void)file;
   (void)line;
-  IH_EmergencyReset();
+  IH_EmergencyResetReason(IH_RESET_CAUSE_ASSERT);
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */

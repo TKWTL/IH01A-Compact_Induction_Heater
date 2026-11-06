@@ -82,3 +82,21 @@ USB-PD 协商状态，必须显式加 `--allow-write` 才会发送。
    ASCII"的帧也能拒掉——只查"是否全为可打印字符"是不够的。
 5. `uart` 的 `idle`（RX 空闲中断）计数会随交互快速增长，属正常现象
    （每次命令后线路回到空闲都会产生一次 IDLE），不是毛刺证据。
+
+## 2026-11-06：28V 大负载时 MCU 重启取证
+
+每次真正进入 MCU 启动流程，USART1 先直接发 `U1OK`，随后从非阻塞 DMA 队列发一行，例如：
+
+```text
+[RESET] CSR=08000000 PWR=1 PIN=0 SW=0 IWDG=0 WWDG=0 LPWR=0 OBL=0 SRC=NONE STAGE=0
+```
+
+示例仅用于展示格式，真实值由 RCC->CSR 决定。
+
+- STM32G071 `PWRRSTF` 同时涵盖 POR/PDR/BOR；`PWR=1` 无法进一步区分上电还是欠压复位。须用示波器同步测量 VBUS、3.3V 与 NRST。
+- `SW=1 SRC=ERROR_HANDLER/ASSERT/HARDFAULT/NMI/EMERGENCY` 表示本固件某个故障入口通过 `NVIC_SystemReset()` 触发软件复位。STAGE 是故障发生时的 `g_uart_boot_stage`，不是程序计数器。
+- `SW=1 SRC=OTHER_SW` 表示软件复位位有效，但没有可信的本地故障记录；可能由别处发起，不能归因为上述入口。
+- `PWR`、`PIN`、`SW`、`IWDG`、`WWDG`、`LPWR`、`OBL` 可能多位同时为 1；原始 CSR 仍然打印，不能只按一个字断定。
+- 4 个 32 位字段在 SRAM2 的 UNINIT 保留区 `0x20008E80..0x20008E9F` 中，利用魔数、原因和反码验证，只在 `SW=1` 且 `PWR=0` 时读取，启动即消费并清除。真正掉电可能使保留数据丢失，不能把 SRC=NONE 解释为排除软件问题。
+- 故障/ISR 路径先关闭 PC6，写 4 字 SRAM 记录并直接请求系统复位；**不在中断里 printf 或阻塞等待 UART**。正常上电仅有既有的 `U1OK` 轮询发送，后面的 RESET 行由 DMA 异步输出。
+- 需要持续读取原始串口字节：电磁干扰或上位机缓存溢出也可能造成伪 `U1OK`。记录实际复位时间、前后两次 RESET 记录和示波器波形，并和 USB-PD Hard Reset 对照。

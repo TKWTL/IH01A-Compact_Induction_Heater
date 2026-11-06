@@ -2,7 +2,7 @@
 ; Preserve Flash RESET vector for boot, copy it to 0x20008F00 at startup,
 ; and execute only the high-priority ADC DMA ISR from SRAM.
 ; Memory: RW/ZI 32KiB, RAM ISR up to 3584B, vector reserve 256B,
-; with 256B unused guard between code region and vector region.
+; with a 32B UNINIT forensic record and remaining guard between regions.
 ; All RW/ZI (including 0x400 heap and 0x400 stack) stay in RW_IRAM1.
 LR_IROM1 0x08000000 0x00020000 {
   ER_IROM1 0x08000000 0x00020000 {
@@ -16,6 +16,11 @@ LR_IROM1 0x08000000 0x00020000 {
   }
   RW_IRAM1 0x20000000 0x00008000 {
     .ANY (+RW +ZI)
+  }
+  ; Retained across SYSRESETREQ to explain our own emergency resets.
+  ; 0x20008E00..0x20008E7F and 0x20008EA0..0x20008EFF remain unused.
+  RW_RESET_DIAG 0x20008E80 UNINIT 0x00000020 {
+    *(.ih_reset_diag)
   }
   RW_VECTORS 0x20008F00 UNINIT 0x00000100 {
     *(.ih_vectors)

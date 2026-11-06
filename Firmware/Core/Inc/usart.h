@@ -49,7 +49,8 @@ typedef struct {
     uint32_t tx_dropped, rx_dropped, rx_errors, rx_idle_events;
     uint32_t tx_dma_starts, tx_dma_failures, tx_dma_completions;
 } DebugUART_Stats;
-void DebugUART_Init(uint32_t reset_flags);
+void DebugUART_Init(uint32_t reset_flags,uint32_t prior_cause,
+                    uint32_t prior_stage);
 void DebugUART_Service(void);
 void DebugUART_WriteByte(uint8_t byte);
 uint32_t DebugUART_Write(const uint8_t *data, uint32_t size);

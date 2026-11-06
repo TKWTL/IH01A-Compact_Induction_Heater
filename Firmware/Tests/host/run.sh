@@ -23,6 +23,8 @@ build_run pm_manual -I Tests/host/stubs -I APP/framework -I APP \
  APP/framework/pm_controller.c APP/framework/pm_api.c \
  Tests/host/test_pm_manual.c
 
+build_run reset_diag -I Core/Inc Tests/host/test_ih_reset_diag.c
+
 build_run mini_format -I BSP/Console \
  BSP/Console/mini_format.c Tests/host/test_mini_format.c
 

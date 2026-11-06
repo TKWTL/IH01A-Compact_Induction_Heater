@@ -150,7 +150,7 @@ void NMI_Handler(void)
 {
   /* USER CODE BEGIN NonMaskableInt_IRQn 0 */
   /* Fatal faults must immediately cut PC6, not wait on UART telemetry. */
-  IH_EmergencyReset();
+  IH_EmergencyResetReason(IH_RESET_CAUSE_NMI);
   /* USER CODE END NonMaskableInt_IRQn 0 */
   /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
   /* Unreachable: IH_EmergencyReset() continuously requests system reset. */
@@ -164,7 +164,7 @@ void HardFault_Handler(void)
 {
   /* USER CODE BEGIN HardFault_IRQn 0 */
   /* No UART polling or stack decoding here: disable FD2204 and reset. */
-  IH_EmergencyReset();
+  IH_EmergencyResetReason(IH_RESET_CAUSE_HARDFAULT);
   /* USER CODE END HardFault_IRQn 0 */
   /* USER CODE BEGIN W1_HardFault_IRQn 0 */
   /* Unreachable: IH_EmergencyReset() does not return. */

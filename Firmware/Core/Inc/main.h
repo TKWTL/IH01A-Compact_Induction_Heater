@@ -67,6 +67,10 @@ void Error_Handler(void);
 /* Fatal/NMI/HardFault/reset paths: disable FD2204 through PC6 before reset.
  * Does not depend on HAL, scheduler, SysTick or ADC state. */
 void IH_EmergencyReset(void) __attribute__((noreturn));
+/* Optional cause attribution retained through an intentional software reset.
+ * Values are defined in ih_reset_diag.h, included here for IRQ users. */
+#include "ih_reset_diag.h"
+void IH_EmergencyResetReason(uint32_t cause) __attribute__((noreturn));
 
 /* USER CODE END EFP */
 

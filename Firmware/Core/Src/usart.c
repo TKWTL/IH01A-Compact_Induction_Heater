@@ -22,6 +22,7 @@
 
 /* USER CODE BEGIN 0 */
 #include <stdio.h>
+#include "ih_reset_diag.h"
 /* USART1 DMA transport lives here, not in a separate BSP source.
  * HAL calls/ISR callbacks and 512-byte RX/TX software rings are CubeMX-safe. */
 /* USER CODE END 0 */
@@ -233,7 +234,8 @@ void DebugUART_GetStats(DebugUART_Stats *out)
     out->tx_dma_failures=s_dma_failures;
     out->tx_dma_completions=s_dma_completions;
 }
-void DebugUART_Init(uint32_t reset_flags)
+void DebugUART_Init(uint32_t reset_flags,uint32_t prior_cause,
+                    uint32_t prior_stage)
 {
     s_tx_head=0u;s_tx_tail=0u;s_tx_active=0u;s_tx_busy=0u;
     s_rx_head=0u;s_rx_tail=0u;s_dma_rx_last=0u;
@@ -252,9 +254,21 @@ void DebugUART_Init(uint32_t reset_flags)
         g_uart_probe_result=(uint32_t)HAL_UART_Transmit(&huart1,
                        (uint8_t *)(void *)marker,(uint16_t)(sizeof(marker)-1u),10u);
     }
-    /* Keep the six-byte direct U1OK probe as a recovery marker; verbose
-     * boot banners are omitted from the production console. */
-    (void)reset_flags;
+    /* This SINGLE boot record is queued (not blocking TX) after U1OK.
+     * STM32G071 PWRRSTF combines POR/PDR/BOR, so do not claim BOR alone.
+     * If SW=1 with SRC=OTHER_SW, another NVIC_SystemReset source is possible. */
+    printf("[RESET] CSR=%08lX PWR=%u PIN=%u SW=%u IWDG=%u WWDG=%u LPWR=%u OBL=%u SRC=%s STAGE=%lu\r\n",
+           (unsigned long)reset_flags,
+           (unsigned)((reset_flags&RCC_CSR_PWRRSTF)!=0u),
+           (unsigned)((reset_flags&RCC_CSR_PINRSTF)!=0u),
+           (unsigned)((reset_flags&RCC_CSR_SFTRSTF)!=0u),
+           (unsigned)((reset_flags&RCC_CSR_IWDGRSTF)!=0u),
+           (unsigned)((reset_flags&RCC_CSR_WWDGRSTF)!=0u),
+           (unsigned)((reset_flags&RCC_CSR_LPWRRSTF)!=0u),
+           (unsigned)((reset_flags&RCC_CSR_OBLRSTF)!=0u),
+           prior_cause?IH_ResetDiag_CauseName(prior_cause):
+           (reset_flags&RCC_CSR_SFTRSTF)?"OTHER_SW":"NONE",
+           (unsigned long)prior_stage);
     DebugUART_Service();
 }
 void DebugUART_Service(void)
