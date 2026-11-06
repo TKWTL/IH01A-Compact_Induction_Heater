@@ -10,6 +10,7 @@
 #include "conv_auto_freq.h"
 #include "conv_protection.h"
 #include "heater_control.h"
+#include "heater_budget.h"
 #include "algorithm/pd_input.h"
 #include "framework/pm_api.h"
 #include "main.h"
@@ -461,6 +462,7 @@ uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms)
     HeaterSnapshot hs;
     PD_InputContract contract;
     ConvProtectionSnapshot protection;
+    uint32_t ibus_trip_ma;
     uint8_t reason,valid_pd;
     if(ConvController_OutputEnabled())
     {
@@ -507,10 +509,17 @@ uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms)
         s_bench_block=reason;
         return 0u;
     }
-    /* Ensure the current PD contract is programmed in AWD2 before any
-     * restart. While a fault is latched SetIbusLimitMa keeps it disarmed;
-     * ManualRearm clears the latch only after safe live measurements. */
-    ConvProtection_SetIbusLimitMa(contract.current_ma);
+    /* Target input current = RDO minus reserve; AWD2 is another 150mA
+     * above that control limit. CT peak/TIM1 Break OCP is independent. */
+    ibus_trip_ma=Heater_InputProtectionLimitMa(contract.voltage_mv,
+                                              contract.current_ma);
+    if(!ibus_trip_ma)
+    {
+        s_bench_block=CONV_BENCH_CURR;
+        return 0u;
+    }
+    /* A previous fault leaves AWD2 disarmed until guarded ManualRearm. */
+    ConvProtection_SetIbusLimitMa(ibus_trip_ma);
     if(!ConvProtection_ManualRearm(now_ms))
     {
         s_bench_block=CONV_BENCH_FAULT;
@@ -518,7 +527,7 @@ uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms)
     }
     ConvProtection_GetSnapshot(&protection);
     if(!protection.awd2_enabled ||
-       protection.ibus_limit_ma!=contract.current_ma)
+       protection.ibus_limit_ma!=ibus_trip_ma)
     {
         s_bench_block=CONV_BENCH_FAULT;
         return 0u;

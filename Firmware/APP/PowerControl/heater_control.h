@@ -16,6 +16,13 @@ typedef enum {
     HEATER_INPUT_NONE=0, HEATER_INPUT_WAIT, HEATER_INPUT_DCIN,
     HEATER_INPUT_PD
 } HeaterInput;
+/* Local policy faults: upper bits intentionally separate from all
+ * ConvProtection faults (bits 0..17). Displayed in the same hex field. */
+#define HEATER_FAULT_NO_BUDGET     (1u<<24)
+#define HEATER_FAULT_NTC_INVALID   (1u<<25)
+#define HEATER_FAULT_TEMP_STALE    (1u<<26)
+#define HEATER_FAULT_SYS_OVERHEAT  (1u<<27)
+#define HEATER_FAULT_POT_OVERHEAT  (1u<<28)
 typedef struct {
     HeaterInput input;
     uint32_t bus_mv;

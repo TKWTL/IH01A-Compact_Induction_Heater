@@ -8,6 +8,17 @@
 #define HEATER_DCIN_MIN_MV 8000u
 #define HEATER_DCIN_CURRENT_MA 7000u
 #define HEATER_BUDGET_MAX_MW 270000u
+/* RDO current policy (mA): reserve a controller margin, then permit
+ * an additional 150mA before the independent IBUS AWD2 watchdog trips.
+ * Does not affect the separate CT/TIM1 Break peak-current protection. */
+#define HEATER_RDO_HIGH_VOLTAGE_MV 20000u
+#define HEATER_RDO_HIGH_MARGIN_MA 100u
+#define HEATER_RDO_LOW_MARGIN_MA 200u
+#define HEATER_IBUS_PROTECTION_HEADROOM_MA 150u
+uint32_t Heater_InputControlLimitMa(uint32_t contract_mv,
+                                    uint32_t contract_ma);
+uint32_t Heater_InputProtectionLimitMa(uint32_t contract_mv,
+                                       uint32_t contract_ma);
 HeaterObservation Heater_BudgetClassify(uint32_t bus_mv,uint8_t pd_mode,
     uint8_t contract_valid,uint32_t contract_mv,uint32_t contract_ma);
 #endif

@@ -77,3 +77,10 @@ Run `bash Firmware/Tests/host/run.sh` for portable C99 tests. Keil target rebuil
 - `pd auto off` 可手动禁用 EPR 自动进入；电压上限仍可由 CLI 人工调整。EPR 请求配置沿用现有硬件已批准的 28V/5A 策略及 140W PDP。
 - 删除 **仅用于 12V 测试的手动恢复电压挡位判断**（ADC 1050～1400）。手动恢复仍要求 PD 合约与实测 BUS 在 ±10% 范围内，原始与滤波 VBUS 不低于约 8V 且不接近 ADC 量程上限；ADC AWD、比较器、TIM1 Break、IBUS、NTC 等保护均不被旁路。
 - 若用户以 XT30 的 DCin 输入，当前手动 RUN 仍要求有效 PD 合约，此更改不扩展到无 PD 合约的 DCin 启动。
+
+## RDO current margin and local Heater faults (2026-11-06)
+
+- Future input-current control ceiling: `I_control = I_RDO - 100mA` for `V_RDO > 20V`, otherwise `I_control = I_RDO - 200mA`. Contract current at/below the reserve is rejected. The proposed power budget uses `V_RDO * I_control`. In the present manual phase bench, this is a supervisory budget only and does not implement real closed-loop current limiting.
+- ADC AWD2 input-current trip uses `I_trip = I_control + 150mA`: 28V/5A -> 4.90A control, 5.05A trip; 20V/3A -> 2.80A control, 2.95A trip. AWD2 8-MSB ADC windows quantize in 16-count steps (~46mA per step at 0.2134V/A), so actual trip points can deviate from nominal by quantization/sensor tolerances. 5.05A nominal threshold lies above a 5A source contract; this is not a guaranteed available operating current.
+- Independent CT/TIM1 Break remains at nominal +-12A **instantaneous peak**; this modification does not change it.
+- `FAULT:00000000` was caused by `Heater_Poll` setting `HEATER_FAULT` without recording a cause. New local policy bit flags in the displayed hex mask: 0x01000000=no input power budget; 0x02000000=NTC invalid; 0x04000000=temperature sample stale (>500ms); 0x08000000=SYS >=85C; 0x10000000=POT >=130C. Causes may be ORed together and require guarded manual acknowledgment.

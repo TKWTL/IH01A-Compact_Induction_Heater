@@ -24,7 +24,23 @@ int main(void)
     dc=Heater_BudgetClassify(5000u,PD_INPUT_DCIN,0u,0u,0u);
     assert(dc.budget_mw==0u);
     dc=Heater_BudgetClassify(28000u,PD_INPUT_PD,1u,28000u,5000u);
-    assert(dc.input==HEATER_INPUT_PD && dc.budget_mw==140000u);
+    assert(dc.input==HEATER_INPUT_PD && dc.budget_mw==137200u);
+    /* RDO voltage boundary and control-to-watchdog +150mA. */
+    assert(Heater_InputControlLimitMa(28000u,5000u)==4900u);
+    assert(Heater_InputProtectionLimitMa(28000u,5000u)==5050u);
+    assert(Heater_InputControlLimitMa(28000u,2600u)==2500u);
+    assert(Heater_InputProtectionLimitMa(28000u,2600u)==2650u);
+    assert(Heater_InputControlLimitMa(20000u,3000u)==2800u);
+    assert(Heater_InputProtectionLimitMa(20000u,3000u)==2950u);
+    assert(Heater_InputControlLimitMa(12000u,3000u)==2800u);
+    assert(Heater_InputProtectionLimitMa(12000u,3000u)==2950u);
+    assert(Heater_InputControlLimitMa(20001u,3000u)==2900u);
+    assert(Heater_InputProtectionLimitMa(20001u,3000u)==3050u);
+    assert(Heater_InputProtectionLimitMa(28000u,0u)==0u);
+    assert(Heater_InputProtectionLimitMa(20000u,200u)==0u);
+    assert(Heater_InputProtectionLimitMa(0u,3000u)==0u);
+    dc=Heater_BudgetClassify(20000u,PD_INPUT_PD,1u,20000u,3000u);
+    assert(dc.input==HEATER_INPUT_PD && dc.budget_mw==56000u);
     Heater_Init();
     assert(Heater_GetProposedTargetMw()==0u);
     Heater_GetSnapshot(&s);
@@ -114,7 +130,31 @@ int main(void)
     Heater_Poll(200000u,&o);
     Heater_GetSnapshot(&s);
     assert(s.state==HEATER_FAULT && s.isr_target_mw==0u);
+    assert(s.fault_mask==HEATER_FAULT_TEMP_STALE);
     Heater_Stop();
+    Heater_AcknowledgeFault();
+    o.temperature_updated_ms=200000u;
+    o.budget_mw=0u;
+    o.pot_valid=0u;
+    o.sys_valid=1u;
+    o.sys_deci_c=860;
+    o.pot_deci_c=1310;
+    Heater_StartConfirmed(200000u);
+    Heater_Poll(200100u,&o);
+    Heater_GetSnapshot(&s);
+    assert(s.state==HEATER_FAULT);
+    assert((s.fault_mask&(HEATER_FAULT_NO_BUDGET|
+                          HEATER_FAULT_NTC_INVALID|
+                          HEATER_FAULT_SYS_OVERHEAT|
+                          HEATER_FAULT_POT_OVERHEAT))==
+                         (HEATER_FAULT_NO_BUDGET|
+                          HEATER_FAULT_NTC_INVALID|
+                          HEATER_FAULT_SYS_OVERHEAT|
+                          HEATER_FAULT_POT_OVERHEAT));
+    assert((s.fault_mask&HEATER_FAULT_TEMP_STALE)==0u);
+    Heater_AcknowledgeFault();
+    Heater_GetSnapshot(&s);
+    assert(s.state==HEATER_OFF && s.fault_mask==0u);
     puts("heater control and budget: PASS");
     return 0;
 }

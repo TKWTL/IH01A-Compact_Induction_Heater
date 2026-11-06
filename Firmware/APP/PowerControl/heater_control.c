@@ -130,6 +130,7 @@ void Heater_Poll(uint32_t now_ms,const HeaterObservation *obs)
     int32_t derivative;
     int32_t raw;
     int32_t cap;
+    uint32_t policy_fault=0u;
     if(!obs)return;
     s.input=obs->input;
     s.bus_mv=obs->bus_mv;
@@ -151,11 +152,20 @@ void Heater_Poll(uint32_t now_ms,const HeaterObservation *obs)
     }
     /* Software-level fail closed; real PWM/overcurrent protection is
      * implemented separately and is NOT commissioned here. */
-    if(!obs->budget_mw || !obs->pot_valid || !obs->sys_valid ||
-       (uint32_t)(now_ms-obs->temperature_updated_ms)>HEATER_TEMP_MAX_AGE_MS ||
-       obs->sys_deci_c>=HEATER_SYS_TRIP_DECI ||
-       obs->pot_deci_c>=HEATER_POT_TRIP_DECI)
+    if(!obs->budget_mw)policy_fault|=HEATER_FAULT_NO_BUDGET;
+    if(!obs->pot_valid || !obs->sys_valid)
+        policy_fault|=HEATER_FAULT_NTC_INVALID;
+    if((uint32_t)(now_ms-obs->temperature_updated_ms)>
+       HEATER_TEMP_MAX_AGE_MS)policy_fault|=HEATER_FAULT_TEMP_STALE;
+    if(obs->sys_deci_c>=HEATER_SYS_TRIP_DECI)
+        policy_fault|=HEATER_FAULT_SYS_OVERHEAT;
+    if(obs->pot_deci_c>=HEATER_POT_TRIP_DECI)
+        policy_fault|=HEATER_FAULT_POT_OVERHEAT;
+    if(policy_fault)
     {
+        /* Previously set HEATER_FAULT without fault_mask, yielding
+         * the misleading UI status FAULT:00000000. */
+        s.fault_mask|=policy_fault;
         s.state=HEATER_FAULT;
         clear_output();
         return;
