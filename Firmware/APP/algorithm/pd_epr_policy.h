@@ -4,17 +4,17 @@
  * independent OVP and a certified 240W EPR e-marked cable.
  * Setting this to 1 authorizes an actual 28V request; leave OFF until then.
  */
-/* 28V input path reviewed by hardware owner on 2026-11-02. Test mode
- * permits explicit user-triggered EPR only; no automatic 28V at boot.
- * The FULL stack/source must verify EPR 5A e-marker cable eligibility.
- * Never energize heater PWM until an independent power-stage review.
+/* The hardware owner approved the 28V input path on 2026-11-02.
+ * At boot: negotiate the highest legal SPR Fixed contract first, then enter
+ * EPR once per attach if Source/cable eligibility permits. This power policy
+ * NEVER starts the heater; power-stage safeguards remain independent.
  */
 #define IH01A_EPR_28V5A_HARDWARE_APPROVED 1
-/* Auto-enter EPR as soon as an EPR-capable Source has an explicit SPR
- * contract (fallback: stay at SPR 20 V). Enabled so a cold boot produces the
- * full SPR -> EPR sequence for a logic-analyser capture. 'pd auto' toggles it
- * at runtime and 'pd epr' still forces a manual attempt. */
-#define IH01A_EPR_28V5A_AUTO_ENTER 0
+/* Auto-enter EPR after an explicit SPR contract when Source and cable permit.
+ * On unavailable/rejected EPR, retain the highest legal SPR Fixed contract
+ * (typically <=20V). 'pd auto' may disable it for diagnostics. */
+#define IH01A_EPR_28V5A_AUTO_ENTER 1
+#define IH01A_PD_DEFAULT_FIXED_MAX_V 28u
 
 /* 2026-11-02 analyzer: ST FULL v5.4.1 sends EPR KeepAlive at 500 ms.
  * A foreground AMS registered with USBPD_PE_Send_ExtendeControlMessage()

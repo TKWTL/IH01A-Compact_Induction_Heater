@@ -10,6 +10,9 @@ static uint32_t fixed(uint32_t mv,uint32_t ma)
 }
 int main(void)
 {
+    /* EPR default is intentional, but Source/cable still decide capability. */
+    assert(IH01A_PD_DEFAULT_FIXED_MAX_V==28u);
+    assert(IH01A_EPR_28V5A_AUTO_ENTER==1);
     uint32_t pdo[7]={0u};
     uint8_t pos=0u;uint32_t mv=0u,ma=0u;
     pdo[0]=fixed(5000,1500);

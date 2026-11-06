@@ -48,7 +48,9 @@ static PD_InputSnapshot s_state;
 static PD_InputContract s_active, s_candidate;
 static uint8_t s_active_valid,s_candidate_valid;
 static uint8_t s_req_enabled=1u;   /* retained across unplug; not in Flash */
-static uint8_t s_max_fixed_v=12u;  /* 12V low-power heating bench default */
+/* Default target 28V EPR Fixed. SPR capability evaluation naturally falls
+ * back to the highest <=20V Fixed PDO when EPR is unavailable. */
+static uint8_t s_max_fixed_v=IH01A_PD_DEFAULT_FIXED_MAX_V;
 static uint8_t s_policy_dirty,s_policy_tries;
 static uint32_t s_policy_dirty_ms;   /* when the policy change was requested */
 static uint8_t s_policy_stall_logged;

@@ -22,6 +22,14 @@ int main(void)
     assert(!ConvProtection_RearmableMask(CONV_PROT_COMP_SETUP));
     assert(!ConvProtection_RearmableMask(CONV_PROT_AUTO_FREQ));
     assert(!ConvProtection_ManualRearm(0u)); /* no fake host hardware */
+    /* Stale 12V-only rearm window must not reject 20/28V valid PD levels.
+     * VBUS pin ADC = bus / 16 / 2.5V * 4095. */
+    assert(ConvProtection_VbusSamplesSafe(1229u,1229u)); /* ~12V */
+    assert(ConvProtection_VbusSamplesSafe(2048u,2048u)); /* ~20V */
+    assert(ConvProtection_VbusSamplesSafe(2867u,2867u)); /* ~28V */
+    assert(!ConvProtection_VbusSamplesSafe(818u,818u)); /* <8V */
+    assert(!ConvProtection_VbusSamplesSafe(4070u,4070u)); /* rail */
+    assert(!ConvProtection_VbusSamplesSafe(2867u,4070u)); /* filter rail */
     assert(!ConvProtection_ZeroReady());
     /* HAL raw CSR.VALUE for COMP1 alone cannot establish a safe window. */
     assert(ConvProtection_WithinWindow(1u,0u));

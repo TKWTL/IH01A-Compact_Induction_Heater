@@ -68,6 +68,9 @@ uint32_t ConvProtection_FaultMask(void);
  * startup/setup faults cannot be cleared by a RUN toggle. */
 uint8_t ConvProtection_RearmableMask(uint32_t mask);
 uint8_t ConvProtection_ManualRearm(uint32_t now_ms);
+/* No 12V-only gate: accept live VBUS samples within physical ADC/protection
+ * bounds; PD contract validation is handled in the caller. */
+uint8_t ConvProtection_VbusSamplesSafe(uint16_t raw,uint16_t filtered);
 /* Explicit user-initiated retry after FAILED startup zero capture. Returns
  * 1 only when a fresh 256+2048 frame calibration was scheduled with power
  * gates disabled. Do not automatically restart the heater afterwards. */

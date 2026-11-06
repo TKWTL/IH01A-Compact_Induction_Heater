@@ -1,6 +1,7 @@
 /* G071: TIM6 ADC/DMA ISR independent of TIM1 PWM and CH2 input capture.
- * Only the explicit <=12V, <=3A manual bench gate may
- * enable FD2204 PC6. Production heater controller remains uncommissioned.
+ * Explicit manual RUN with valid PD, NTC, ADC and hardware comparator status
+ * may enable FD2204 PC6. Production closed-loop heater control is still
+ * uncommissioned; a 28V PD contract never automatically starts heating.
  */
 #include "conv_controller.h"
 #include "conv_adc.h"
@@ -16,8 +17,8 @@
 #define IH_RAMFUNC __attribute__((section(".ih_ramfunc"), used, noinline))
 /* Explicit commissioning gate; no UI command may override this. */
 #define IH_POWER_STAGE_COMMISSIONED 0u
-/* Explicit narrow gate, ONLY for 12V low-power with any manual phase.
- * Normal heater/power controller remains uncommissioned. */
+/* Deliberate manual bench gate only; no automatic power-stage enable on PD
+ * contract change or EPR negotiation. Hardware fault interlocks still apply. */
 #define IH_LOW_POWER_BENCH_ENABLE 1u
 static volatile ConvState s_state;
 static volatile uint32_t s_errors;

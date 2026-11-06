@@ -339,6 +339,15 @@ uint8_t ConvProtection_AnalogInputsSafe(void)
 /* Called only after a user RUN gesture with PC6 LOW.
  * Clearing the old diagnostic latch MUST also re-arm all one-shot
  * hardware ADC watchdog IRQs. Persistent electrical faults are rejected. */
+uint8_t ConvProtection_VbusSamplesSafe(uint16_t raw,uint16_t filtered)
+{
+    /* Keep actual ~8V undervoltage and ADC rail monitoring; the previous
+     * 1050..1400 ADC code range was 12V-only and rejected valid 20/28V.
+     * The caller additionally verifies the active PD contract against VBUS. */
+    return (uint8_t)(raw>=819u && filtered>=819u &&
+                     raw<CONV_PROT_VBUS_RAIL_RAW &&
+                     filtered<CONV_PROT_VBUS_RAIL_RAW);
+}
 uint8_t ConvProtection_ManualRearm(uint32_t now_ms)
 {
 #ifndef CONV_PROTECTION_HOST_TEST
@@ -359,9 +368,8 @@ uint8_t ConvProtection_ManualRearm(uint32_t now_ms)
     if(!adc.frames ||
        adc.raw[CONV_ADC_IBUS]<=5u ||
        adc.raw[CONV_ADC_IBUS]>=CONV_PROT_IBUS_RAIL_RAW ||
-       adc.raw[CONV_ADC_VBUS]<1050u || adc.raw[CONV_ADC_VBUS]>1400u ||
-       adc.filtered[CONV_ADC_VBUS]<1050u ||
-       adc.filtered[CONV_ADC_VBUS]>1400u ||
+       !ConvProtection_VbusSamplesSafe(
+           adc.raw[CONV_ADC_VBUS],adc.filtered[CONV_ADC_VBUS]) ||
        adc.raw[CONV_ADC_NTC_SYS]<640u ||
        adc.filtered[CONV_ADC_NTC_SYS]<640u ||
        adc.raw[CONV_ADC_VBIAS]<s_low ||

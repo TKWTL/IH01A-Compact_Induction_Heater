@@ -31,7 +31,7 @@ Malformed frequency input returns `HCLI ERR SYNTAX`; outside 150..400 returns `H
 `heater on` 和 MiaoUI 的 PC6 ON / Heater RUN 均走相同的同步安全门控：
 
 - 保护事件立即拉低 PC6、禁止 TIM1 MOE，并在故障弹窗保留最近的故障码；**不会自行重启**。
-- 下一次人工 ON 才尝试确认先前的**瞬态故障**：重新检查最新的 12V/≤3A PD 合约、VBUS、零点有效性、IBUS 原始和滤波采样、NTC、COMP1/2/PA6 窗口以及至少约 100ms 的故障冷却。
+- 下一次人工 ON 才尝试确认先前的**瞬态故障**：检查最新有效的 PD 合约及与实际 VBUS 的一致性、零点有效性、IBUS 原始和滤波采样、NTC、COMP1/2/PA6 窗口以及至少约 100ms 的故障冷却；不再要求旧版 12V/≤3A 挡位。
 - 校验通过后重新启用 ADC AWD1/AWD2/AWD3 的中断；如果之前 TIM1 Break 清除了 MOE，则在 PC6 保持低电平的前提下重新确认模拟窗、清除旧 BIF，并恢复 TIM1 Break 中断和逻辑 PWM，最后才允许再次使能 PC6。
 - 仍在过流/过温、PD 合约不符、采样失效，或 COMP 初始化失败时，手动 ON 仍返回阻止原因；不把“人工确认”视为禁用硬件保护的许可。
 - 如果启动零点采集失败（`ZERO FAILED`），首次手动 RUN 只会在 PC6/MOE 关闭时请求重新采集 256+2048 帧 ADC 样本（约 115ms）；期间绝不自动开启加热。界面显示 `REZERO - KEEP OFF`，采集成功后显示 `ZERO OK - PRESS RUN`。**用户再次手动 RUN** 且其余保护检查全部通过，才清除可恢复故障并尝试开启输出；采集再次失败则继续保持关闭。
@@ -70,3 +70,10 @@ py Tools/heater_cli_client.py --port COM4 off
 `heater freq` reports **realized rounded kHz**, as actual TIM1 timer ARR is integer. The manual frequency setpoint is not persisted over reset; boot baseline remains **300 kHz**. If connected to a load, test VDS/VGS and the tank current against the actual switching voltage phase, and qualify the modified winding's impedance, capacitor current, current transformer polarity, and hardware comparator trip at low voltage and limited supply current before increasing input power.
 
 Run `bash Firmware/Tests/host/run.sh` for portable C99 tests. Keil target rebuild and hardware measurement are separately required.
+
+## 默认 PD 28V EPR 与手动恢复电压策略（2026-11-06）
+
+- 默认 Fixed 电压上限改为 **28V**，默认自动进入 EPR。连接支持 EPR 的适配器时，先获取最高合法 SPR Fixed 合约（通常为 20V），随后由 ST FULL EPR 状态机尝试一次 28V/5A Fixed EPR；并不跳过 EPR 模式进入、Source PDO、线缆资格验证。若 EPR 不可用/失败，维持 SPR 合约，不强制 28V，也不自动开启加热。
+- `pd auto off` 可手动禁用 EPR 自动进入；电压上限仍可由 CLI 人工调整。EPR 请求配置沿用现有硬件已批准的 28V/5A 策略及 140W PDP。
+- 删除 **仅用于 12V 测试的手动恢复电压挡位判断**（ADC 1050～1400）。手动恢复仍要求 PD 合约与实测 BUS 在 ±10% 范围内，原始与滤波 VBUS 不低于约 8V 且不接近 ADC 量程上限；ADC AWD、比较器、TIM1 Break、IBUS、NTC 等保护均不被旁路。
+- 若用户以 XT30 的 DCin 输入，当前手动 RUN 仍要求有效 PD 合约，此更改不扩展到无 PD 合约的 DCin 启动。
