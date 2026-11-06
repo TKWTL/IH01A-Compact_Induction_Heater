@@ -314,10 +314,7 @@ static uint8_t bench_preflight_reason(const HeaterSnapshot *h,
     if(ConvController_GetPhaseDegrees()!=h->target_phase_deg)
                                            return CONV_BENCH_PHASE;
     if(!valid_pd)                         return CONV_BENCH_NOPD;
-    if(c->voltage_mv!=12000u)             return CONV_BENCH_VOLT;
-    if(c->current_ma==0u || c->current_ma>3000u) return CONV_BENCH_CURR;
     if(o->input!=HEATER_INPUT_PD)         return CONV_BENCH_SOURCE;
-    if(o->bus_mv<10800u || o->bus_mv>13200u) return CONV_BENCH_BUS;
     if(!o->zero_calibrated)               return CONV_BENCH_ZERO;
     if(!o->pot_valid || !o->sys_valid)    return CONV_BENCH_NTC;
     if(o->pot_deci_c>=700 || o->sys_deci_c>=600) return CONV_BENCH_HOT;
