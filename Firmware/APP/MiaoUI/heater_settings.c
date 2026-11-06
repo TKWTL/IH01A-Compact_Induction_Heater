@@ -17,7 +17,7 @@
 
 static ui_page_t s_page;
 static ui_item_t s_entry,s_back,s_pc6_item,s_phase_item,s_auto_item,s_freq_item,s_af_item;
-static ui_item_t s_ic2_item,s_lag_item,s_lag_raw_item,s_ct_item,s_zero_item,s_status_item;
+static ui_item_t s_ic2_item,s_lag_item,s_lag_raw_item,s_ct_item,s_ibus_item,s_status_item;
 static ui_data_t s_pc6_data,s_phase_data,s_auto_data,s_freq_data;
 static ui_element_t s_pc6_elem,s_phase_elem,s_auto_elem,s_freq_elem;
 static uint8_t s_pc6,s_auto;
@@ -25,7 +25,7 @@ static int s_phase,s_freq;
 static int s_previous_phase,s_previous_freq;
 static char s_af_text[26];
 static char s_ic2_text[26],s_lag_text[26],s_lag_raw_text[26],s_ct_text[26];
-static char s_zero_text[26],s_status_text[26];
+static char s_ibus_text[26],s_status_text[26];
 static uint32_t s_last_poll;
 static uint8_t s_created;
 
@@ -158,7 +158,7 @@ void HeaterSettings_AddSettings(ui_page_t *settings)
     AddItem(s_lag_text,UI_ITEM_WORD,0,&s_lag_item,&s_page,0,readonly_item);
     AddItem(s_lag_raw_text,UI_ITEM_WORD,0,&s_lag_raw_item,&s_page,0,readonly_item);
     AddItem(s_ct_text,UI_ITEM_WORD,0,&s_ct_item,&s_page,0,readonly_item);
-    AddItem(s_zero_text,UI_ITEM_WORD,0,&s_zero_item,&s_page,0,readonly_item);
+    AddItem(s_ibus_text,UI_ITEM_WORD,0,&s_ibus_item,&s_page,0,readonly_item);
     AddItem(s_status_text,UI_ITEM_WORD,0,&s_status_item,&s_page,0,readonly_item);
     s_created=1u;
     s_last_poll=HAL_GetTick()-100u;
@@ -173,7 +173,6 @@ void HeaterSettings_Poll(void)
     ConvAutoFreqSnapshot af;
     uint32_t now=HAL_GetTick();
     uint32_t current_ma=0u;
-    uint8_t ct_valid=0u;
     if(!s_created || (uint32_t)(now-s_last_poll)<50u)return;
     s_last_poll=now;
     Heater_GetSnapshot(&heater);
@@ -187,6 +186,22 @@ void HeaterSettings_Poll(void)
     s_phase=(int)heater.target_phase_deg;
     s_previous_phase=s_phase;
     s_auto=af.enabled;
+    /* Signed, startup-zero-corrected 0.2134 V/A filtered IBUS reading. */
+    if(adc.frames && protection.zero_status==CONV_ZERO_READY &&
+       ConvController_GetState()==CONV_STATE_ADC_MONITOR &&
+       adc.raw[CONV_ADC_IBUS]>5u && adc.raw[CONV_ADC_IBUS]<4090u)
+    {
+        int32_t ma=ConvCurrent_IbusMilliAmp(
+                       adc.filtered[CONV_ADC_IBUS],
+                       protection.ibus_zero_raw);
+        uint32_t abs_ma=(uint32_t)(ma<0?-ma:ma);
+        uint32_t centi=(abs_ma+5u)/10u;
+        (void)snprintf(s_ibus_text,sizeof(s_ibus_text),
+                       "IBUS:%s%lu.%02luA",ma<0?"-":"",
+                       (unsigned long)(centi/100u),
+                       (unsigned long)(centi%100u));
+    }
+    else (void)snprintf(s_ibus_text,sizeof(s_ibus_text),"IBUS: --");
     s_freq=(int)ConvController_GetFrequencyKhz();
     s_previous_freq=s_freq;
     (void)snprintf(s_af_text,sizeof(s_af_text),"AF:%s IB:%u",
@@ -199,13 +214,10 @@ void HeaterSettings_Poll(void)
         current_ma=ConvCurrent_CtRmsMilliAmp(
                          adc.filtered[CONV_ADC_CT_RMS],
                          protection.ct_zero_raw);
-        ct_valid=1u;
     }
 
     if(capture.valid && (uint32_t)(now-capture.last_ms)<=250u)
     {
-        ConvZcdCalStatus quality=ConvZcd_CorrectionStatus(
-                                         &capture,current_ma,ct_valid);
         int raw=(int)capture.lag_deci_deg;
         unsigned mag=(unsigned)((raw<0)?-raw:raw);
         (void)snprintf(s_ic2_text,sizeof(s_ic2_text),
@@ -213,7 +225,9 @@ void HeaterSettings_Poll(void)
         (void)snprintf(s_lag_raw_text,sizeof(s_lag_raw_text),
                        "LagR:%c%u.%u deg",raw<0?'-':'+',
                        mag/10u,mag%10u);
-        if(quality==CONV_ZCD_CAL_FIT)
+        /* The previous CT-delay fit remains a useful displayed estimate.
+         * It is not qualified for automatic frequency or ZVS claims. */
+        if(capture.correction_valid)
         {
             int corrected=(int)capture.lag_corr_deci_deg;
             mag=(unsigned)(corrected<0?-corrected:corrected);
@@ -221,17 +235,8 @@ void HeaterSettings_Poll(void)
                            "LagC:%c%u.%u deg",corrected<0?'-':'+',
                            mag/10u,mag%10u);
         }
-        else
-        {
-            const char *reason=
-                quality==CONV_ZCD_CAL_FREQ_RANGE?"FREQ":
-                quality==CONV_ZCD_CAL_RECAL_REQUIRED?"RECAL":
-                quality==CONV_ZCD_CAL_PHASE_RANGE?"PHASE":
-                quality==CONV_ZCD_CAL_LOW_CURRENT?"LOW CT":
-                quality==CONV_ZCD_CAL_ADC_INVALID?"ADC":"IC2";
-            (void)snprintf(s_lag_text,sizeof(s_lag_text),
-                           "LagC: -- %s",reason);
-        }
+        else (void)snprintf(s_lag_text,sizeof(s_lag_text),
+                            "LagC: -- FREQ");
     }
     else
     {
@@ -254,19 +259,30 @@ void HeaterSettings_Poll(void)
                            "CT_RMS:%lu.%03luA",
                            (unsigned long)(current_ma/1000u),
                            (unsigned long)(current_ma%1000u));
-        (void)snprintf(s_zero_text,sizeof(s_zero_text),
-                       "CT0:%u ADC:%u",
-                       (unsigned)protection.ct_zero_raw,
-                       (unsigned)adc.filtered[CONV_ADC_CT_RMS]);
     }
+    else if(ConvController_GetState()!=CONV_STATE_ADC_MONITOR ||
+            !adc.frames)
+        (void)snprintf(s_ct_text,sizeof(s_ct_text),"CT_RMS: ADC FAULT/WAIT");
     else
     {
-        (void)snprintf(s_ct_text,sizeof(s_ct_text),"CT_RMS: calibrating");
-        (void)snprintf(s_zero_text,sizeof(s_zero_text),"CT0: --");
+        const char *reason=
+            protection.zero_status==CONV_ZERO_FAILED?"ZERO FAILED":
+            protection.zero_status==CONV_ZERO_COLLECT?"ZERO AVERAGING":
+            "ZERO WAIT";
+        (void)snprintf(s_ct_text,sizeof(s_ct_text),"CT_RMS: %s",reason);
     }
-    if(heater.state==HEATER_FAULT || protection.fault_mask)
+    if((protection.fault_mask&
+        (CONV_PROT_ZERO_UNSTABLE|CONV_PROT_ZERO_SWITCHING))!=0u &&
+       protection.zero_status!=CONV_ZERO_FAILED)
+    {
+        (void)snprintf(s_status_text,sizeof(s_status_text),"%s",
+            protection.zero_status==CONV_ZERO_READY?
+            "ZERO OK - PRESS RUN":"REZERO - KEEP OFF");
+    }
+    else if(heater.state==HEATER_FAULT || protection.fault_mask)
         (void)snprintf(s_status_text,sizeof(s_status_text),
-                       "Fault: %08lX",(unsigned long)(protection.fault_mask|heater.fault_mask));
+                       "Fault: %08lX",(unsigned long)
+                       (protection.fault_mask|heater.fault_mask));
     else if(ConvController_OutputEnabled())
         (void)snprintf(s_status_text,sizeof(s_status_text),
                        "PC6: Y/%c RUN",

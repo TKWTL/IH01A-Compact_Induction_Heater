@@ -279,6 +279,40 @@ uint8_t ConvProtection_ZeroReady(void)
 {
     return s_zero_status==CONV_ZERO_READY;
 }
+uint8_t ConvProtection_RequestZeroRecalibration(void)
+{
+#ifndef CONV_PROTECTION_HOST_TEST
+    uint32_t irqmask=__get_PRIMASK();
+    /* TIM6->ADC/DMA updates the zero averaging fields from its ISR; reset
+     * all of them atomically while neither PC6 nor TIM1 MOE is enabled. */
+    __disable_irq();
+    if((PWM_EN_GPIO_Port->ODR&PWM_EN_Pin)!=0u ||
+       (TIM1->BDTR&TIM_BDTR_MOE)!=0u ||
+       s_zero_status!=CONV_ZERO_FAILED ||
+       !ConvProtection_RearmableMask(ConvProtection_FaultMask()))
+    {
+        if((irqmask&1u)==0u)__enable_irq();
+        return 0u;
+    }
+#else
+    if(s_zero_status!=CONV_ZERO_FAILED ||
+       !ConvProtection_RearmableMask(ConvProtection_FaultMask()))
+        return 0u;
+#endif
+    /* This is a fresh calibration request only. Do NOT clear existing
+     * evidence or turn on the bridge automatically after it completes. */
+    s_zero_status=CONV_ZERO_WAIT;
+    s_settle=0u;
+    s_zero_samples=0u;
+    s_ct_sum=s_ibus_sum=0u;
+    s_ct_min=s_ib_min=4095u;
+    s_ct_max=s_ib_max=0u;
+    s_ct_zero=s_ibus_zero=0u;
+#ifndef CONV_PROTECTION_HOST_TEST
+    if((irqmask&1u)==0u)__enable_irq();
+#endif
+    return 1u;
+}
 uint32_t ConvProtection_FaultMask(void)
 {
     return s_faults|s_fast_faults;
@@ -289,6 +323,7 @@ uint32_t ConvProtection_FaultMask(void)
  * are NOT cleared by a manual start. */
 #define CONV_REARMABLE_FAULTS ( \
     CONV_PROT_VBUS_RAIL | CONV_PROT_IBUS_RAIL | \
+    CONV_PROT_ZERO_UNSTABLE | CONV_PROT_ZERO_SWITCHING | \
     CONV_PROT_NTC_POT | CONV_PROT_NTC_SYS | CONV_PROT_VBUS_LOW | \
     CONV_PROT_ADC_STALE | CONV_PROT_IBUS_LIMIT | \
     CONV_PROT_AWD_VBUS | CONV_PROT_AWD_IBUS | CONV_PROT_AWD_SYS | \
@@ -484,7 +519,8 @@ void ConvProtection_Service(uint32_t now,const ConvADC_Snapshot *adc,
         /* For ±12A at revised 0.075V/A, both DAC codes must be legal.
          * An out-of-range VBIAS would invalidate the two-sided trip window. */
         if(s_profile_ready && ConvProtection_ZeroReady() &&
-           !ConvProtection_FaultMask())
+           (ConvProtection_FaultMask()==0u ||
+            ConvProtection_RearmableMask(ConvProtection_FaultMask())))
         {
             uint16_t bias=adc->filtered[CONV_ADC_VBIAS];
             uint16_t lower,upper;

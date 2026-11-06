@@ -78,8 +78,7 @@ void PowerDashboard_Poll(void)
                    (unsigned)protection.zero_samples,
                    (unsigned)CONV_ZERO_AVG_FRAMES);
     (void)snprintf(s_prot_text[1],sizeof(s_prot_text[1]),
-                   "CT0:%u IB0:%u",
-                   (unsigned)protection.ct_zero_raw,
+                   "IB0:%u",
                    (unsigned)protection.ibus_zero_raw);
     (void)snprintf(s_prot_text[2],sizeof(s_prot_text[2]),
                    "DAC: %u/%u %c",

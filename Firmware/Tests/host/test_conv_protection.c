@@ -15,7 +15,10 @@ int main(void)
                                        CONV_PROT_TIM1_BREAK));
     assert(ConvProtection_RearmableMask(CONV_PROT_NTC_SYS |
                                        CONV_PROT_IBUS_LIMIT));
-    assert(!ConvProtection_RearmableMask(CONV_PROT_ZERO_UNSTABLE));
+    /* A failed zero is rearmable only after an explicit new calibration
+     * with both PC6 and MOE held low, never by merely clearing flags. */
+    assert(ConvProtection_RearmableMask(CONV_PROT_ZERO_UNSTABLE));
+    assert(ConvProtection_RearmableMask(CONV_PROT_ZERO_SWITCHING));
     assert(!ConvProtection_RearmableMask(CONV_PROT_COMP_SETUP));
     assert(!ConvProtection_RearmableMask(CONV_PROT_AUTO_FREQ));
     assert(!ConvProtection_ManualRearm(0u)); /* no fake host hardware */
@@ -81,6 +84,20 @@ int main(void)
     ConvProtection_GetSnapshot(&s);
     assert(s.zero_status==CONV_ZERO_FAILED);
     assert(s.fault_mask&CONV_PROT_ZERO_UNSTABLE);
+    assert(ConvProtection_RequestZeroRecalibration());
+    assert(!ConvProtection_RequestZeroRecalibration());
+    ConvProtection_GetSnapshot(&s);
+    assert(s.zero_status==CONV_ZERO_WAIT && s.zero_samples==0u);
+    assert(s.fault_mask&CONV_PROT_ZERO_UNSTABLE);
+    f[CONV_ADC_CT_RMS]=1500u;
+    f[CONV_ADC_IBUS]=1900u;
+    for(unsigned i=0;i<CONV_ZERO_SETTLE_FRAMES+CONV_ZERO_AVG_FRAMES;i++)
+        ConvProtection_FrameISR(f);
+    ConvProtection_GetSnapshot(&s);
+    assert(s.zero_status==CONV_ZERO_READY);
+    assert(s.ct_zero_raw==1500u && s.ibus_zero_raw==1900u);
+    assert(s.fault_mask&CONV_PROT_ZERO_UNSTABLE);
+    assert(!ConvProtection_RequestZeroRecalibration());
     puts("conv protection/zero: PASS");
     return 0;
 }

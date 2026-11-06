@@ -412,17 +412,26 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
 static uint8_t ConvController_ManualRearmLogicPwm(void)
 {
     if(ConvController_LogicPwmRunning())return 1u;
-    if(!s_logic_pwm_started)
-        return (uint8_t)(!s_logic_pwm_start_attempted &&
-                         ConvController_StartLogicPwm());
+    /* A first PWM start aborted by BIF after setting CEN leaves
+     * start_attempted=1 and started=0. Manual recovery must handle it. */
+    if(!s_logic_pwm_started && !s_logic_pwm_start_attempted)
+        return ConvController_StartLogicPwm();
     if(ConvController_OutputEnabled() ||
        s_state!=CONV_STATE_ADC_MONITOR ||
        ConvProtection_FaultMask()!=0u ||
        !ConvProtection_CompArmed() ||
-       !ConvProtection_AnalogInputsSafe() ||
-       (TIM1->CR1&TIM_CR1_CEN)==0u ||
-       (TIM1->CCER&(TIM_CCER_CC1E|TIM_CCER_CC3E))!=
-                     (TIM_CCER_CC1E|TIM_CCER_CC3E))
+       !ConvProtection_AnalogInputsSafe())
+        return 0u;
+    if((TIM1->CR1&TIM_CR1_CEN)==0u)
+    {
+        /* The first start may have failed before the timer was running.
+         * Restart ONLY on this explicit user request with PC6 held LOW. */
+        if(s_logic_pwm_started)return 0u;
+        s_logic_pwm_start_attempted=0u;
+        return ConvController_StartLogicPwm();
+    }
+    if((TIM1->CCER&(TIM_CCER_CC1E|TIM_CCER_CC3E))!=
+                      (TIM_CCER_CC1E|TIM_CCER_CC3E))
         return 0u;
     /* The old Break is history, not evidence of a currently active input.
      * Raw COMP1/COMP2 and PA6 were checked immediately above; the hardware
@@ -440,6 +449,7 @@ static uint8_t ConvController_ManualRearmLogicPwm(void)
         ConvController_TripISR();
         return 0u;
     }
+    s_logic_pwm_started=1u; /* keep state coherent after a failed first start */
     return 1u;
 }
 /* CLI-only synchronous request. Success means the physical enable pin is
@@ -471,6 +481,21 @@ uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms)
     {
         s_bench_block=CONV_BENCH_AGE;
         return 0u;
+    }
+    /* An initial zero capture that FAILED does not heal by waiting.
+     * One explicit RUN retries zero calibration with PC6/MOE disabled;
+     * the operator must request RUN again once the new capture is READY.
+     * Never energize power during the recapture window. */
+    if(ConvController_GetState()==CONV_STATE_ADC_MONITOR &&
+       !ConvProtection_ZeroReady())
+    {
+        ConvProtection_GetSnapshot(&protection);
+        if(protection.zero_status==CONV_ZERO_FAILED &&
+           ConvProtection_RequestZeroRecalibration())
+        {
+            s_bench_block=CONV_BENCH_ZERO;
+            return 0u;
+        }
     }
     /* User action is an acknowledgment, NOT an interlock bypass.
      * Check fresh PD/NTC/voltage/phase inputs before any fault is cleared. */

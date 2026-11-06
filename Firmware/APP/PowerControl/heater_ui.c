@@ -157,11 +157,34 @@ void Heater_UI_Page(ui_t *ui)
                 (unsigned long)((s.bus_mv+500u)/1000u));
         Disp_DrawStr(0u,11u,line);
     }
-    if(s.pot_valid && s.sys_valid)
-        (void)snprintf(line,sizeof(line),"POT %dC SYS %dC",
-            (int)(s.pot_deci_c/10),(int)(s.sys_deci_c/10));
-    else
-        (void)snprintf(line,sizeof(line),"POT/SYS: --");
+    {
+        ConvADC_Snapshot adc;
+        ConvProtectionSnapshot protection;
+        char ibus_text[13];
+        ConvADC_CopySnapshot(&adc);
+        ConvProtection_GetSnapshot(&protection);
+        if(ConvController_GetState()==CONV_STATE_ADC_MONITOR &&
+           adc.frames && protection.zero_status==CONV_ZERO_READY &&
+           adc.raw[CONV_ADC_IBUS]>5u && adc.raw[CONV_ADC_IBUS]<4090u)
+        {
+            int32_t ma=ConvCurrent_IbusMilliAmp(
+                           adc.filtered[CONV_ADC_IBUS],
+                           protection.ibus_zero_raw);
+            uint32_t abs_ma=(uint32_t)(ma<0?-ma:ma);
+            uint32_t centi=(abs_ma+5u)/10u;
+            (void)snprintf(ibus_text,sizeof(ibus_text),"%s%lu.%02luA",
+                ma<0?"-":"",(unsigned long)(centi/100u),
+                (unsigned long)(centi%100u));
+        }
+        else (void)snprintf(ibus_text,sizeof(ibus_text),"--");
+        /* Fit 128px OLED line; keep the IBUS label explicit. */
+        if(s.pot_valid && s.sys_valid)
+            (void)snprintf(line,sizeof(line),"P%d S%d IBUS:%s",
+                (int)(s.pot_deci_c/10),(int)(s.sys_deci_c/10),
+                ibus_text);
+        else
+            (void)snprintf(line,sizeof(line),"P/S:-- IBUS:%s",ibus_text);
+    }
     Disp_DrawStr(0u,23u,line);
     if(s.mode==HEATER_MODE_TEMP)
         (void)snprintf(line,sizeof(line),"SET %uC P%luW",
@@ -194,31 +217,14 @@ void Heater_UI_Page(ui_t *ui)
         ConvZcd_GetSnapshot(&z);
         if(z.valid && (uint32_t)(now-z.last_ms)<=250u)
         {
-            ConvADC_Snapshot adc;
-            ConvProtectionSnapshot protection;
-            ConvZcdCalStatus status;
-            uint32_t ct_ma=0u;
-            uint8_t ct_ok=0u;
-            uint8_t fitted;
-            int16_t lag,mag;
-            ConvADC_CopySnapshot(&adc);
-            ConvProtection_GetSnapshot(&protection);
-            if(adc.frames && ConvController_GetState()==CONV_STATE_ADC_MONITOR &&
-               protection.zero_status==CONV_ZERO_READY &&
-               adc.raw[CONV_ADC_CT_RMS]<4090u)
-            {
-                ct_ma=ConvCurrent_CtRmsMilliAmp(
-                            adc.filtered[CONV_ADC_CT_RMS],
-                            protection.ct_zero_raw);
-                ct_ok=1u;
-            }
-            status=ConvZcd_CorrectionStatus(&z,ct_ma,ct_ok);
-            fitted=(uint8_t)(status==CONV_ZCD_CAL_FIT);
-            lag=fitted?z.lag_corr_deci_deg:z.lag_deci_deg;
-            mag=(int16_t)(lag<0?-lag:lag);
+            /* Display the historical correction estimate whenever it is
+             * computable. Do NOT treat it as a calibrated safety input. */
+            int16_t lag=z.correction_valid?
+                        z.lag_corr_deci_deg:z.lag_deci_deg;
+            int16_t mag=(int16_t)(lag<0?-lag:lag);
             (void)snprintf(line,sizeof(line),"IC2:%u %c:%c%d.%d",
                            (unsigned)z.capture_raw,
-                           fitted?'C':'R',lag<0?'-':'+',
+                           z.correction_valid?'C':'R',lag<0?'-':'+',
                            (int)(mag/10),(int)(mag%10));
         }
         else (void)snprintf(line,sizeof(line),"IC2:-- C:--");

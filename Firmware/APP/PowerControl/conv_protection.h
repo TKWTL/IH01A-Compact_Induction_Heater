@@ -68,6 +68,10 @@ uint32_t ConvProtection_FaultMask(void);
  * startup/setup faults cannot be cleared by a RUN toggle. */
 uint8_t ConvProtection_RearmableMask(uint32_t mask);
 uint8_t ConvProtection_ManualRearm(uint32_t now_ms);
+/* Explicit user-initiated retry after FAILED startup zero capture. Returns
+ * 1 only when a fresh 256+2048 frame calibration was scheduled with power
+ * gates disabled. Do not automatically restart the heater afterwards. */
+uint8_t ConvProtection_RequestZeroRecalibration(void);
 /* Compare COMP1/2 and PA6 while the old Break latch may still be set. */
 uint8_t ConvProtection_AnalogInputsSafe(void);
 /* COMP1 + COMP2 raw state, PA6 synthesized window output and TIM1 Break.

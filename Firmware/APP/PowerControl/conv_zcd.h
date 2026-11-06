@@ -14,7 +14,7 @@ typedef struct {
     uint16_t capture_raw;
     uint16_t phase_deg;
     int16_t lag_deci_deg;  /* raw [-1800,+1800], uncorrected */
-    int16_t lag_corr_deci_deg; /* model-corrected, use only if status == FIT */
+    int16_t lag_corr_deci_deg; /* historical model estimate; UI may display without FIT */
     int32_t delay_milliticks; /* modeled bias in TIM1 ticks * 1000; signed */
     int32_t lag_quarter_ticks;
     uint32_t sequence;
@@ -25,7 +25,8 @@ typedef struct {
 } ConvZcdSnapshot;
 /* Old CT_ZERO empirical timing fit was characterized at 0.100V/A.
  * Revised 0.075V/A changes comparator input slew and overdrive.
- * Keep historical fit math for comparison but require new calibration. */
+ * Historical fit may be DISPLAYED without new CT calibration.
+ * Automatic frequency feedback still requires calibration. */
 #define CONV_ZCD_CT75_CALIBRATED 0u
 /* FIT only establishes that the empty-coil model applies, not ZVS. */
 typedef enum {
