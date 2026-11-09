@@ -101,17 +101,20 @@ uint32_t ConvController_ErrorCount(void) { return s_errors; }
 
 IH_RAMFUNC void ConvController_TripISR(void)
 {
-    /* FD2204 EN is the FINAL physical output gate. Shut it off FIRST.
-     * TIM1 shift PWM could safely keep running with PC6 low; clearing
-     * MOE here is an additional defensive measure, not the primary gate. */
+    uint32_t mask=__get_PRIMASK();
+    /* Atomic with a pending TIM1 update: prevent a fault from being
+     * followed by a stale ISR that accidentally reasserts the gate. */
+    __disable_irq();
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
     __DSB();
     TIM1->BDTR &= ~TIM_BDTR_MOE;
     if(s_pan_state!=PAN_IDLE)
     {
-        TIM1->DIER &= ~TIM_DIER_UIE;
         s_pan_state=PAN_ABORTED;
+        TIM1->DIER &= ~TIM_DIER_UIE;
     }
+    __DSB();
+    if((mask&1u)==0u)__enable_irq();
 }
 uint32_t ConvController_BenchElapsedSeconds(uint32_t now_ms)
 {
@@ -120,10 +123,19 @@ uint32_t ConvController_BenchElapsedSeconds(uint32_t now_ms)
 }
 void ConvController_BenchPowerOff(void)
 {
-    /* PC6 is always switched off FIRST; timer logic PWM may continue. */
+    uint32_t mask=__get_PRIMASK();
+    /* STOP must disable PC6 AND invalidate a pending pulse atomically.
+     * Otherwise an UPDATE IRQ could reenable PC6 after the user stops. */
+    __disable_irq();
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
+    if(s_pan_state!=PAN_IDLE)
+    {
+        s_pan_state=PAN_ABORTED;
+        TIM1->DIER &= ~TIM_DIER_UIE;
+    }
     __DSB();
-    pan_cancel();
+    if((mask&1u)==0u)__enable_irq();
+    pan_cancel(); /* DMA abort and preload restore, foreground only */
     pm_api_set_sleep_block(PM_BLOCK_HEATER,0u);
 }
 /* TIM1 ARR and CCR1/3/4 are staged as one coherent preload transaction.

@@ -16,7 +16,7 @@
 #include "main.h"
 #include <stdio.h>
 
-enum {EDIT_MODE=0u,EDIT_TARGET,EDIT_OFF,EDIT_PAN,EDIT_RUN,EDIT_COUNT};
+enum {EDIT_MODE=0u,EDIT_TARGET,EDIT_OFF,EDIT_RUN,EDIT_COUNT};
 /* Power bench default: L/R edits phase immediately on Main entry. */
 static uint8_t s_edit_field=EDIT_TARGET;
 
@@ -32,7 +32,7 @@ static const char *state_name(HeaterState s)
 static const char *field_name(uint8_t field)
 {
     static const char *const names[EDIT_COUNT]={
-        "MODE","TARGET","OFF","PAN","RUN"
+        "MODE","TARGET","OFF","RUN"
     };
     return names[field<EDIT_COUNT?field:0u];
 }
@@ -57,7 +57,6 @@ static const char *bench_block_name(uint8_t why)
     case CONV_BENCH_COMP:  return "COMP";
     case CONV_BENCH_FAULT: return "FLT";
     case CONV_BENCH_BRK:   return "BRK";
-    case CONV_BENCH_COUNTDOWN:return "TIME";
     default:               return "";
     }
 }
@@ -99,11 +98,6 @@ static void edit_value(uint8_t field,UI_ACTION action,uint32_t now)
             if(minutes>240)minutes=240;
             Heater_SetOffMinutes((uint16_t)minutes,now);
         }
-        break;
-    case EDIT_PAN:
-        /* Never toggle detection during a RUN, fault, or in-flight pulse. */
-        (void)Heater_SetPanDetectEnabled(
-            (uint8_t)!s.pan_detect_enabled);
         break;
     case EDIT_RUN:
         if(up)
@@ -215,11 +209,9 @@ void Heater_UI_Page(ui_t *ui)
             (unsigned long)(s.off_remaining_s%60u));
     else
         (void)snprintf(line,sizeof(line),"OFF %um",(unsigned)s.off_minutes);
-    /* Pan detect replaces the normal phase readout; it is a distinct
-     * pulse-only run mode, never a continuous bridge enable. */
-    if(s.pan_detect_enabled)
-        (void)snprintf(line,sizeof(line),"PAN:ON 150k 180deg");
-    else if(s.mode==HEATER_MODE_POWER)
+    /* During manual phase testing reserve one row for latest TIM1_CH2 edge.
+     * Lag is relative to the model voltage +->- at ARR/4+D/2. */
+    if(s.mode==HEATER_MODE_POWER)
     {
         ConvZcdSnapshot z;
         ConvZcd_GetSnapshot(&z);

@@ -113,13 +113,3 @@ I_mA = round(delta * 250000000 / (4095 * 25253))
 本轮不修改 PD 默认12V/3A、安全保护门限以及 TP1941 链路极性。
 已登记 Host 纯函数单元测试和 Keil 工程文件；完整 Keil
 Rebuild、RMS 模拟前端增益及板级中断时序仍需实测。
-
-## 项目收尾：Pan Detect（2026-11-09）
-
-- Settings → Heater → `Pan Detect` 为独立开关，Main 的 ENTER 编辑序列也增加 `PAN`；**默认 OFF**，仅在 Heater 停止时可以更改。普通连续手动移相不受影响。
-- 使用前设置 `OFF` 自动停止时间（至少 1 分钟）；显式 `RUN` 后倒计时立即运行，但 PC6 保持关闭，**不会连续加热**。每 2 秒执行一次 150kHz / 180° 的 **6 周期**探测（标称 40μs），TIM1 UPDATE 中断负责打开/关闭 PC6；TIM1 的 CEN 和 IC2 捕获继续运行。每次探测后恢复原手动频率和相位。
-- 仅在有效 PD 合同、IBUS 零点已标定、NTC 与温度数据有效、DAC/COMP 正常、无软件故障、TIM1 Break 未置位且自动调频关闭时允许脉冲。运行时不允许切换 Pan Detect 开关；取消倒计时自动停止，保护故障或显式 STOP 均禁止后续脉冲。
-- DMA1 Channel 3 以半字正常模式从 TIM1->CCR2 获取至多 48 个原始 IC2 时间戳（定时器 CNT 值），在 PC6 下降后继续最多 4ms，随后关闭 CC2 DMA 请求并恢复原 ARR/CCR 预加载；计数器 **不停止**，但 DMA 仅在检测窗口内使能。
-- 有有效 CCR2 DMA 样本才在串口异步输出 `[PAN] SEQ=... FREQ=150K PHASE=180 CYC=6 CAP=N ON_COUNT=M RAW=n1,n2,...`。从 PC6 上升前的 DMA 捕获会被丢弃；`ON_COUNT` 表示 PC6 拉低前收集的样本数，之后是关断后的自由衰减样本。**此处“有效”只表示 DMA 转移得到且 CCR2≤ARR，不能代表真的有锅，也不保证全部是真实电流零交越。** 初期完全不做自动锅具识别。
-- 独立的 ADC 20kHz DMA ISR 对 PAN_ACTIVE 设置 3 帧强制关断后备保障，防止 TIM1 UPDATE IRQ 停顿导致长时间通电；保持原 TIM1 COMP Break / AWD2 等硬件软件保护。必须在低电压、带示波器的条件下实测 TIM1 更新 IRQ 延迟、实际 PC6 高电平宽度、VDS、CT 峰值与 IC2 波形，未经实测不得将“6 周期”视作可靠的物理最大发电时间。
-- **非 USB-PD 参数变更**。所有串口捕获在前台排队发送，TIM1/ADC/DMA IRQ 不输出 UART 文本；窗口内禁止外部频率和相位调节，采集结束时恢复此前设置。

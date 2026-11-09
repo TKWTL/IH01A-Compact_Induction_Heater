@@ -68,16 +68,8 @@ __WEAK void DMA1_Channel2_3_IRQHandler(void);
  * causes no interrupts; only a Break invokes this handler. */
 void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
 {
-    uint32_t sr=TIM1->SR;
-    if((sr&TIM_SR_BIF)!=0u)
+    if((TIM1->SR&TIM_SR_BIF)!=0u)
         ConvProtection_BreakISR();
-    /* UIE is armed ONLY for a six-cycle pan-detect pulse. Keeping the
-     * TIM1 counter active afterwards also preserves IC2 input capture. */
-    if((sr&TIM_SR_UIF)!=0u && (TIM1->DIER&TIM_DIER_UIE)!=0u)
-    {
-        TIM1->SR=(uint32_t)~TIM_SR_UIF;
-        ConvController_PanProbeUpdateISR();
-    }
 }
 /* Fatal-path console. The normal console formats into a RAM ring and lets the
  * main loop start the DMA, so it silently stops working when the superloop

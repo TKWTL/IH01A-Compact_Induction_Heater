@@ -148,9 +148,7 @@ THRD_DECLARE(thread_heater)
             /* AWD2 tracks PD negotiated current or DCin's 7A policy.
              * It stays disabled until the raw IBUS zero has settled. */
             ConvProtection_SetIbusLimitMa(
-                observation.input==HEATER_INPUT_PD ?
-                    Heater_InputProtectionLimitMa(contract.voltage_mv,
-                                                 contract.current_ma) :
+                observation.input==HEATER_INPUT_PD ? contract.current_ma :
                 observation.input==HEATER_INPUT_DCIN ? 7000u : 0u);
         }
         TempService_GetSnapshot(&temperature);
@@ -170,11 +168,7 @@ THRD_DECLARE(thread_heater)
         {
             HeaterSnapshot hs;
             Heater_GetSnapshot(&hs);
-            /* Do not overwrite 150kHz/180deg during the microsecond pulse
-             * or its post-pulse IC2 DMA capture. Restore stored UI target
-             * only after the probe module has released the timer. */
-            if(!ConvController_PanProbeBusy())
-                ConvController_SetPhaseDegrees(hs.target_phase_deg);
+            ConvController_SetPhaseDegrees(hs.target_phase_deg);
             (void)ConvController_StartLogicPwm();
             /* Explicit RUN, validated 12V/3A source, 0..180deg.
              * Stop always pulls PC6 LOW, never auto-restart on later PD. */
@@ -241,8 +235,5 @@ void APP_Tasks_RunOnce(void)
     DebugUART_Service();
     TempService_Poll(); /* 10Hz; never in the 20kHz ADC ISR */
     CoroOS_RunOnce(&s_scheduler);
-    /* Microsecond pulse OFF is TIM1 ISR-owned; this fast foreground task
-     * only finalizes the IC2 DMA window and schedules a new 2s probe. */
-    ConvController_PanProbeService(TIME_Millis());
     SSD1315_Display_Service();
 }
