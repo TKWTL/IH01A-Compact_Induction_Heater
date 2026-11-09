@@ -31,6 +31,10 @@ static volatile uint16_t s_zero_samples,s_ct_zero,s_ibus_zero;
 static volatile uint16_t s_ibus_trip_delta_raw;
 static uint32_t s_ibus_limit_ma;
 static uint16_t s_awd2_low,s_awd2_high;
+/* Completed DMA samples BEFORE AWD2 IRQ: not the exact triggering sample. */
+static volatile uint16_t s_ibus_run_last,s_ibus_run_min,s_ibus_run_max;
+static volatile uint16_t s_awd2_pre_last,s_awd2_pre_min,s_awd2_pre_max;
+static volatile uint8_t s_awd2_trip_valid;
 static uint8_t s_comp_armed;
 static uint8_t s_awd2_enabled;
 static uint32_t s_ct_sum,s_ibus_sum;
@@ -48,6 +52,9 @@ void ConvProtection_Init(void)
     s_ibus_limit_ma=0u;
     s_awd2_low=0u;
     s_awd2_high=4095u;
+    s_ibus_run_last=s_ibus_run_min=s_ibus_run_max=0u;
+    s_awd2_pre_last=s_awd2_pre_min=s_awd2_pre_max=0u;
+    s_awd2_trip_valid=0u;
     s_comp_armed=0u;
     s_awd2_enabled=0u;
     s_settle=0u;s_ct_sum=s_ibus_sum=0u;
@@ -110,7 +117,15 @@ void ConvProtection_AnalogWatchdogISR(void)
         (ADC_ISR_AWD1 | ADC_ISR_AWD2 | ADC_ISR_AWD3);
     if(!pending)return;
     if(pending&ADC_ISR_AWD1)s_fast_faults|=CONV_PROT_AWD_VBUS;
-    if(pending&ADC_ISR_AWD2)s_fast_faults|=CONV_PROT_AWD_IBUS;
+    if(pending&ADC_ISR_AWD2)
+    {
+        /* Source IRQ can precede completion of its DMA frame. */
+        s_awd2_pre_last=s_ibus_run_last;
+        s_awd2_pre_min=s_ibus_run_min;
+        s_awd2_pre_max=s_ibus_run_max;
+        s_awd2_trip_valid=1u;
+        s_fast_faults|=CONV_PROT_AWD_IBUS;
+    }
     if(pending&ADC_ISR_AWD3)s_fast_faults|=CONV_PROT_AWD_SYS;
     /* Disarm the asserted IRQ sources and clear their write-one flags;
      * the ADC scan and DMA remain active for diagnosis. */
@@ -159,6 +174,11 @@ void ConvProtection_SetIbusLimitMa(uint32_t current_ma)
     if(armed)ibus_window_codes(s_ibus_zero,current_ma,&lower,&upper);
     if(current_ma==s_ibus_limit_ma && lower==s_awd2_low &&
        upper==s_awd2_high && s_awd2_enabled==armed)return;
+    if(armed && !s_awd2_enabled)
+    {
+        s_ibus_run_last=s_ibus_run_min=s_ibus_run_max=s_ibus_zero;
+        s_awd2_trip_valid=0u;
+    }
     s_awd2_enabled=armed;
     s_ibus_limit_ma=current_ma;
     s_awd2_low=lower;
@@ -170,12 +190,20 @@ void ConvProtection_SetIbusLimitMa(uint32_t current_ma)
     ADC1->ISR=ADC_ISR_AWD2;
     if(s_awd2_enabled)ADC1->IER |= ADC_IER_AWD2IE;
 #else
-    s_ibus_limit_ma=current_ma;
-    s_awd2_low=0u;s_awd2_high=4080u;
-    s_awd2_enabled=(uint8_t)(ConvProtection_ZeroReady() && current_ma &&
-                            !s_fast_faults && !s_faults);
-    if(s_awd2_enabled)
-        ibus_window_codes(s_ibus_zero,current_ma,&s_awd2_low,&s_awd2_high);
+    {
+        uint8_t armed=(uint8_t)(ConvProtection_ZeroReady() && current_ma &&
+                                !s_fast_faults && !s_faults);
+        if(armed && !s_awd2_enabled)
+        {
+            s_ibus_run_last=s_ibus_run_min=s_ibus_run_max=s_ibus_zero;
+            s_awd2_trip_valid=0u;
+        }
+        s_ibus_limit_ma=current_ma;
+        s_awd2_low=0u;s_awd2_high=4080u;
+        s_awd2_enabled=armed;
+        if(s_awd2_enabled)
+            ibus_window_codes(s_ibus_zero,current_ma,&s_awd2_low,&s_awd2_high);
+    }
 #endif
 }
 
@@ -183,6 +211,14 @@ PROT_RAMFUNC void ConvProtection_FrameISR(const volatile uint16_t *frame)
 {
     uint16_t ct,ibus;
     if(!frame)return;
+    if(s_awd2_enabled && !s_awd2_trip_valid &&
+       s_zero_status==CONV_ZERO_READY)
+    {
+        uint16_t sample=frame[CONV_ADC_IBUS];
+        s_ibus_run_last=sample;
+        if(sample<s_ibus_run_min)s_ibus_run_min=sample;
+        if(sample>s_ibus_run_max)s_ibus_run_max=sample;
+    }
     /* Raw watchdog equivalents run in the existing DMA IRQ; these detect
      * ADC rail/saturation, not accurately calibrated physical current. */
 #ifndef CONV_PROTECTION_HOST_TEST
@@ -463,6 +499,13 @@ void ConvProtection_GetSnapshot(ConvProtectionSnapshot *out)
     out->awd2_low_code=s_awd2_low;
     out->awd2_high_code=s_awd2_high;
     out->ibus_limit_ma=s_ibus_limit_ma;
+    out->awd2_trip_valid=s_awd2_trip_valid;
+    out->awd2_pre_last_raw=s_awd2_pre_last;
+    out->awd2_pre_min_raw=s_awd2_pre_min;
+    out->awd2_pre_max_raw=s_awd2_pre_max;
+    out->ibus_run_last_raw=s_ibus_run_last;
+    out->ibus_run_min_raw=s_ibus_run_min;
+    out->ibus_run_max_raw=s_ibus_run_max;
     out->fault_mask=ConvProtection_FaultMask();
 }
 #ifndef CONV_PROTECTION_HOST_TEST
@@ -552,6 +595,19 @@ void ConvProtection_Service(uint32_t now,const ConvADC_Snapshot *adc,
     }
     fresh &= ~s_faults;
     if(!fresh)return;
+#ifndef CONV_PROTECTION_HOST_TEST
+    if(fresh&CONV_PROT_AWD_IBUS)
+    {
+        /* Logged once from foreground, NEVER from ADC IRQ.
+         * PRE_* are prior completed DMA samples, not the tripping ADC DR. */
+        printf("[AWD2_IBUS] TRIP_MA=%lu ZERO=%u LO=%u HI=%u "
+               "PRE_LAST=%u PRE_MIN=%u PRE_MAX=%u VALID=%u\r\n",
+               (unsigned long)s_ibus_limit_ma,(unsigned)s_ibus_zero,
+               (unsigned)s_awd2_low,(unsigned)s_awd2_high,
+               (unsigned)s_awd2_pre_last,(unsigned)s_awd2_pre_min,
+               (unsigned)s_awd2_pre_max,(unsigned)s_awd2_trip_valid);
+    }
+#endif
     s_faults|=fresh;
     s_fault_at=now;
 #ifndef CONV_PROTECTION_HOST_TEST

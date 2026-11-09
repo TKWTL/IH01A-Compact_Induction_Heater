@@ -84,3 +84,10 @@ Run `bash Firmware/Tests/host/run.sh` for portable C99 tests. Keil target rebuil
 - ADC AWD2 input-current trip uses `I_trip = I_control + 150mA`: 28V/5A -> 4.90A control, 5.05A trip; 20V/3A -> 2.80A control, 2.95A trip. AWD2 8-MSB ADC windows quantize in 16-count steps (~46mA per step at 0.2134V/A), so actual trip points can deviate from nominal by quantization/sensor tolerances. 5.05A nominal threshold lies above a 5A source contract; this is not a guaranteed available operating current.
 - Independent CT/TIM1 Break remains at nominal +-12A **instantaneous peak**; this modification does not change it.
 - `FAULT:00000000` was caused by `Heater_Poll` setting `HEATER_FAULT` without recording a cause. New local policy bit flags in the displayed hex mask: 0x01000000=no input power budget; 0x02000000=NTC invalid; 0x04000000=temperature sample stale (>500ms); 0x08000000=SYS >=85C; 0x10000000=POT >=130C. Causes may be ORed together and require guarded manual acknowledgment.
+
+## AWD2 128W 高频跳闸诊断（2026-11-09）
+
+- 28V/5A RDO 对应未来电流控制限额 4.90A，单次 ADC AWD2 门限 5.05A；128W/28V 平均约 4.57A，输入纹波/瞬态/采样干扰仍可能越过 5.05A。
+- 手动相移加热目前未接入 IBUS 闭环，功率预算不是硬限流。保留用户指定的 150mA 保护裕量、单次采样 AWD2 跳闸和独立 TIM1 Break。
+- 故障出现后，前台异步输出 `[AWD2_IBUS] TRIP_MA=... ZERO=... LO=... HI=... PRE_LAST=... PRE_MIN=... PRE_MAX=... VALID=1`。数值单位：TRIP_MA 是 mA，其他均为12位ADC码；LO/HI按16码量化。
+- **PRE_* 是在 AWD2 IRQ 之前处理完成的 DMA 帧统计，不能看作精确的触发样本**。即使 PRE_MAX 小于 HI，某次转换仍可能触发真实的硬件 AWD2。也可用 `ConvProtectionSnapshot` 在 Keil Watch 查看这些值。

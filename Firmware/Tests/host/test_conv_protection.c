@@ -50,6 +50,18 @@ int main(void)
     ConvProtection_GetSnapshot(&s);
     assert(s.awd2_enabled && s.ibus_limit_ma==5000u);
     assert(s.awd2_low_code==160u && s.awd2_high_code==3648u);
+    assert(!s.awd2_trip_valid);
+    assert(s.ibus_run_last_raw==1900u &&
+           s.ibus_run_min_raw==1900u && s.ibus_run_max_raw==1900u);
+    f[CONV_ADC_IBUS]=2500u;
+    ConvProtection_FrameISR(f);
+    f[CONV_ADC_IBUS]=1820u;
+    ConvProtection_FrameISR(f);
+    ConvProtection_GetSnapshot(&s);
+    assert(s.ibus_run_last_raw==1820u);
+    assert(s.ibus_run_min_raw==1820u);
+    assert(s.ibus_run_max_raw==2500u);
+    f[CONV_ADC_IBUS]=1900u;
     ConvProtection_SetIbusLimitMa(0u);
     ConvProtection_GetSnapshot(&s);
     assert(!s.awd2_enabled);

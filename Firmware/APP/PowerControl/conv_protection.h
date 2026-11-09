@@ -43,6 +43,10 @@ typedef struct {
     uint8_t dac_profile_ready,comp_armed,awd2_enabled;
     uint16_t awd2_low_code,awd2_high_code;
     uint32_t ibus_limit_ma;
+    /* AWD2 pre-IRQ completed-frame diagnostics, not exact trigger sample. */
+    uint8_t awd2_trip_valid;
+    uint16_t awd2_pre_last_raw,awd2_pre_min_raw,awd2_pre_max_raw;
+    uint16_t ibus_run_last_raw,ibus_run_min_raw,ibus_run_max_raw;
     uint32_t fault_mask;
 } ConvProtectionSnapshot;
 void ConvProtection_Init(void); /* before ADC/DMA start */
