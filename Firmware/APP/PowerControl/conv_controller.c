@@ -15,6 +15,7 @@
 #include "framework/pm_api.h"
 #include "main.h"
 #include "tim.h"
+#include <stdio.h>
 #define IH_RAMFUNC __attribute__((section(".ih_ramfunc"), used, noinline))
 /* Explicit commissioning gate; no UI command may override this. */
 #define IH_POWER_STAGE_COMMISSIONED 0u
@@ -39,6 +40,26 @@ static HeaterObservation s_last_bench_obs;
 static uint32_t s_last_bench_obs_ms;
 static uint8_t s_last_bench_obs_valid;
 
+/* Opt-in six-cycle pulse, then IC2 DMA while TIM1 keeps counting. */
+#define PAN_PERIOD_MS 2000u
+#define PAN_CAPTURE_MS 4u
+#define PAN_TIMEOUT_MS 10u
+#define PAN_FREQ_KHZ 150u
+#define PAN_PHASE 180u
+#define PAN_CYCLES 6u
+#define PAN_DMA_LEN 48u
+typedef enum { PAN_IDLE=0u,PAN_ARMED,PAN_ACTIVE,PAN_COLLECT,PAN_ABORTED } PanState;
+static volatile PanState s_pan_state;
+static volatile uint8_t s_pan_left,s_pan_adc_guard;
+static volatile uint16_t s_pan_start_index,s_pan_off_index;
+static volatile uint32_t s_pan_off_ms;
+static volatile uint16_t s_pan_dma[PAN_DMA_LEN] __attribute__((aligned(4)));
+static uint16_t s_pan_restore_arr,s_pan_restore_phase,s_pan_arr;
+static uint32_t s_pan_due_ms,s_pan_armed_ms,s_pan_seq;
+static uint8_t s_pan_session;
+static char s_pan_log[360];
+static void pan_cancel(void);
+
 void ConvController_Init(void)
 {
     s_state=CONV_STATE_STOP;
@@ -52,6 +73,11 @@ void ConvController_Init(void)
     s_bench_block=CONV_BENCH_OK;
     s_last_bench_obs_valid=0u;
     s_last_bench_obs_ms=0u;
+    s_pan_state=PAN_IDLE;
+    s_pan_session=0u;
+    s_pan_left=s_pan_adc_guard=0u;
+    s_pan_start_index=s_pan_off_index=0u;
+    s_pan_due_ms=s_pan_armed_ms=s_pan_off_ms=s_pan_seq=0u;
     ConvZcd_Init();
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port, PWM_EN_Pin);
     TIM1->BDTR &= ~TIM_BDTR_MOE;
@@ -81,6 +107,11 @@ IH_RAMFUNC void ConvController_TripISR(void)
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
     __DSB();
     TIM1->BDTR &= ~TIM_BDTR_MOE;
+    if(s_pan_state!=PAN_IDLE)
+    {
+        TIM1->DIER &= ~TIM_DIER_UIE;
+        s_pan_state=PAN_ABORTED;
+    }
 }
 uint32_t ConvController_BenchElapsedSeconds(uint32_t now_ms)
 {
@@ -92,6 +123,7 @@ void ConvController_BenchPowerOff(void)
     /* PC6 is always switched off FIRST; timer logic PWM may continue. */
     LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
     __DSB();
+    pan_cancel();
     pm_api_set_sleep_block(PM_BLOCK_HEATER,0u);
 }
 /* TIM1 ARR and CCR1/3/4 are staged as one coherent preload transaction.
@@ -154,6 +186,7 @@ void ConvController_SetPhaseDegrees(uint16_t angle_deg)
     uint32_t mask=__get_PRIMASK();
     uint16_t arr;
     uint8_t ok=1u;
+    if(s_pan_state!=PAN_IDLE)return; /* defer external phase changes */
     /* Lock the ARR read AND subsequent staged write as one operation.
      * Without this, an ISR tick could change ARR after calculating
      * phase CCRs but before the foreground enters StageTimerPreloads. */
@@ -187,6 +220,7 @@ uint16_t ConvController_GetFrequencyKhz(void)
 static uint8_t ConvController_ApplyFrequencyArr(uint16_t next_arr)
 {
     ConvPhaseConfig phase;
+    if(s_pan_state!=PAN_IDLE)return 0u;
     if(TIM1->ARR==next_arr)return 1u;
     /* ISR must not copy the mutable HeaterSnapshot. Phase is an aligned,
      * staged controller setpoint, updated under the preload lock above. */
@@ -208,13 +242,13 @@ uint8_t ConvController_SetFrequencyKhz(uint16_t requested_khz)
 {
     uint16_t next_arr;
     /* This public manual API cannot contend with the automatic ISR. */
-    if(ConvAutoFreq_Enabled())return 0u;
+    if(ConvAutoFreq_Enabled() || s_pan_state!=PAN_IDLE)return 0u;
     if(!ConvPhase_ArrFromKHz(requested_khz,&next_arr))return 0u;
     return ConvController_ApplyFrequencyArr(next_arr);
 }
 uint8_t ConvController_SetFrequencyArr(uint16_t arr)
 {
-    if(arr<426u || arr>752u)return 0u;
+    if(s_pan_state!=PAN_IDLE || arr<426u || arr>752u)return 0u;
     return ConvController_ApplyFrequencyArr(arr);
 }
 uint8_t ConvController_LogicPwmRunning(void)
@@ -311,10 +345,18 @@ static uint8_t bench_preflight_reason(const HeaterSnapshot *h,
 {
     if(o==0)                              return CONV_BENCH_SOURCE;
     if(h->mode!=HEATER_MODE_POWER)        return CONV_BENCH_MODE;
-    if(ConvAutoFreq_Enabled() && h->target_phase_deg<120u)
+    if(h->pan_detect_enabled)
+    {
+        if(!h->off_minutes)                return CONV_BENCH_COUNTDOWN;
+        if(ConvAutoFreq_Enabled())        return CONV_BENCH_PHASE;
+    }
+    else
+    {
+        if(ConvAutoFreq_Enabled() && h->target_phase_deg<120u)
                                            return CONV_BENCH_PHASE;
-    if(ConvController_GetPhaseDegrees()!=h->target_phase_deg)
+        if(ConvController_GetPhaseDegrees()!=h->target_phase_deg)
                                            return CONV_BENCH_PHASE;
+    }
     if(!valid_pd)                         return CONV_BENCH_NOPD;
     if(o->input!=HEATER_INPUT_PD)         return CONV_BENCH_SOURCE;
     if(!o->zero_calibrated)               return CONV_BENCH_ZERO;
@@ -358,6 +400,25 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
     allow=(uint8_t)(h.state==HEATER_RUN_REQUESTED &&
                     bench_block_reason(&h,valid_pd,&contract,now_ms,
                                        observation)==CONV_BENCH_OK);
+    if(h.pan_detect_enabled)
+    {
+        /* Countdown RUN never becomes continuous output; pulses are
+         * controlled exclusively by the TIM1 UPDATE ISR. */
+        if(h.state!=HEATER_RUN_REQUESTED)
+        {
+            pm_api_set_sleep_block(PM_BLOCK_HEATER,0u);
+            return;
+        }
+        if(!allow)
+        {
+            s_bench_block=bench_block_reason(&h,valid_pd,&contract,now_ms,
+                                              observation);
+            ConvController_BenchPowerOff();
+            Heater_Stop();
+        }
+        else pm_api_set_sleep_block(PM_BLOCK_HEATER,1u);
+        return;
+    }
     if(ConvController_OutputEnabled())
     {
         pm_api_set_sleep_block(PM_BLOCK_HEATER,1u);
@@ -502,6 +563,8 @@ uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms)
     Heater_SetMode(HEATER_MODE_POWER);
     Heater_GetSnapshot(&hs);
     valid_pd=PD_Input_GetActiveContract(&contract);
+    if(hs.pan_detect_enabled && hs.state==HEATER_RUN_REQUESTED)
+        return 1u; /* no implicit countdown restart */
     reason=bench_preflight_reason(&hs,valid_pd,&contract,now_ms,
                                   &s_last_bench_obs);
     if(reason!=CONV_BENCH_OK)
@@ -541,6 +604,14 @@ uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms)
      * and TIM1 logic PWM have been restored. */
     if(hs.state==HEATER_FAULT)Heater_AcknowledgeFault();
     Heater_StartConfirmed(now_ms);
+    if(hs.pan_detect_enabled)
+    {
+        /* Schedule short pulses only: do not energize PC6 on RUN. */
+        s_pan_session=0u;
+        pm_api_set_sleep_block(PM_BLOCK_HEATER,1u);
+        pm_api_refresh_idle();
+        return 1u;
+    }
     ConvController_BenchRunPoll(now_ms,&s_last_bench_obs);
     if(ConvController_OutputEnabled() &&
        ConvController_OutputPinIsOutput() &&
@@ -647,6 +718,10 @@ IH_RAMFUNC void DMA1_Channel2_3_IRQHandler(void)
                 const volatile uint16_t *frame=
                   ConvADC_DmaFrame((flags & DMA_ISR_TCIF2)!=0u);
                 ConvADC_ProcessFrameISR(frame);
+                /* Backstop if TIM1 update IRQ stalls. Six periods at
+                 * 150kHz take ~40us; three 20kHz frames force PC6/MOE OFF. */
+                if(s_pan_state==PAN_ACTIVE && ++s_pan_adc_guard>=3u)
+                    ConvController_TripISR();
                 /* Exact 100-frame decimation: deterministic TIM6 clock,
                  * no coroOS latency, no HAL/heap/float in controller. */
                 ConvAutoFreq_FrameISR(frame);
@@ -654,4 +729,215 @@ IH_RAMFUNC void DMA1_Channel2_3_IRQHandler(void)
         }
     }
     LL_GPIO_ResetOutputPin(ISR_TIME_GPIO_Port, ISR_TIME_Pin);
+}
+
+/* TIM1 UPDATE IRQ is enabled ONLY for a six-period probe. First update
+ * commits the staged ARR/CCR preload and asserts PC6; six subsequent
+ * PWM periods later, PC6 is cleared. TIM1 CEN stays high throughout. */
+IH_RAMFUNC void ConvController_PanProbeUpdateISR(void)
+{
+    if(s_pan_state!=PAN_ARMED && s_pan_state!=PAN_ACTIVE)
+    {
+        TIM1->DIER &= ~TIM_DIER_UIE;
+        return;
+    }
+    if((TIM1->SR&TIM_SR_BIF)!=0u ||
+       (TIM1->BDTR&TIM_BDTR_MOE)==0u ||
+       ConvProtection_FaultMask()!=0u)
+    {
+        LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
+        __DSB();
+        s_pan_state=PAN_ABORTED;
+        TIM1->DIER &= ~TIM_DIER_UIE;
+        return;
+    }
+    if(s_pan_state==PAN_ARMED)
+    {
+        s_pan_start_index=(uint16_t)(PAN_DMA_LEN -
+                                     hdma_tim1_ch2.Instance->CNDTR);
+        s_pan_adc_guard=0u;
+        s_pan_left=PAN_CYCLES;
+        s_pan_state=PAN_ACTIVE;
+        LL_GPIO_SetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
+        __DSB();
+        if((TIM1->SR&TIM_SR_BIF)!=0u ||
+           ConvProtection_FaultMask()!=0u)
+            ConvController_TripISR();
+        return;
+    }
+    if(--s_pan_left==0u)
+    {
+        LL_GPIO_ResetOutputPin(PWM_EN_GPIO_Port,PWM_EN_Pin);
+        __DSB();
+        s_pan_off_index=(uint16_t)(PAN_DMA_LEN -
+                                   hdma_tim1_ch2.Instance->CNDTR);
+        s_pan_off_ms=HAL_GetTick();
+        s_pan_state=PAN_COLLECT;
+        TIM1->DIER &= ~TIM_DIER_UIE;
+    }
+}
+uint8_t ConvController_PanProbeBusy(void)
+{
+    return (uint8_t)(s_pan_state!=PAN_IDLE);
+}
+static uint8_t pan_restore(void)
+{
+    ConvPhaseConfig phase;
+    if(!ConvPhase_Calculate(s_pan_restore_arr,s_pan_restore_phase,&phase))
+        return 0u;
+    if(!ConvController_StageTimerPreloads(&phase,1u))return 0u;
+    ConvZcd_Invalidate();
+    TIM1->SR=(uint32_t)~(TIM_SR_CC2IF|TIM_SR_CC2OF);
+    return 1u;
+}
+static void pan_cancel(void)
+{
+    if(s_pan_state==PAN_IDLE)return;
+    /* Foreground only. PC6 has already been disabled by the caller. */
+    TIM1->DIER &= ~(TIM_DIER_UIE|TIM_DIER_CC2DE);
+    (void)HAL_DMA_Abort(&hdma_tim1_ch2);
+    if(!pan_restore())ConvController_TripISR();
+    s_pan_state=PAN_IDLE;
+}
+static uint8_t pan_arm(uint32_t now_ms)
+{
+    ConvPhaseConfig phase;
+    uint16_t arr,i;
+    if(s_pan_state!=PAN_IDLE || ConvController_OutputEnabled() ||
+       ConvAutoFreq_Enabled() || !ConvController_LogicPwmRunning() ||
+       (TIM1->SR&TIM_SR_BIF)!=0u ||
+       ConvProtection_FaultMask()!=0u ||
+       !ConvProtection_CompArmed() || !ConvProtection_ZeroReady() ||
+       !ConvPhase_ArrFromKHz(PAN_FREQ_KHZ,&arr))
+        return 0u;
+    s_pan_restore_arr=(uint16_t)TIM1->ARR;
+    s_pan_restore_phase=s_phase_deg;
+    s_pan_arr=arr;
+    if(!ConvPhase_Calculate(arr,PAN_PHASE,&phase) ||
+       !ConvController_StageTimerPreloads(&phase,1u))
+        return 0u;
+    ConvZcd_Invalidate();
+    for(i=0u;i<PAN_DMA_LEN;++i)s_pan_dma[i]=0xFFFFu;
+    DMA1->IFCR=DMA_IFCR_CGIF3;
+    /* Normal DMA1 Ch3, no IRQ / HAL callbacks: the existing ADC Ch2
+     * SRAM ISR cannot afford an extra 150kHz interrupt source. */
+    if(HAL_DMA_Start(&hdma_tim1_ch2,(uint32_t)(uintptr_t)&TIM1->CCR2,
+                     (uint32_t)(uintptr_t)s_pan_dma,PAN_DMA_LEN)!=HAL_OK)
+    {
+        (void)pan_restore();
+        return 0u;
+    }
+    s_pan_start_index=s_pan_off_index=0u;
+    s_pan_left=s_pan_adc_guard=0u;
+    s_pan_armed_ms=now_ms;
+    s_pan_state=PAN_ARMED;
+    TIM1->DIER |= TIM_DIER_CC2DE;
+    /* Clear stale UIF. At the first natural update, the new preloads
+     * become active; only then can the ISR raise the FD2204 enable. */
+    TIM1->SR=(uint32_t)~TIM_SR_UIF;
+    TIM1->DIER |= TIM_DIER_UIE;
+    __DSB();
+    return 1u;
+}
+/* Fast foreground poll: no UART or HAL inside TIM1/DMA IRQs. */
+void ConvController_PanProbeService(uint32_t now_ms)
+{
+    HeaterSnapshot h;
+    PD_InputContract contract;
+    uint8_t valid_pd,why;
+    uint16_t count,from,off,i,valid,wr;
+    Heater_GetSnapshot(&h);
+    if(!h.pan_detect_enabled || h.state!=HEATER_RUN_REQUESTED ||
+       !h.off_minutes || !h.off_remaining_s)
+    {
+        if(s_pan_state!=PAN_IDLE || s_pan_session)
+            ConvController_BenchPowerOff();
+        s_pan_session=0u;
+        return;
+    }
+    if(s_pan_state==PAN_ABORTED ||
+       (s_pan_state!=PAN_IDLE &&
+        ((TIM1->SR&TIM_SR_BIF)!=0u ||
+         ConvProtection_FaultMask()!=0u ||
+         ((s_pan_state==PAN_ARMED || s_pan_state==PAN_ACTIVE) &&
+          (uint32_t)(now_ms-s_pan_armed_ms)>PAN_TIMEOUT_MS))))
+    {
+        ConvController_BenchPowerOff();
+        Heater_Stop();
+        s_bench_block=CONV_BENCH_FAULT;
+        s_pan_session=0u;
+        return;
+    }
+    if(s_pan_state==PAN_COLLECT &&
+       (hdma_tim1_ch2.Instance->CNDTR==0u ||
+        (uint32_t)(now_ms-s_pan_off_ms)>=PAN_CAPTURE_MS))
+    {
+        TIM1->DIER &= ~TIM_DIER_CC2DE;
+        count=(uint16_t)(PAN_DMA_LEN-hdma_tim1_ch2.Instance->CNDTR);
+        if(count>PAN_DMA_LEN)count=PAN_DMA_LEN;
+        (void)HAL_DMA_Abort(&hdma_tim1_ch2);
+        from=s_pan_start_index;
+        off=s_pan_off_index;
+        if(from>count)from=count;
+        if(off>count)off=count;
+        valid=0u;
+        for(i=from;i<count;++i)
+            if(s_pan_dma[i]<=s_pan_arr)++valid;
+        /* Raw CCR2 capture only. No assumption of metal or empty coil.
+         * ON_COUNT partitions captures from energized and ringdown phases. */
+        if(valid)
+        {
+            int n=snprintf(s_pan_log,sizeof(s_pan_log),
+                "[PAN] SEQ=%lu FREQ=150K PHASE=180 CYC=%u CAP=%u ON_COUNT=%u RAW=",
+                (unsigned long)++s_pan_seq,(unsigned)PAN_CYCLES,
+                (unsigned)valid,(unsigned)(off-from));
+            wr=(n>0 && (uint32_t)n<sizeof(s_pan_log))?(uint16_t)n:0u;
+            for(i=from;i<count && wr<sizeof(s_pan_log)-8u;++i)
+            {
+                int m;
+                if(s_pan_dma[i]>s_pan_arr)continue;
+                m=snprintf(s_pan_log+wr,sizeof(s_pan_log)-wr,
+                           "%s%u",wr && s_pan_log[wr-1u]!='='?",":"",
+                           (unsigned)s_pan_dma[i]);
+                if(m<=0 || (uint32_t)m>=sizeof(s_pan_log)-wr)break;
+                wr=(uint16_t)(wr+(uint16_t)m);
+            }
+            printf("%s\r\n",s_pan_log);
+        }
+        if(!pan_restore())
+        {
+            ConvController_TripISR();
+            Heater_Stop();
+            s_bench_block=CONV_BENCH_PWM;
+        }
+        s_pan_state=PAN_IDLE;
+        return;
+    }
+    if(s_pan_state!=PAN_IDLE)return;
+    if(!s_pan_session)
+    {
+        s_pan_session=1u;
+        s_pan_due_ms=now_ms+PAN_PERIOD_MS;
+        return;
+    }
+    if((int32_t)(now_ms-s_pan_due_ms)<0)return;
+    valid_pd=PD_Input_GetActiveContract(&contract);
+    why=bench_block_reason(&h,valid_pd,&contract,now_ms,
+                           &s_last_bench_obs);
+    if(!s_last_bench_obs_valid ||
+       (uint32_t)(now_ms-s_last_bench_obs_ms)>200u ||
+       why!=CONV_BENCH_OK)
+    {
+        s_bench_block=!s_last_bench_obs_valid?CONV_BENCH_AGE:why;
+        ConvController_BenchPowerOff();
+        Heater_Stop();
+        return;
+    }
+    s_pan_due_ms=now_ms+PAN_PERIOD_MS;
+    if(!pan_arm(now_ms))
+    {
+        s_bench_block=CONV_BENCH_PWM;
+        ConvController_BenchPowerOff();
+        Heater_Stop();
+    }
 }

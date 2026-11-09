@@ -17,10 +17,11 @@
 
 static ui_page_t s_page;
 static ui_item_t s_entry,s_back,s_pc6_item,s_phase_item,s_auto_item,s_freq_item,s_af_item;
+static ui_item_t s_pan_item;
 static ui_item_t s_ic2_item,s_lag_item,s_lag_raw_item,s_ct_item,s_ibus_item,s_status_item;
-static ui_data_t s_pc6_data,s_phase_data,s_auto_data,s_freq_data;
-static ui_element_t s_pc6_elem,s_phase_elem,s_auto_elem,s_freq_elem;
-static uint8_t s_pc6,s_auto;
+static ui_data_t s_pc6_data,s_phase_data,s_auto_data,s_freq_data,s_pan_data;
+static ui_element_t s_pc6_elem,s_phase_elem,s_auto_elem,s_freq_elem,s_pan_elem;
+static uint8_t s_pc6,s_auto,s_pan;
 static int s_phase,s_freq;
 static int s_previous_phase,s_previous_freq;
 static char s_af_text[26];
@@ -94,6 +95,18 @@ static void auto_changed(ui_t *ui)
         s_auto=ConvAutoFreq_Enabled();
     pm_api_refresh_idle();
 }
+static void pan_changed(ui_t *ui)
+{
+    HeaterSnapshot h;
+    (void)ui;
+    /* The policy refuses mode switches while running or faulted. */
+    if(!Heater_SetPanDetectEnabled(s_pan))
+    {
+        Heater_GetSnapshot(&h);
+        s_pan=h.pan_detect_enabled;
+    }
+    pm_api_refresh_idle();
+}
 void HeaterSettings_AddSettings(ui_page_t *settings)
 {
     if(!settings)return;
@@ -113,6 +126,18 @@ void HeaterSettings_AddSettings(ui_page_t *settings)
     s_pc6_elem.data=&s_pc6_data;
     Create_element(&s_pc6_item,&s_pc6_elem);
     AddItem(" PC6 Enable",UI_ITEM_DATA,0,&s_pc6_item,&s_page,0,0);
+
+    s_pan=0u;
+    s_pan_data.name="Pan Detect";
+    s_pan_data.ptr=&s_pan;
+    s_pan_data.function=pan_changed;
+    s_pan_data.functionType=UI_DATA_FUNCTION_STEP_EXECUTE;
+    s_pan_data.dataType=UI_DATA_SWITCH;
+    s_pan_data.actionType=UI_DATA_ACTION_RW;
+    s_pan_data.min=0;s_pan_data.max=0;s_pan_data.step=0;
+    s_pan_elem.data=&s_pan_data;
+    Create_element(&s_pan_item,&s_pan_elem);
+    AddItem(" Pan Detect",UI_ITEM_DATA,0,&s_pan_item,&s_page,0,0);
 
     s_phase=180;s_previous_phase=180;
     s_phase_data.name="Phase deg";
@@ -176,6 +201,7 @@ void HeaterSettings_Poll(void)
     if(!s_created || (uint32_t)(now-s_last_poll)<50u)return;
     s_last_poll=now;
     Heater_GetSnapshot(&heater);
+    s_pan=heater.pan_detect_enabled;
     ConvProtection_GetSnapshot(&protection);
     ConvADC_CopySnapshot(&adc);
     ConvZcd_GetSnapshot(&capture);

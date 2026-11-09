@@ -63,7 +63,8 @@ typedef enum {
     CONV_BENCH_PWM,    /* TIM1 logic PWM not running                      */
     CONV_BENCH_COMP,   /* comparators not armed / already faulted         */
     CONV_BENCH_FAULT,  /* protection fault mask not clear                 */
-    CONV_BENCH_BRK     /* TIM1 Break flag latched                         */
+    CONV_BENCH_BRK,    /* TIM1 Break flag latched                        */
+    CONV_BENCH_COUNTDOWN /* Pan probe requires nonzero off timer         */
 } ConvBenchBlock;
 uint8_t ConvController_BenchBlockReason(void);
 void ConvController_BenchRunPoll(uint32_t now_ms,
@@ -71,4 +72,10 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
 /* Synchronous CLI start, reports success only if PC6 is physically HIGH. */
 uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms);
 uint8_t ConvController_BenchAdcFrameWatchdogISR(void);
+/* Opt-in pan probe: 150kHz, 180deg, six periods every 2s while the
+ * Heater run countdown is active. TIM1 CEN remains set after PC6 goes low.
+ * CC2 DMA captures raw edge positions; this does NOT classify cookware. */
+uint8_t ConvController_PanProbeBusy(void);
+void ConvController_PanProbeService(uint32_t now_ms);
+void ConvController_PanProbeUpdateISR(void);
 #endif

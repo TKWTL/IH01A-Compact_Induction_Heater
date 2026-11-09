@@ -48,6 +48,9 @@ typedef struct {
     uint8_t pot_valid,sys_valid;
     uint16_t off_minutes;  /* automatic stop delay for the current run */
     uint32_t off_remaining_s;
+    /* Explicit, nonpersistent pulse-only pan detection. Never auto-starts
+     * output: needs a manual RUN and nonzero off_minutes countdown. */
+    uint8_t pan_detect_enabled;
 } HeaterSnapshot;
 
 void Heater_Init(void);
@@ -55,6 +58,8 @@ void Heater_SetMode(HeaterMode mode);
 void Heater_SetTargetTemp(uint16_t deci_c);
 void Heater_SetPhaseDegrees(uint16_t degrees);
 void Heater_SetOffMinutes(uint16_t minutes,uint32_t now_ms);
+/* Only change while HEATER_OFF; independent of normal RUN enable. */
+uint8_t Heater_SetPanDetectEnabled(uint8_t enabled);
 void Heater_StartConfirmed(uint32_t now_ms);
 void Heater_Stop(void);
 void Heater_LatchFault(uint32_t reason_mask);
