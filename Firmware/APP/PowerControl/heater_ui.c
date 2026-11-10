@@ -3,6 +3,7 @@
  * ENTER cycles editable fields; L/R change the selected field; EXIT leaves.
  */
 #include "PowerControl/heater_ui.h"
+#include "PowerControl/heater_ui_format.h"
 #include "PowerControl/heater_control.h"
 #include "PowerControl/conv_controller.h"
 #include "PowerControl/conv_phase.h"
@@ -16,7 +17,14 @@
 #include "main.h"
 #include <stdio.h>
 
-enum {EDIT_MODE=0u,EDIT_TARGET,EDIT_OFF,EDIT_PAN,EDIT_RUN,EDIT_COUNT};
+/* Named aliases keep the existing edit_value cases and make the selection
+ * sequence reusable in host tests without changing control behavior. */
+#define EDIT_MODE   HEATER_UI_EDIT_MODE
+#define EDIT_TARGET HEATER_UI_EDIT_TARGET
+#define EDIT_OFF    HEATER_UI_EDIT_OFF
+#define EDIT_PAN    HEATER_UI_EDIT_PAN
+#define EDIT_RUN    HEATER_UI_EDIT_RUN
+#define EDIT_COUNT  HEATER_UI_EDIT_COUNT
 /* Power bench default: L/R edits phase immediately on Main entry. */
 static uint8_t s_edit_field=EDIT_TARGET;
 
@@ -130,7 +138,7 @@ void Heater_UI_Page(ui_t *ui)
     if(!ui)return;
     if(ui->action==UI_ACTION_ENTER)
     {
-        s_edit_field=(uint8_t)((s_edit_field+1u)%EDIT_COUNT);
+        s_edit_field=HeaterUI_NextField(s_edit_field);
         ui->action=UI_ACTION_NONE; /* prevent MiaoUI from exiting the page */
     }
     else if(ui->action==UI_ACTION_UP || ui->action==UI_ACTION_DOWN)
@@ -206,35 +214,27 @@ void Heater_UI_Page(ui_t *ui)
             (void)snprintf(line,sizeof(line),"PHASE --");
     }
     Disp_DrawStr(0u,35u,line);
-    /* Auto-stop countdown only; there is no reservation/countdown start.
-     * The timer keeps running while this menu item is closed. */
-    if(s.state==HEATER_RUN_REQUESTED && s.off_minutes)
-        (void)snprintf(line,sizeof(line),"OFF %02lu:%02lu",
-            (unsigned long)(s.off_remaining_s/60u),
-            (unsigned long)(s.off_remaining_s%60u));
-    else
-        (void)snprintf(line,sizeof(line),"OFF %um",(unsigned)s.off_minutes);
-    /* During manual phase testing reserve one row for latest TIM1_CH2 edge.
-     * Lag is relative to the model voltage +->- at ARR/4+D/2. */
-    if(s.pan_detect_enabled)
-        (void)snprintf(line,sizeof(line),"PAN:ON 150k 180deg");
-    else if(s.mode==HEATER_MODE_POWER)
+    /* The previous code formatted OFF then overwrote it with IC2/PAN
+     * before drawing, hiding the required Pan Detect countdown entirely.
+     * Keep OFF visible and append concise IC2 or PAN status on one row. */
     {
-        ConvZcdSnapshot z;
-        ConvZcd_GetSnapshot(&z);
-        if(z.valid && (uint32_t)(now-z.last_ms)<=250u)
+        uint8_t ic2_valid=0u;
+        uint16_t ic2=0u;
+        if(!s.pan_detect_enabled && s.mode==HEATER_MODE_POWER)
         {
-            /* Display the historical correction estimate whenever it is
-             * computable. Do NOT treat it as a calibrated safety input. */
-            int16_t lag=z.correction_valid?
-                        z.lag_corr_deci_deg:z.lag_deci_deg;
-            int16_t mag=(int16_t)(lag<0?-lag:lag);
-            (void)snprintf(line,sizeof(line),"IC2:%u %c:%c%d.%d",
-                           (unsigned)z.capture_raw,
-                           z.correction_valid?'C':'R',lag<0?'-':'+',
-                           (int)(mag/10),(int)(mag%10));
+            ConvZcdSnapshot z;
+            ConvZcd_GetSnapshot(&z);
+            if(z.valid && (uint32_t)(now-z.last_ms)<=250u)
+            {
+                ic2_valid=1u;
+                ic2=z.capture_raw;
+            }
         }
-        else (void)snprintf(line,sizeof(line),"IC2:-- C:--");
+        HeaterUI_FormatCountdown(line,sizeof(line),
+            (uint8_t)(s.state==HEATER_RUN_REQUESTED),
+            s.off_minutes,s.off_remaining_s,s.pan_detect_enabled,
+            (uint8_t)(s.mode==HEATER_MODE_POWER),
+            ic2_valid,ic2);
     }
     Disp_DrawStr(0u,47u,line);
     /* At 128px and ~6px/glyph, keep line <=21 ASCII characters.
@@ -248,18 +248,15 @@ void Heater_UI_Page(ui_t *ui)
         uint8_t why=ConvController_BenchBlockReason();
         char pin1=ConvController_OutputPinIsOutput()?
                   (ConvController_OutputPinLevel()?'Y':'n'):'-';
-        if(why!=CONV_BENCH_OK && s.state!=HEATER_RUN_REQUESTED)
-            (void)snprintf(line,sizeof(line),"%s P:%c E:%c%c R:%s",
-                state_name(s.state),
-                ConvController_LogicPwmRunning()?'Y':'N',
-                ConvController_OutputEnabled()?'Y':'N',pin1,
-                bench_block_name(why));
-        else
-            (void)snprintf(line,sizeof(line),"%s P:%c E:%c%c >%s",
-                state_name(s.state),
-                ConvController_LogicPwmRunning()?'Y':'N',
-                ConvController_OutputEnabled()?'Y':'N',pin1,
-                field_name(s_edit_field));
+        /* A latched RUN refusal must not hide the active field selector.
+         * Confirm continues cycling even with e.g. R:TIME displayed. */
+        HeaterUI_FormatFooter(line,sizeof(line),
+            state_name(s.state),field_name(s_edit_field),
+            (uint8_t)(why!=CONV_BENCH_OK &&
+                      s.state!=HEATER_RUN_REQUESTED),
+            bench_block_name(why),
+            ConvController_LogicPwmRunning(),
+            ConvController_OutputEnabled(),pin1);
     }
     Disp_DrawStr(0u,59u,line);
     Disp_SendBuffer();

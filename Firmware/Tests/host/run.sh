@@ -47,6 +47,8 @@ build_run temp_service -I Tests/host/temp_mock -I APP -I APP/PowerControl \
 build_run beep -I APP \
  APP/framework/beep.c Tests/host/test_beep.c
 
+build_run heater_ui_format -I APP Tests/host/test_heater_ui_format.c
+
 build_run heater -I APP \
  APP/PowerControl/heater_control.c APP/PowerControl/heater_budget.c \
  Tests/host/test_heater_control.c
