@@ -28,11 +28,12 @@
 #include "stdio.h"
 #include "core/ui.h"
 #include "display/dispDriver.h"
+#include "i18n.h"
 
 void ParameterSetting_Widget(ui_t *ui)
 {
     uint8_t color;
-    char value[20] = {0};
+    char value[48] = {0};
     int x = 4, y = 12, w = UI_HOR_RES - 8, h = UI_VER_RES - 32;
     int Step = ui->nowItem->element->data->step;
 
@@ -67,7 +68,7 @@ void ParameterSetting_Widget(ui_t *ui)
         switch (ui->nowItem->element->data->dataType)
         {
         case UI_DATA_INT:
-            snprintf(value, sizeof(value), "%s:%d ", ui->nowItem->element->data->name, *(int *)(ui->nowItem->element->data->ptr));
+            snprintf(value, sizeof(value), "%s:%d ", IH_I18n_Text(ui->nowItem->element->data->name), *(int *)(ui->nowItem->element->data->ptr));
             break;
         case UI_DATA_FLOAT:
         {
@@ -75,7 +76,7 @@ void ParameterSetting_Widget(ui_t *ui)
             char num[16];
             UI_FmtScaled(num, sizeof(num), *(int *)(ui->nowItem->element->data->ptr),
                          ui->nowItem->element->data->decimals);
-            snprintf(value, sizeof(value), "%s:%s ", ui->nowItem->element->data->name, num);
+            snprintf(value, sizeof(value), "%s:%s ", IH_I18n_Text(ui->nowItem->element->data->name), num);
             break;
         }
         default:
@@ -87,6 +88,7 @@ void ParameterSetting_Widget(ui_t *ui)
         color = ui->bgColor ? 0 : 1;
         Disp_SetDrawColor(&color);
         //绘制数据
+        Disp_SetFont(IH_I18n_Font());
         Disp_DrawStr(x + 4, y + 13, value);
         Disp_SendBuffer();
     }

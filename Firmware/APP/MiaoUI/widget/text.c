@@ -29,54 +29,63 @@
 #include "display/dispDriver.h"
 #include "string.h"
 
+/* UTF-8-safe paragraph wrapping based on actual glyph advance widths.
+ * No malloc, fixed stack buffer; never split a UTF-8 code point. */
+#include "i18n.h"
 void Text_Widget(ui_t *ui)
 {
-    if (!ui || !ui->nowItem || !ui->nowItem->element || !ui->nowItem->element->text) {
-        return;
-    }
-
-    const int fontWidth = ui->nowItem->element->text->fontWidth;
-    const int fontHight = ui->nowItem->element->text->fontHight;
-    const char* text_ptr = ui->nowItem->element->text->ptr;
-    const uint8_t * font = ui->nowItem->element->text->font;
-
-    // 设置字体
+    const char *ptr;
+    const uint8_t *font;
+    char line[128];
+    unsigned len = 0u;
+    int row = 0;
+    const int left = 4, right = UI_HOR_RES - 5;
+    int font_height;
+    if(!ui || !ui->nowItem || !ui->nowItem->element || !ui->nowItem->element->text) return;
+    ptr=IH_I18n_Text(ui->nowItem->element->text->ptr);
+    font=IH_I18n_Font();
+    font_height=ui->nowItem->element->text->fontHight;
     Disp_SetFont(font);
-
-    //计算字符总数
-    int char_cnt = strlen(text_ptr);
-
-    //计算每行的最大字符数
-    int lineMaxCnt = UI_HOR_RES / fontWidth - 1;
-
-    //每行已显示过的字符数
-    int printed_char = 0;
-
-    //初始化行号和X坐标
-    int line = 0;
-    int x = ui->nowItem->element->text->fontWidth - 2;
-
-    //等待直到对话框完全显示
-    if (Dialog_Show(ui, 1, 1, UI_HOR_RES - 2, UI_VER_RES - 2)) {
-        for (int i = 0; i < char_cnt; i++) {
-            char c = text_ptr[i];
-            Disp_Putchar(x, fontHight + line * fontHight, c);
-            x += fontWidth;
-            printed_char++;
-            if (c == '\t') {
-                x += fontWidth* 3;
-                printed_char += 3;
-            }
-            if (printed_char >= lineMaxCnt || c == '\n') {
-                line++;
-                x = ui->nowItem->element->text->fontWidth - 2;
-                printed_char = 0;
-            }
-            // 检查是否超出屏幕高度
-            if (line * fontHight >= UI_VER_RES - 2) {
-                break;
-            }
+    if(!Dialog_Show(ui,1,1,UI_HOR_RES-2,UI_VER_RES-2)) return;
+    while(*ptr && ((row+1)*font_height < UI_VER_RES-2))
+    {
+        unsigned cbytes=1u;
+        unsigned i;
+        if(*ptr=='\n')
+        {
+            line[len]='\0';
+            Disp_DrawUTF8(left,font_height*(row+1),line);
+            ++row;len=0u;++ptr;
+            continue;
         }
-        Disp_SendBuffer();
+        if(((unsigned char)*ptr&0xf0u)==0xe0u)cbytes=3u;
+        else if(((unsigned char)*ptr&0xe0u)==0xc0u)cbytes=2u;
+        else if(((unsigned char)*ptr&0xf8u)==0xf0u)cbytes=4u;
+        for(i=0u;i<cbytes;i++)if(ptr[i]=='\0')break;
+        cbytes=i;
+        if(cbytes==0u)break;
+        if(len+cbytes>=sizeof(line))
+        {
+            line[len]='\0';Disp_DrawUTF8(left,font_height*(row+1),line);
+            ++row;len=0u;
+            if((row+1)*font_height>=UI_VER_RES-2)break;
+        }
+        for(i=0u;i<cbytes;i++)line[len+i]=ptr[i];
+        line[len+cbytes]='\0';
+        if(len && Disp_GetUTF8Width(line)>(unsigned)(right-left))
+        {
+            line[len]='\0';
+            Disp_DrawUTF8(left,font_height*(row+1),line);
+            ++row;len=0u;
+            if((row+1)*font_height>=UI_VER_RES-2)break;
+            for(i=0u;i<cbytes;i++)line[i]=ptr[i];
+            line[cbytes]='\0';
+        }
+        len+=cbytes;ptr+=cbytes;
     }
+    if(len && (row+1)*font_height<UI_VER_RES-2)
+    {
+        line[len]='\0';Disp_DrawUTF8(left,font_height*(row+1),line);
+    }
+    Disp_SendBuffer();
 }

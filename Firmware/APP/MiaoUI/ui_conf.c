@@ -3,7 +3,7 @@
  * Heater live bench controls (PC6, phase, auto frequency, CT_RMS/IC2), Display,
  * PD and System (sleep). Statistics/Source PDO shows SPR/EPR capabilities;
  * Statistics/System shows other ADC voltages (IBUS moved to Heater) and MCU temperature.
- * The current ASCII font is used until the Chinese glyph port.
+ * UI text is localized at rendering time (English keys remain stable).
  */
 #include "ui_conf.h"
 #include "core/ui.h"

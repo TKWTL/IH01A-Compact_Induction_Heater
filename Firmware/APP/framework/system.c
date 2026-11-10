@@ -5,11 +5,21 @@
 #include "framework/system.h"
 #include "framework/time_service.h"
 #include "framework/beep.h"
+#include "i18n.h"
 #include "main.h"
 #include "core/ui.h"
 #include <stdio.h>
 
-static ui_item_t s_reset_item;
+static ui_item_t s_reset_item,s_language_item;
+static ui_data_t s_language_data;
+static ui_element_t s_language_element;
+static uint8_t s_language_cn;
+static void system_language_changed(ui_t *ui)
+{
+    (void)ui;
+    IH_I18n_SetChinese(s_language_cn);
+}
+
 static ui_item_t s_click_item,s_mute_item,s_music_item;
 static ui_data_t s_click_data,s_mute_data;
 static ui_element_t s_click_element,s_mute_element;
@@ -98,6 +108,19 @@ void System_AddSettingsItems(ui_page_t *page)
                            " Mute Beep",system_mute_changed);
     AddItem(" Play Music",UI_ITEM_ONCE_FUNCTION,0,
             &s_music_item,page,0,system_play_music);
+    s_language_cn=IH_I18n_IsChinese();
+    s_language_data.name="Language";
+    s_language_data.ptr=&s_language_cn;
+    s_language_data.function=system_language_changed;
+    s_language_data.functionType=UI_DATA_FUNCTION_STEP_EXECUTE;
+    s_language_data.dataType=UI_DATA_SWITCH;
+    s_language_data.actionType=UI_DATA_ACTION_RW;
+    s_language_data.min=0;
+    s_language_data.max=0;
+    s_language_data.step=0;
+    s_language_element.data=&s_language_data;
+    Create_element(&s_language_item,&s_language_element);
+    AddItem(" Language",UI_ITEM_DATA,0,&s_language_item,page,0,0);
     /* The caller MUST insert this after all other Settings/System items. */
     AddItem(" System Reset", UI_ITEM_ONCE_FUNCTION, 0,
             &s_reset_item, page, 0, System_ResetSelected);

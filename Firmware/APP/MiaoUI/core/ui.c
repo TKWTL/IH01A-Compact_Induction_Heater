@@ -25,6 +25,7 @@
  * Created on: 2025-02-08
  */
 #include "core/ui.h"
+#include "i18n.h"
 #include "display/dispDriver.h"
 #include "indev/indevDriver.h"
 #include "images/image.h"
@@ -413,7 +414,7 @@ uint8_t Notifications(ui_t *ui, int16_t x,int16_t y,int16_t targrtW,int16_t targ
     {
         ui->dialog.times = 0;
         char value[20] = {0};
-        snprintf(value, sizeof(value), "%s OK!", ui->nowItem->itemName);
+        snprintf(value, sizeof(value), "%s OK!", IH_I18n_Text(ui->nowItem->itemName));
         Disp_DrawStr(x + 5, y + targrtH/2, value);
         Change_UIState(ui, UI_ITEM_RUNING);
         return true;
@@ -748,7 +749,7 @@ static void Calculate_Cursor(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item,ui_i
     switch (Page->type){
     case UI_PAGE_TEXT:
         // 计算当前项名称的宽度（nowWide 为 Q10 定点）
-        ui->cursor.nowWide  = UI_FX(strlen(now_Item->itemName)*UI_FONT_WIDTH + 4);
+        ui->cursor.nowWide  = UI_FX(Disp_GetUTF8Width(IH_I18n_Text(now_Item->itemName)) + 4);
         ui->cursor.targrtRow = next_item->y - UI_FONT_HIGHT;
         if (ui->cursor.targrtRow > (ui->textSpace*(UI_VER_RES/ui->textSpace) - ui->textSpace) || ui->cursor.targrtRow < 0)  // 防止光标溢出可视范围
         {
@@ -845,13 +846,13 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
             switch (temp_item->rollState)
             {
             case UI_ITEM_ROLL_STOP:
-                if (strlen(temp_item->itemName) * UI_FONT_WIDTH > (text_right - UI_TITLE_X0))
+                if (Disp_GetUTF8Width(IH_I18n_Text(temp_item->itemName)) > (text_right - UI_TITLE_X0))
                     temp_item->rollState = UI_ITEM_ROLL_FORWARD;
                 break;
 
             case UI_ITEM_ROLL_FORWARD:
                 temp_item->x--;
-                if ((strlen(temp_item->itemName) * UI_FONT_WIDTH + temp_item->x) < (text_right - UI_TITLE_X0))
+                if ((Disp_GetUTF8Width(IH_I18n_Text(temp_item->itemName)) + temp_item->x) < (text_right - UI_TITLE_X0))
                     temp_item->rollState = UI_ITEM_ROLL_BACKWARD;
                 break;
 
@@ -865,7 +866,7 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
                 break;
             }
 #endif
-            Disp_DrawStr(temp_item->x, (uint16_t)UI_FXI(temp_item->animationY), temp_item->itemName);
+            Disp_DrawStr(temp_item->x, (uint16_t)UI_FXI(temp_item->animationY), IH_I18n_Text(temp_item->itemName));
         }
 
         temp_item = temp_item->nextItem;
@@ -925,14 +926,14 @@ static void Draw_ImagePage(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_ite
     {
     case UI_ITEM_ROLL_STOP: // 如果项目处于静止状态
         // 检查项目名称是否需要开始滚动
-        if(strlen(next_item->itemName) * UI_FONT_WIDTH > UI_HOR_RES)
+        if(Disp_GetUTF8Width(IH_I18n_Text(next_item->itemName)) > UI_HOR_RES)
             next_item->rollState = UI_ITEM_ROLL_FORWARD; // 如果名称宽度大于项目区域宽度，改变状态为向前滚动
         else tital_x = 0;
         break;
     case UI_ITEM_ROLL_FORWARD: // 如果项目处于向前滚动状态
         tital_x --; // 向左移动项目
         // 检查是否需要改变滚动方向
-        if((strlen(next_item->itemName) * UI_FONT_WIDTH + tital_x) < UI_HOR_RES)
+        if((Disp_GetUTF8Width(IH_I18n_Text(next_item->itemName)) + tital_x) < UI_HOR_RES)
             next_item->rollState = UI_ITEM_ROLL_BACKWARD; // 如果项目移出左边界，改变状态为向后滚动
         break;
     case UI_ITEM_ROLL_BACKWARD: // 如果项目处于向后滚动状态
@@ -948,7 +949,7 @@ static void Draw_ImagePage(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_ite
 
     color = ui->bgColor^0x01;;
     Disp_SetDrawColor(&color); // 设置特定的颜色，通常用于高亮显示
-    Disp_DrawStr(tital_x, UI_VER_RES - 2, next_item->itemName);
+    Disp_DrawStr(tital_x, UI_VER_RES - 2, IH_I18n_Text(next_item->itemName));
     // 根据目标位置和当前位置，以及PID算法计算并更新当前选项的位置和宽度
     ui->cursor.nowColumn = UI_Animation(UI_FX(ui->cursor.targrtColumn), ui->cursor.nowColumn, &ui->animation.cursor_ani);
     // 绘制选中项的下划线
@@ -969,16 +970,16 @@ static void Draw_UI(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_item_t *ne
 {
     uint8_t color = ui->bgColor;
 
-    Disp_SetFont(UI_FONT);
+    Disp_SetFont(IH_I18n_Font());
 
     // 计算页面状态
     if(ui->menuState == UI_PAGE_RUNING) Calculate_PageState(ui, Page, nowItem, next_item);
 
     // 计算下一个将要选中项的名称宽度
-    if(strlen(next_item->itemName)* UI_FONT_WIDTH >
+    if(Disp_GetUTF8Width(IH_I18n_Text(next_item->itemName)) >
        ((Page->wideText ? UI_HOR_RES - 10u : UI_TITLE_X1) - UI_TITLE_X0))
     ui->cursor.targrtWide = (Page->wideText ? UI_HOR_RES - 10u : UI_TITLE_X1) - UI_TITLE_X0;
-    else ui->cursor.targrtWide = strlen(next_item->itemName)* UI_FONT_WIDTH;
+    else ui->cursor.targrtWide = Disp_GetUTF8Width(IH_I18n_Text(next_item->itemName));
     // 开始绘制菜单界面
     //清屏
     Disp_SetDrawColor(&color); // 设置背景颜色
