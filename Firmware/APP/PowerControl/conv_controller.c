@@ -372,7 +372,7 @@ static uint8_t bench_preflight_reason(const HeaterSnapshot *h,
     if(o->input!=HEATER_INPUT_PD)         return CONV_BENCH_SOURCE;
     if(!o->zero_calibrated)               return CONV_BENCH_ZERO;
     if(!o->pot_valid || !o->sys_valid)    return CONV_BENCH_NTC;
-    if(o->pot_deci_c>=700 || o->sys_deci_c>=600) return CONV_BENCH_HOT;
+    if(o->pot_deci_c>=1100 || o->sys_deci_c>=800) return CONV_BENCH_HOT;
     if((uint32_t)(now_ms-o->temperature_updated_ms)>250u)
                                            return CONV_BENCH_AGE;
     return CONV_BENCH_OK;

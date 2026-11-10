@@ -81,7 +81,7 @@ void ConvProtection_Init(void)
      * sensor delay and resonant overvoltage invalidate that simple
      * estimate; retain independent fast HW trip and margin.
      * This revision intentionally DOES NOT implement the dynamic rule. */
-    s_low=s_high=(uint16_t)((CONV_CT_OUT_MV_PER_A*12u*4095u+1250u)/2500u);
+    s_low=s_high=(uint16_t)((CONV_CT_OUT_MV_PER_A*16u*4095u+1250u)/2500u);
     s_profile_ready=1u;
     s_notified=0u;
     s_faults=s_fault_at=0u;
