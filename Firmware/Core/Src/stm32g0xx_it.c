@@ -50,26 +50,25 @@
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
-/* CubeMX owns the fallback HAL DMA handler below and may regenerate it.
- * Keep its symbol weak: the strong SRAM-resident implementation in
- * APP/PowerControl/conv_controller.c takes precedence in the vector table.
- * Do NOT remove this declaration on CubeMX regeneration, or Keil will
- * report L6200E: DMA1_Channel2_3_IRQHandler multiply defined.
- */
-__WEAK void DMA1_Channel2_3_IRQHandler(void);
+/* DMA1 Channel2_3 IRQ is implemented exactly once, in the SRAM-resident
+ * controller ISR. Do not regenerate an additional HAL fallback handler. */
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-/* STM32G071 TIM1 combined Break/Update/Trigger/Commutation vector.
- * The TIM1 Break input already asynchronously disables MOE in hardware.
- * This ISR additionally disables FD2204 through PC6 on the same event.
- * We deliberately do NOT enable TIM1 UIE, so the 200kHz update rate
- * causes no interrupts; only a Break invokes this handler. */
+/* STM32G071 combined Break/Update vector. UPDATE interrupts are enabled
+ * only for the six cycles of an explicit PanProbe, not continuously.
+ * Break is handled first and always disables the physical gate. */
 void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
 {
-    if((TIM1->SR&TIM_SR_BIF)!=0u)
+    uint32_t sr=TIM1->SR;
+    if((sr&TIM_SR_BIF)!=0u)
         ConvProtection_BreakISR();
+    if((sr&TIM_SR_UIF)!=0u && (TIM1->DIER&TIM_DIER_UIE)!=0u)
+    {
+        TIM1->SR=(uint32_t)~TIM_SR_UIF;
+        ConvController_PanProbeUpdateISR();
+    }
 }
 /* Fatal-path console. The normal console formats into a RAM ring and lets the
  * main loop start the DMA, so it silently stops working when the superloop
@@ -253,17 +252,9 @@ void DMA1_Channel1_IRQHandler(void)
 /**
   * @brief This function handles DMA1 channel 2 and channel 3 interrupts.
   */
-void DMA1_Channel2_3_IRQHandler(void)
-{
-  /* USER CODE BEGIN DMA1_Channel2_3_IRQn 0 */
-
-  /* USER CODE END DMA1_Channel2_3_IRQn 0 */
-  HAL_DMA_IRQHandler(&hdma_adc1);
-  HAL_DMA_IRQHandler(&hdma_tim1_ch2);
-  /* USER CODE BEGIN DMA1_Channel2_3_IRQn 1 */
-
-  /* USER CODE END DMA1_Channel2_3_IRQn 1 */
-}
+/* DMA1 Ch2/3: single SRAM ISR implementation in conv_controller.c.
+ * Do NOT define it again here. ADC1 Ch2 is handled directly; TIM1 CH2
+ * uses polling DMA1 Ch3 without enabling DMA IRQ callbacks. */
 
 /**
   * @brief This function handles DMA1 channel 4, channel 5, channel 6, channel 7 and DMAMUX1 interrupts.

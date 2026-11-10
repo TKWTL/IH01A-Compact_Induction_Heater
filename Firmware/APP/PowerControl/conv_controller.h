@@ -63,7 +63,8 @@ typedef enum {
     CONV_BENCH_PWM,    /* TIM1 logic PWM not running                      */
     CONV_BENCH_COMP,   /* comparators not armed / already faulted         */
     CONV_BENCH_FAULT,  /* protection fault mask not clear                 */
-    CONV_BENCH_BRK     /* TIM1 Break flag latched                         */
+    CONV_BENCH_BRK,    /* TIM1 Break flag latched                         */
+    CONV_BENCH_COUNTDOWN /* Pulse-only run requires auto-stop countdown */
 } ConvBenchBlock;
 uint8_t ConvController_BenchBlockReason(void);
 void ConvController_BenchRunPoll(uint32_t now_ms,
@@ -71,4 +72,10 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
 /* Synchronous CLI start, reports success only if PC6 is physically HIGH. */
 uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms);
 uint8_t ConvController_BenchAdcFrameWatchdogISR(void);
+/* Six-period, 150kHz / 180deg short-pulse pan experiment.
+ * Foreground schedules DMA capture; TIM1 UPDATE IRQ shuts pulse off.
+ * No cookware classification or automatic power enable. */
+uint8_t ConvController_PanProbeBusy(void);
+void ConvController_PanProbeService(uint32_t now_ms);
+void ConvController_PanProbeUpdateISR(void);
 #endif

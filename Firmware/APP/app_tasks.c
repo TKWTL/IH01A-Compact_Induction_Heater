@@ -145,10 +145,13 @@ THRD_DECLARE(thread_heater)
             uint8_t valid=PD_Input_GetActiveContract(&contract);
             observation=Heater_BudgetClassify(pd.bus_mv,pd.mode,valid,
                 contract.voltage_mv,contract.current_ma);
-            /* AWD2 tracks PD negotiated current or DCin's 7A policy.
-             * It stays disabled until the raw IBUS zero has settled. */
+            /* AWD2 uses the negotiated contract with its 150mA
+             * protection headroom over the reserved control limit.
+             * Do not overwrite it with the raw RDO each 100ms. */
             ConvProtection_SetIbusLimitMa(
-                observation.input==HEATER_INPUT_PD ? contract.current_ma :
+                observation.input==HEATER_INPUT_PD ?
+                    Heater_InputProtectionLimitMa(contract.voltage_mv,
+                                                 contract.current_ma) :
                 observation.input==HEATER_INPUT_DCIN ? 7000u : 0u);
         }
         TempService_GetSnapshot(&temperature);
@@ -168,7 +171,8 @@ THRD_DECLARE(thread_heater)
         {
             HeaterSnapshot hs;
             Heater_GetSnapshot(&hs);
-            ConvController_SetPhaseDegrees(hs.target_phase_deg);
+            if(!ConvController_PanProbeBusy())
+                ConvController_SetPhaseDegrees(hs.target_phase_deg);
             (void)ConvController_StartLogicPwm();
             /* Explicit RUN, validated 12V/3A source, 0..180deg.
              * Stop always pulls PC6 LOW, never auto-restart on later PD. */
@@ -235,5 +239,7 @@ void APP_Tasks_RunOnce(void)
     DebugUART_Service();
     TempService_Poll(); /* 10Hz; never in the 20kHz ADC ISR */
     CoroOS_RunOnce(&s_scheduler);
+    /* Foreground DMA collection after a timer-IRQ-gated pulse. */
+    ConvController_PanProbeService(TIME_Millis());
     SSD1315_Display_Service();
 }

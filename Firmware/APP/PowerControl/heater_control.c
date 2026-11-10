@@ -46,6 +46,7 @@ void Heater_Init(void)
     s_proposed_target_mw=0u;
     s.target_temp_deci_c=800u;
     s.target_phase_deg=180u; /* default maximum bridge phase-shift */
+    s.pan_detect_enabled=0u;
     s_stop_timer_armed=0u;
     s_stop_deadline_ms=0u;
 }
@@ -69,10 +70,22 @@ void Heater_SetPhaseDegrees(uint16_t degrees)
     s.target_phase_deg=degrees;
     /* Only a configuration request; NEVER raises PC6. */
 }
+uint8_t Heater_SetPanDetectEnabled(uint8_t enabled)
+{
+    if(s.state!=HEATER_OFF)return 0u;
+    s.pan_detect_enabled=(uint8_t)(enabled!=0u);
+    return 1u;
+}
 void Heater_SetOffMinutes(uint16_t minutes,uint32_t now_ms)
 {
     if(minutes>HEATER_MAX_MINUTES)minutes=HEATER_MAX_MINUTES;
     s.off_minutes=minutes;
+    /* Disabling the stop timer cannot create an unlimited probe session. */
+    if(s.pan_detect_enabled && s.state==HEATER_RUN_REQUESTED && !minutes)
+    {
+        Heater_Stop();
+        return;
+    }
     if(s.state==HEATER_RUN_REQUESTED && minutes)
     {
         s_stop_deadline_ms=now_ms+(uint32_t)minutes*60000u;
@@ -87,7 +100,9 @@ void Heater_StartConfirmed(uint32_t now_ms)
      * human confirmation must be paired with pot/overtemp/interlock checks.
      * Deliberately immediate: there is no reservation/countdown start, so a
      * RUN press goes straight to RUN_REQUESTED. */
-    if(s.state==HEATER_FAULT)return;
+    if(s.state==HEATER_FAULT ||
+       (s.pan_detect_enabled && (!s.off_minutes ||
+                                s.mode!=HEATER_MODE_POWER)))return;
     s.state=HEATER_RUN_REQUESTED;
     s_integrator_mw=0;
     s_derivative_ready=0u;

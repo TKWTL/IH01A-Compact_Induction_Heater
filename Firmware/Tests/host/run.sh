@@ -76,3 +76,18 @@ build_run heater_cli_commands -DHEATER_CLI_HOST_TEST -I APP -I BSP/Console -I Te
  BSP/Console/heater_cli_parse.c BSP/Console/heater_cli.c \
  APP/PowerControl/conv_phase.c APP/PowerControl/conv_current.c \
  Tests/host/test_heater_cli_commands.c
+
+# MCU integration smoke tests: the host unit tests above do not compile
+# CubeMX modules, so enforce cross-module wiring and single DMA ISR owner.
+grep -Fq 'uint8_t pan_detect_enabled;' APP/PowerControl/heater_control.h
+grep -Fq 'uint8_t Heater_SetPanDetectEnabled(uint8_t enabled);' APP/PowerControl/heater_control.h
+grep -Fq 'CONV_BENCH_COUNTDOWN' APP/PowerControl/conv_controller.h
+grep -Fq 'extern DMA_HandleTypeDef hdma_tim1_ch2;' Core/Inc/tim.h
+grep -Fq 'ConvController_PanProbeService(TIME_Millis());' APP/app_tasks.c
+grep -Fq 'ConvController_PanProbeUpdateISR();' Core/Src/stm32g0xx_it.c
+grep -Fq 'void DMA1_Channel2_3_IRQHandler(void)' APP/PowerControl/conv_controller.c
+if grep -Fq 'void DMA1_Channel2_3_IRQHandler(void)' Core/Src/stm32g0xx_it.c; then
+  echo 'ERROR: duplicate DMA1_Channel2_3_IRQHandler' >&2
+  exit 1
+fi
+echo 'pan probe integration: PASS'

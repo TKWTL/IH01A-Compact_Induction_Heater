@@ -155,6 +155,36 @@ int main(void)
     Heater_AcknowledgeFault();
     Heater_GetSnapshot(&s);
     assert(s.state==HEATER_OFF && s.fault_mask==0u);
+    /* Pulse-only mode must remain explicitly OFF on boot, require a
+     * countdown and prevent configuration changes during RUN. */
+    Heater_Init();
+    Heater_GetSnapshot(&s);
+    assert(!s.pan_detect_enabled);
+    assert(Heater_SetPanDetectEnabled(1u));
+    Heater_StartConfirmed(1000u);
+    Heater_GetSnapshot(&s);
+    assert(s.state==HEATER_OFF); /* no timer: fail closed */
+    Heater_SetOffMinutes(1u,1000u);
+    Heater_SetMode(HEATER_MODE_TEMP);
+    Heater_StartConfirmed(1000u);
+    Heater_GetSnapshot(&s);
+    assert(s.state==HEATER_OFF); /* TEMP not qualified */
+    Heater_SetMode(HEATER_MODE_POWER);
+    Heater_StartConfirmed(1000u);
+    Heater_GetSnapshot(&s);
+    assert(s.state==HEATER_RUN_REQUESTED);
+    assert(!Heater_SetPanDetectEnabled(0u));
+    o=sensor(140000u);
+    o.temperature_updated_ms=1500u;
+    Heater_Poll(1500u,&o);
+    Heater_GetSnapshot(&s);
+    assert(s.pan_detect_enabled && s.off_remaining_s>0u);
+    Heater_SetOffMinutes(0u,1500u);
+    Heater_GetSnapshot(&s);
+    assert(s.state==HEATER_OFF);
+    assert(Heater_SetPanDetectEnabled(0u));
+    Heater_GetSnapshot(&s);
+    assert(!s.pan_detect_enabled);
     puts("heater control and budget: PASS");
     return 0;
 }

@@ -52,7 +52,9 @@ void MX_TIM15_Init(void);
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /* USER CODE BEGIN Prototypes */
-
+/* TIM1 CH2 -> DMA1 Ch3, defined in tim.c; used by PanProbe.
+ * Keep in CubeMX USER CODE section so regeneration retains declaration. */
+extern DMA_HandleTypeDef hdma_tim1_ch2;
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus
