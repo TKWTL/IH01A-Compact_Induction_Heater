@@ -792,6 +792,14 @@ uint8_t ConvController_PanProbeBusy(void)
 {
     return (uint8_t)(s_pan_state!=PAN_IDLE);
 }
+uint8_t ConvController_PanProbeState(void)
+{
+    return (uint8_t)s_pan_state;
+}
+uint32_t ConvController_PanProbeSequence(void)
+{
+    return s_pan_seq;
+}
 static uint8_t pan_restore(void)
 {
     ConvPhaseConfig phase;
@@ -843,6 +851,9 @@ static uint8_t pan_arm(uint32_t now_ms)
     s_pan_left=s_pan_adc_guard=0u;
     s_pan_armed_ms=now_ms;
     s_pan_state=PAN_ARMED;
+    /* Count every armed attempt, including those with zero IC2 edges.
+     * The UART PAN record is still emitted only with valid DMA data. */
+    ++s_pan_seq;
     TIM1->DIER |= TIM_DIER_CC2DE;
     /* Clear stale UIF. At the first natural update, the new preloads
      * become active; only then can the ISR raise the FD2204 enable. */
@@ -901,7 +912,7 @@ void ConvController_PanProbeService(uint32_t now_ms)
         {
             int n=snprintf(s_pan_log,sizeof(s_pan_log),
                 "[PAN] SEQ=%lu FREQ=150K PHASE=180 CYC=%u CAP=%u ON_COUNT=%u RAW=",
-                (unsigned long)++s_pan_seq,(unsigned)PAN_CYCLES,
+                (unsigned long)s_pan_seq,(unsigned)PAN_CYCLES,
                 (unsigned)valid,(unsigned)(off-from));
             wr=(n>0 && (uint32_t)n<sizeof(s_pan_log))?(uint16_t)n:0u;
             for(i=from;i<count && wr<sizeof(s_pan_log)-8u;++i)

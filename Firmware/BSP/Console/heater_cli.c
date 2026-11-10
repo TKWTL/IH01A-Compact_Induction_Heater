@@ -43,6 +43,7 @@ static const char *bench_reason(uint8_t code)
     case CONV_BENCH_COMP: return "COMP";
     case CONV_BENCH_FAULT:return "FAULT";
     case CONV_BENCH_BRK:  return "BREAK";
+    case CONV_BENCH_COUNTDOWN:return "COUNTDOWN";
     default:              return "NOT_READY";
     }
 }
@@ -58,6 +59,18 @@ static const char *lag_quality(ConvZcdCalStatus quality)
     case CONV_ZCD_CAL_ADC_INVALID:  return "ADC";
     case CONV_ZCD_CAL_LOW_CURRENT:  return "LOW_CT";
     default:                        return "NO_IC2";
+    }
+}
+static const char *pan_step_name(uint8_t step)
+{
+    switch(step)
+    {
+    case 0u:return "IDLE";
+    case 1u:return "ARMED";
+    case 2u:return "ACTIVE";
+    case 3u:return "COLLECT";
+    case 4u:return "ABORTED";
+    default:return "UNKNOWN";
     }
 }
 static void report_snapshot(void)
@@ -146,11 +159,15 @@ static void report_snapshot(void)
     phase=(unsigned)ConvController_GetPhaseDegrees();
     /* Preserve IC2 and raw lag for regression; LAG_DEG is now the
      * fitted corrected angle, or NA whenever the fit gate is invalid. */
-    printf("HCLI OK HEATER=%s PHASE_DEG=%u FREQ_KHZ=%u FREQ_HZ=%lu IC2=%s LAG_DEG=%s LAG_RAW_DEG=%s LAG_QUAL=%s CT_RMS_A=%s AUTO_FREQ=%s AF_STATE=%s IBUS_DELTA=%u\r\n",
+    printf("HCLI OK HEATER=%s PHASE_DEG=%u FREQ_KHZ=%u FREQ_HZ=%lu IC2=%s LAG_DEG=%s LAG_RAW_DEG=%s LAG_QUAL=%s CT_RMS_A=%s AUTO_FREQ=%s AF_STATE=%s IBUS_DELTA=%u PAN=%s OFF_MIN=%u LEFT_S=%lu PAN_STEP=%s PAN_SEQ=%lu\r\n",
            state,phase,(unsigned)ConvController_GetFrequencyKhz(),
            (unsigned long)actual_hz,ic2,lag,lag_raw,
            lag_quality(quality),current,af.enabled?"ON":"OFF",
-           ConvAutoFreq_StateName(af.state),(unsigned)af.ibus_delta_raw);
+           ConvAutoFreq_StateName(af.state),(unsigned)af.ibus_delta_raw,
+           h.pan_detect_enabled?"ON":"OFF",(unsigned)h.off_minutes,
+           (unsigned long)h.off_remaining_s,
+           pan_step_name(ConvController_PanProbeState()),
+           (unsigned long)ConvController_PanProbeSequence());
 }
 uint8_t HeaterCLI_Dispatch(const char *line)
 {
@@ -202,7 +219,11 @@ uint8_t HeaterCLI_Dispatch(const char *line)
 
     case HEATER_CLI_ON:
         if(ConvController_RequestBenchRunNow(HAL_GetTick()))
-            printf("HCLI OK HEATER=ON\r\n");
+        {
+            Heater_GetSnapshot(&heater);
+            printf("HCLI OK HEATER=%s\r\n",
+                   heater.pan_detect_enabled?"PAN_REQUESTED":"ON");
+        }
         else
             printf("HCLI ERR HEATER_BLOCK=%s\r\n",
                    bench_reason(ConvController_BenchBlockReason()));

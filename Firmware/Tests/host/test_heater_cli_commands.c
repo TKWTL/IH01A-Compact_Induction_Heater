@@ -15,6 +15,8 @@ static ConvZcdSnapshot s_zcd;
 static ConvAutoFreqSnapshot s_af;
 static ConvState s_state=CONV_STATE_ADC_MONITOR;
 static uint8_t s_enabled,s_on_allowed,s_block;
+static uint8_t s_pan_step;
+static uint32_t s_pan_seq;
 static HeaterCliMockTim s_timer={639u};
 HeaterCliMockTim *TIM1=&s_timer;
 
@@ -68,6 +70,8 @@ ConvZcdCalStatus ConvZcd_CorrectionStatus(const ConvZcdSnapshot *v,
     return CONV_ZCD_CAL_RECAL_REQUIRED; /* revised CT not yet refitted */
 }
 uint8_t ConvController_OutputEnabled(void){return s_enabled;}
+uint8_t ConvController_PanProbeState(void){return s_pan_step;}
+uint32_t ConvController_PanProbeSequence(void){return s_pan_seq;}
 uint8_t ConvController_OutputPinLevel(void){return s_enabled;}
 uint16_t ConvController_GetPhaseDegrees(void){return s_phase;}
 uint16_t ConvController_GetFrequencyKhz(void)
@@ -89,7 +93,9 @@ uint8_t ConvController_RequestBenchRunNow(uint32_t now)
 {
     (void)now;
     s_enabled=s_on_allowed;
-    s_block=s_on_allowed?CONV_BENCH_OK:CONV_BENCH_NOPD;
+    s_block=s_on_allowed?CONV_BENCH_OK:
+            s_heater.pan_detect_enabled?CONV_BENCH_COUNTDOWN:
+            CONV_BENCH_NOPD;
     if(s_enabled)s_heater.state=HEATER_RUN_REQUESTED;
     return s_enabled;
 }
@@ -128,6 +134,9 @@ int main(void)
     s_af.enabled=0u;
     send("heater auto 1","HCLI ERR SYNTAX\r\n");
     send("heater on","HCLI ERR HEATER_BLOCK=NO_PD\r\n");
+    s_heater.pan_detect_enabled=1u; /* verify the previously hidden reason */
+    send("heater on","HCLI ERR HEATER_BLOCK=COUNTDOWN\r\n");
+    s_heater.pan_detect_enabled=0u;
 
     s_now=1100u;
     s_on_allowed=1u;
@@ -151,7 +160,7 @@ int main(void)
     s_reply[0]='\0';
     assert(HeaterCLI_Dispatch("heater get"));
     assert(strstr(s_reply,"HCLI OK HEATER=ON PHASE_DEG=180 FREQ_KHZ=200 FREQ_HZ=200000 ")==s_reply);
-    assert(strstr(s_reply," AUTO_FREQ=OFF AF_STATE=OFF IBUS_DELTA=0\r\n")!=0);
+    assert(strstr(s_reply," AUTO_FREQ=OFF AF_STATE=OFF IBUS_DELTA=0 PAN=OFF OFF_MIN=0 LEFT_S=0 PAN_STEP=IDLE PAN_SEQ=0\r\n")!=0);
     assert(strstr(s_reply,"IC2=444 LAG_DEG=NA LAG_RAW_DEG=+114.9 LAG_QUAL=RECAL CT_RMS_A=0.932")!=0);
     s_zcd.last_ms=0u;
     s_reply[0]='\0';
@@ -178,6 +187,16 @@ int main(void)
     assert(HeaterCLI_Dispatch("heater get"));
     assert(strstr(s_reply,"LAG_QUAL=FREQ")!=0);
     send("heater off","HCLI OK HEATER=OFF\r\n");
+    s_heater.pan_detect_enabled=1u;
+    s_heater.off_minutes=5u;
+    s_heater.off_remaining_s=280u;
+    s_pan_step=2u;s_pan_seq=3u;
+    s_enabled=0u;
+    s_reply[0]='\0';
+    assert(HeaterCLI_Dispatch("heater get"));
+    assert(strstr(s_reply,
+        " PAN=ON OFF_MIN=5 LEFT_S=280 PAN_STEP=ACTIVE PAN_SEQ=3\r\n")!=0);
+    send("heater on","HCLI OK HEATER=PAN_REQUESTED\r\n");
     puts("heater CLI command: PASS");
     return 0;
 }

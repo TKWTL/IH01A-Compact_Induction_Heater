@@ -76,6 +76,10 @@ uint8_t ConvController_BenchAdcFrameWatchdogISR(void);
  * Foreground schedules DMA capture; TIM1 UPDATE IRQ shuts pulse off.
  * No cookware classification or automatic power enable. */
 uint8_t ConvController_PanProbeBusy(void);
+/* Debug-only: state is IDLE/ARMED/ACTIVE/COLLECT/ABORTED (0..4).
+ * Sequence counts DMA-armed attempts even when IC2 produced no captures. */
+uint8_t ConvController_PanProbeState(void);
+uint32_t ConvController_PanProbeSequence(void);
 void ConvController_PanProbeService(uint32_t now_ms);
 void ConvController_PanProbeUpdateISR(void);
 #endif
