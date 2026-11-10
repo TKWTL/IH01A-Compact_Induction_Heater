@@ -61,28 +61,13 @@ void ConvProtection_Init(void)
     s_ct_min=s_ib_min=4095u;
     s_ct_max=s_ib_max=0u;
     s_dac1=s_dac2=0u;
-    /* TEST-ONLY window: preserve ±12A at revised 0.075V/A =>
-     * 0.900V = 1474 DAC counts. Keeping 1966 would silently increase the
-     * trip to ±16A, which the revised coils/MOSFETs have NOT qualified.
-     *
-     * PROPOSED FUTURE PROTECTION: limit resonant-capacitor voltage to
-     * |V_C,peak| <= 1000V by adapting the allowed sinusoidal CT_OCP
-     * peak current to TIM1 period (ARR), not by holding 12A forever.
-     * For i_C(t)=Ipk*sin(2*pi*f*t), with steady symmetric AC and C fixed:
-     * Q_half = integral[0 .. T/2] i_C dt = 2*Ipk/(2*pi*f)
-     * and delta_V_C(half-cycle)=Q_half/C = Ipk/(pi*f*C).
-     * IMPORTANT: that delta is the PEAK-TO-PEAK voltage swing, so
-     * |V_C,peak| = Ipk/(2*pi*f*C) (not delta_V_C itself).
-     * Consequently the approximate bound is Ipk <= 2*pi*f*C*1000V,
-     * f_TIM1 = 128MHz/(ARR+1) for PSC=0 (if PWM and current have this
-     * fundamental frequency). For 37.6nF C, 300kHz permits ~70.9A
-     * from this ideal model, 150kHz ~35.4A. Non-sinusoidal current,
-     * frequency transitions, capacitor tolerances, voltage DC offset,
-     * sensor delay and resonant overvoltage invalidate that simple
-     * estimate; retain independent fast HW trip and margin.
-     * This revision intentionally DOES NOT implement the dynamic rule. */
-    /* ±12 A peak at CT_OUT gain 75 mV/A; 16 A would allow 1966 counts. */
-    s_low=s_high=(uint16_t)((CONV_CT_OUT_MV_PER_A*12u*4095u+1250u)/2500u);
+    /* Nominal fixed hardware trip setting: +/-16 A peak at CT_OUT 75 mV/A.
+     * Delta DAC code = round(16 A * 0.075 V/A * 4095 / 2.5 V) = 1966.
+     * This configuration is NOT proof of safe current at any given VBUS,
+     * resonance frequency or driver delay. Keep TIM1 hardware Break enabled;
+     * verify comparator threshold and switching stress on real hardware.
+     * No frequency-dependent capacitor-voltage limit is implemented. */
+    s_low=s_high=(uint16_t)((CONV_CT_OUT_MV_PER_A*16u*4095u+1250u)/2500u);
     s_profile_ready=1u;
     s_notified=0u;
     s_faults=s_fault_at=0u;

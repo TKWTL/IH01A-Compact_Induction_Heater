@@ -1,14 +1,8 @@
+# The firmware host regression suite is retained for explicit runs only.
+# Deliberately no push/PR triggers: IH01A is an archival research project.
+# Run from GitHub Actions -> Firmware host regression tests -> Run workflow.
 name: Firmware host regression tests
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'Firmware/**'
-      - '.github/workflows/host-tests.yml'
-  pull_request:
-    paths:
-      - 'Firmware/**'
-      - '.github/workflows/host-tests.yml'
   workflow_dispatch:
 jobs:
   host:
