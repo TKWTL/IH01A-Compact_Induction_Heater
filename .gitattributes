@@ -51,3 +51,11 @@ Hardware/Manufacturing/BOM/*.html binary
 *.stp  binary
 *.3mf  binary
 *.dxf  binary
+
+# Images/ 目录统一策略:目录内是实物照片/示波器截图等纯二进制资产,
+# 一律禁止行尾转换(避免 core.autocrlf 反复改写)并禁用文本 diff;
+# 目录里的说明文件仍按文本处理,改动要能在 review 里看到。
+Images/**            -text -diff
+Images/**/*.md       text diff
+Images/**/README.md  text diff
+Images/**/.gitkeep   text diff
