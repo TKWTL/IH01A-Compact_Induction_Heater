@@ -11,6 +11,7 @@
 #include "conv_protection.h"
 #include "heater_control.h"
 #include "heater_budget.h"
+#include "pan_probe_config.h"
 #include "algorithm/pd_input.h"
 #include "framework/pm_api.h"
 #include "main.h"
@@ -40,13 +41,11 @@ static HeaterObservation s_last_bench_obs;
 static uint32_t s_last_bench_obs_ms;
 static uint8_t s_last_bench_obs_valid;
 
-/* Opt-in six-cycle pulse, then IC2 DMA while TIM1 keeps counting. */
+/* Opt-in short probe, then IC2 DMA while TIM1 keeps counting.
+ * Electrical profile is shared with host tests in pan_probe_config.h. */
 #define PAN_PERIOD_MS 2000u
 #define PAN_CAPTURE_MS 4u
 #define PAN_TIMEOUT_MS 10u
-#define PAN_FREQ_KHZ 150u
-#define PAN_PHASE 180u
-#define PAN_CYCLES 6u
 #define PAN_DMA_LEN 48u
 typedef enum { PAN_IDLE=0u,PAN_ARMED,PAN_ACTIVE,PAN_COLLECT,PAN_ABORTED } PanState;
 static volatile PanState s_pan_state;
@@ -730,8 +729,10 @@ IH_RAMFUNC void DMA1_Channel2_3_IRQHandler(void)
                 const volatile uint16_t *frame=
                   ConvADC_DmaFrame((flags & DMA_ISR_TCIF2)!=0u);
                 ConvADC_ProcessFrameISR(frame);
-                /* Backstop if TIM1 update IRQ stalls. Six periods at
-                 * 150kHz take ~40us; three 20kHz frames force PC6/MOE OFF. */
+                /* Backstop if TIM1 update IRQ stalls. Two periods at
+                 * 160kHz nominally take 12.5us; three 20kHz frames still
+                 * force PC6/MOE OFF if update IRQ timing fails. This is
+                 * NOT an accurate substitute for hardware pulse timing. */
                 if(s_pan_state==PAN_ACTIVE && ++s_pan_adc_guard>=3u)
                     ConvController_TripISR();
                 /* Exact 100-frame decimation: deterministic TIM6 clock,
@@ -743,9 +744,9 @@ IH_RAMFUNC void DMA1_Channel2_3_IRQHandler(void)
     LL_GPIO_ResetOutputPin(ISR_TIME_GPIO_Port, ISR_TIME_Pin);
 }
 
-/* TIM1 UPDATE IRQ is enabled ONLY for a six-period probe. First update
- * commits the staged ARR/CCR preload and asserts PC6; six subsequent
- * PWM periods later, PC6 is cleared. TIM1 CEN stays high throughout. */
+/* TIM1 UPDATE IRQ is enabled ONLY for the PAN_CYCLES-period probe.
+ * First update commits staged ARR/CCR preloads and asserts PC6; after
+ * PAN_CYCLES natural PWM periods, PC6 is cleared. TIM1 keeps counting. */
 IH_RAMFUNC void ConvController_PanProbeUpdateISR(void)
 {
     if(s_pan_state!=PAN_ARMED && s_pan_state!=PAN_ACTIVE)
@@ -840,7 +841,7 @@ static uint8_t pan_arm(uint32_t now_ms)
     for(i=0u;i<PAN_DMA_LEN;++i)s_pan_dma[i]=0xFFFFu;
     DMA1->IFCR=DMA_IFCR_CGIF3;
     /* Normal DMA1 Ch3, no IRQ / HAL callbacks: the existing ADC Ch2
-     * SRAM ISR cannot afford an extra 150kHz interrupt source. */
+     * SRAM ISR cannot afford an extra 160kHz interrupt source. */
     if(HAL_DMA_Start(&hdma_tim1_ch2,(uint32_t)(uintptr_t)&TIM1->CCR2,
                      (uint32_t)(uintptr_t)s_pan_dma,PAN_DMA_LEN)!=HAL_OK)
     {
@@ -911,8 +912,10 @@ void ConvController_PanProbeService(uint32_t now_ms)
         if(valid)
         {
             int n=snprintf(s_pan_log,sizeof(s_pan_log),
-                "[PAN] SEQ=%lu FREQ=150K PHASE=180 CYC=%u CAP=%u ON_COUNT=%u RAW=",
-                (unsigned long)s_pan_seq,(unsigned)PAN_CYCLES,
+                "[PAN] SEQ=%lu FREQ=%uK PHASE=%u CYC=%u CAP=%u ON_COUNT=%u RAW=",
+                (unsigned long)s_pan_seq,
+                (unsigned)PAN_FREQ_KHZ,(unsigned)PAN_PHASE,
+                (unsigned)PAN_CYCLES,
                 (unsigned)valid,(unsigned)(off-from));
             wr=(n>0 && (uint32_t)n<sizeof(s_pan_log))?(uint16_t)n:0u;
             for(i=from;i<count && wr<sizeof(s_pan_log)-8u;++i)

@@ -72,7 +72,7 @@ void ConvController_BenchRunPoll(uint32_t now_ms,
 /* Synchronous CLI start, reports success only if PC6 is physically HIGH. */
 uint8_t ConvController_RequestBenchRunNow(uint32_t now_ms);
 uint8_t ConvController_BenchAdcFrameWatchdogISR(void);
-/* Six-period, 150kHz / 180deg short-pulse pan experiment.
+/* Two-period, 160kHz / 180deg short-pulse pan experiment.
  * Foreground schedules DMA capture; TIM1 UPDATE IRQ shuts pulse off.
  * No cookware classification or automatic power enable. */
 uint8_t ConvController_PanProbeBusy(void);
