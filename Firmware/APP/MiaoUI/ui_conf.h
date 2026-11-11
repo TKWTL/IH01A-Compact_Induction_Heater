@@ -53,6 +53,9 @@ extern "C" {
 // 文本间距
 #define UI_TEXT_SPACE  13
 #define UI_TEXT_CURSOR_Y_OFFSET  3
+/* TEXT page selection inset (pixels); text moves inward, not outside OLED bounds. */
+#define UI_TEXT_CURSOR_SIDE_MARGIN  1u
+#define UI_TEXT_CURSOR_TOP_PADDING  1u
 // 起始Y坐标，基于字体大小设定的第一行位置
 #define UI_PAGE_INIT_Y   UI_FONT_HIGHT
 // 起始X坐标

@@ -6,10 +6,10 @@
 
 ## 实现方式
 
-- **原文为键**：`AddItem`、`AddPage` 和 `ui_data_t.name` 保存英文原文，不对菜单内部标识、回调或结构进行中文替换。`Firmware/APP/i18n.c` 中的 `IH_I18n_Text()` 负责显示层精确匹配翻译；无匹配时保留原文。
+- **原文为键**：`AddItem`、`AddPage` 和 `ui_data_t.name` 保存英文原文，不对菜单内部标识、回调或结构进行中文替换。`Firmware/APP/i18n.c` 中的 `IH_I18n_Text()` 负责显示层精确匹配翻译；无匹配时保留原文。译文保留原文的**前导空格、`-` 以及成对方括号**（例如 `-Settings` → `-设置`、`[Return]` → `[返回]`），维护菜单层级和视觉缩进。
 - **语言切换**：`Settings → System → Language` 是 MiaoUI 原生开关。英文 `OFF`、简体中文 `ON`；启动默认英文。切换即时生效，目前为 **RAM 状态**，复位后恢复英文，不涉及未完成的 EEPROM 异步写入。
 - **字体**：简体中文采用 TakWolf [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) 12px Proportional zh_Hans，源自本次提供的 `fusion-pixel-12px-proportional-zh_hans.bdf`。编译内置的是 Unicode/U8g2 RLE 子集，含 95 个 ASCII 字形和 89 个汉字，字库占 3428 字节；英文模式继续使用原 `font_menu_main_h12w6`。
-- **宽度**：菜单光标、滚动边界与图标标题改用 `Disp_GetUTF8Width(IH_I18n_Text(...))` 测量，不能继续以 `strlen() × 6` 处理中文。绘制调用现有的 `Disp_DrawStr()` / `Disp_DrawUTF8()`，底层均为 `u8g2_DrawUTF8()`。
+- **宽度**：菜单光标、滚动边界与图标标题改用 `Disp_GetUTF8Width(IH_I18n_Text(...))` 测量，不能继续以 `strlen() × 6` 处理中文。绘制调用现有的 `Disp_DrawStr()` / `Disp_DrawUTF8()`，底层均为 `u8g2_DrawUTF8()`。TEXT 页文本从 X=1 开始，选中框从 X=0 开始，宽度为 `min(实际 UTF-8 字宽+2px, 文本区可用宽度)`，左右各留 1px；上沿比原实现高 1px，高度从 11px 增至 12px，下沿不变。文本区域被裁剪时，末尾右侧留白可能不足 1px。
 - **文本控件**：关于页按 UTF-8 码点分段、按实际像素宽度折行，避免把一个三字节汉字当三个字符绘制。
 - **Keil**：`Compact_Induction_Heater.uvprojx` 纳入 `APP/i18n.c` 和 `APP/MiaoUI/fonts/font_fusion_pixel_12_zh.c`。
 

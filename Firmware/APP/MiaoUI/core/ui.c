@@ -740,6 +740,18 @@ static void Calculate_PageState(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item,u
 }
 
 //勘误：修复了非菜单第一项返回时位置错误的问题
+/* The selection rectangle is inset relative to the OLED edge and has one
+ * pixel of padding on each side of the text. Clamp to the title clip width.
+ * Pixel advance is measured after translation using the active U8g2 font. */
+static uint16_t UI_TextCursorWidth(const ui_page_t *page, const char *english)
+{
+    const uint16_t available = (uint16_t)
+        ((page->wideText ? UI_HOR_RES - 10u : UI_TITLE_X1) - UI_TITLE_X0);
+    const uint32_t width = (uint32_t)
+        Disp_GetUTF8Width(IH_I18n_Text(english)) + 2u * UI_TEXT_CURSOR_SIDE_MARGIN;
+    return (uint16_t)((width > available) ? available : width);
+}
+
 static void Calculate_Cursor(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item,ui_item_t *next_item){
     if(next_item->page.location != now_Item->page.location){//换页面了
         if(now_Item->itemType == UI_ITEM_PARENTS) Cursor_AnimationParam_Init(ui, next_item);//进入子菜单，初始化子菜单各项目坐标
@@ -749,7 +761,7 @@ static void Calculate_Cursor(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item,ui_i
     switch (Page->type){
     case UI_PAGE_TEXT:
         // 计算当前项名称的宽度（nowWide 为 Q10 定点）
-        ui->cursor.nowWide  = UI_FX(Disp_GetUTF8Width(IH_I18n_Text(now_Item->itemName)) + 4);
+        ui->cursor.nowWide  = UI_FX(UI_TextCursorWidth(Page, now_Item->itemName));
         ui->cursor.targrtRow = next_item->y - UI_FONT_HIGHT;
         if (ui->cursor.targrtRow > (ui->textSpace*(UI_VER_RES/ui->textSpace) - ui->textSpace) || ui->cursor.targrtRow < 0)  // 防止光标溢出可视范围
         {
@@ -866,21 +878,21 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
                 break;
             }
 #endif
-            Disp_DrawStr(temp_item->x, (uint16_t)UI_FXI(temp_item->animationY), IH_I18n_Text(temp_item->itemName));
+            Disp_DrawStr((uint16_t)(temp_item->x + UI_TEXT_CURSOR_SIDE_MARGIN), (uint16_t)UI_FXI(temp_item->animationY), IH_I18n_Text(temp_item->itemName));
         }
 
         temp_item = temp_item->nextItem;
     }
 
     /* 高光框：保留动画，但动画目标改成“选中项实际动画基线Y + 固定补偿” */
-    cursor_target_row = (int16_t)(UI_FXI(selected_anim_y) - UI_FONT_HIGHT + UI_TEXT_CURSOR_Y_OFFSET);
+    cursor_target_row = (int16_t)(UI_FXI(selected_anim_y) - UI_FONT_HIGHT + UI_TEXT_CURSOR_Y_OFFSET - UI_TEXT_CURSOR_TOP_PADDING);
 
     Disp_SetClipWindow(UI_TITLE_X0, UI_TITLE_Y0, text_right, UI_TITLE_Y1);
     color = 2;
     Disp_SetDrawColor(&color);
     ui->cursor.nowRow = UI_Animation(UI_FX(cursor_target_row), ui->cursor.nowRow, &ui->animation.cursor_ani);
     ui->cursor.nowWide = UI_Animation(UI_FX(ui->cursor.targrtWide), ui->cursor.nowWide, &ui->animation.cursor_ani);
-    Disp_DrawRBox(ui->headX, (uint16_t)UI_FXI(ui->cursor.nowRow), (uint16_t)UI_FXI(ui->cursor.nowWide), UI_FONT_HIGHT - 1, 0);
+    Disp_DrawRBox(ui->headX, (uint16_t)UI_FXI(ui->cursor.nowRow), (uint16_t)UI_FXI(ui->cursor.nowWide), UI_FONT_HIGHT - 1 + UI_TEXT_CURSOR_TOP_PADDING, 0);
     Disp_SetMaxClipWindow();
 }
 
@@ -975,11 +987,10 @@ static void Draw_UI(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_item_t *ne
     // 计算页面状态
     if(ui->menuState == UI_PAGE_RUNING) Calculate_PageState(ui, Page, nowItem, next_item);
 
-    // 计算下一个将要选中项的名称宽度
-    if(Disp_GetUTF8Width(IH_I18n_Text(next_item->itemName)) >
-       ((Page->wideText ? UI_HOR_RES - 10u : UI_TITLE_X1) - UI_TITLE_X0))
-    ui->cursor.targrtWide = (Page->wideText ? UI_HOR_RES - 10u : UI_TITLE_X1) - UI_TITLE_X0;
-    else ui->cursor.targrtWide = Disp_GetUTF8Width(IH_I18n_Text(next_item->itemName));
+    // TEXT page: glyph advance + left/right margins, capped to the title clip.
+    // ICON page uses a separate underline and does not need the width.
+    if(Page->type == UI_PAGE_TEXT)
+        ui->cursor.targrtWide = UI_TextCursorWidth(Page, next_item->itemName);
     // 开始绘制菜单界面
     //清屏
     Disp_SetDrawColor(&color); // 设置背景颜色
