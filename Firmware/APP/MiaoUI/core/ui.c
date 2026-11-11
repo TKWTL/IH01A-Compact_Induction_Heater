@@ -884,15 +884,23 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
         temp_item = temp_item->nextItem;
     }
 
-    /* 高光框：保留动画，但动画目标改成“选中项实际动画基线Y + 固定补偿” */
-    cursor_target_row = (int16_t)(UI_FXI(selected_anim_y) - UI_FONT_HIGHT + UI_TEXT_CURSOR_Y_OFFSET - UI_TEXT_CURSOR_TOP_PADDING);
+    /* Font metrics differ slightly between CJK and ASCII.
+     * CJK: extend top by 1px, preserve the existing bottom boundary.
+     * ASCII: preserve the existing top and extend bottom by 1px.
+     * Both selection rectangles remain 13px tall; the row animation
+     * tracks the chosen locale while horizontal padding stays unchanged. */
+    cursor_target_row = (int16_t)(UI_FXI(selected_anim_y) - UI_FONT_HIGHT
+                                  + UI_TEXT_CURSOR_Y_OFFSET - UI_TEXT_CURSOR_TOP_PADDING
+                                  - (IH_I18n_IsChinese() ? 1 : 0));
 
     Disp_SetClipWindow(UI_TITLE_X0, UI_TITLE_Y0, text_right, UI_TITLE_Y1);
     color = 2;
     Disp_SetDrawColor(&color);
     ui->cursor.nowRow = UI_Animation(UI_FX(cursor_target_row), ui->cursor.nowRow, &ui->animation.cursor_ani);
     ui->cursor.nowWide = UI_Animation(UI_FX(ui->cursor.targrtWide), ui->cursor.nowWide, &ui->animation.cursor_ani);
-    Disp_DrawRBox(ui->headX, (uint16_t)UI_FXI(ui->cursor.nowRow), (uint16_t)UI_FXI(ui->cursor.nowWide), UI_FONT_HIGHT - 1 + UI_TEXT_CURSOR_TOP_PADDING, 0);
+    Disp_DrawRBox(ui->headX, (uint16_t)UI_FXI(ui->cursor.nowRow),
+                  (uint16_t)UI_FXI(ui->cursor.nowWide),
+                  UI_FONT_HIGHT + UI_TEXT_CURSOR_TOP_PADDING, 0);
     Disp_SetMaxClipWindow();
 }
 
