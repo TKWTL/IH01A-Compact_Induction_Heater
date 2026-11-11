@@ -45,10 +45,11 @@ extern "C" {
 #define UI_DEFAULT_ROTATION U8G2_R0
 #define UI_ALTERNATE_ROTATION U8G2_R2
 // 菜单字体定义
-#define UI_FONT   font_menu_main_h12w6
+#define UI_FONT   font_fusion_pixel_12_zh
 // 字体尺寸定义
 #define UI_FONT_HIGHT   12 // 字体高度
-// 字体宽度
+// Compatibility-only nominal width; Fusion Pixel is proportional.
+// Actual layout and cursor measurement must use Disp_GetUTF8Width().
 #define UI_FONT_WIDTH  6
 // 文本间距
 #define UI_TEXT_SPACE  13

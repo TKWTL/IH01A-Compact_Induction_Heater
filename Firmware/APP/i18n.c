@@ -63,7 +63,8 @@ static const translation_t s_dictionary[] = {
 void IH_I18n_SetChinese(uint8_t enable) { s_chinese = enable ? 1u : 0u; }
 uint8_t IH_I18n_IsChinese(void) { return s_chinese; }
 const uint8_t *IH_I18n_Font(void) {
-    return s_chinese ? font_fusion_pixel_12_zh : font_menu_main_h12w6;
+    /* One pixel font for both locales: ASCII and CJK are in one glyph subset. */
+    return font_fusion_pixel_12_zh;
 }
 const char *IH_I18n_Text(const char *english) {
     unsigned i;

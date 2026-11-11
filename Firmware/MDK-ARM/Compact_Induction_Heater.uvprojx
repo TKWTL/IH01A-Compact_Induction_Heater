@@ -3759,11 +3759,7 @@
               <FileType>1</FileType>
               <FilePath>../APP/MiaoUI/indev/indevDriver.c</FilePath>
             </File>
-            <File>
-              <FileName>fonts.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../APP/MiaoUI/fonts/fonts.c</FilePath>
-            </File>
+
             <File>
                 <FileName>font_fusion_pixel_12_zh.c</FileName>
                 <FileType>1</FileType>
