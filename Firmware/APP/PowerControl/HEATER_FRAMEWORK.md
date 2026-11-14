@@ -6,7 +6,7 @@
 > **当前试验阶段提示（2026-11-02）**：已转为12V、
 > 200kHz、无时间上限的显式手动低功率加热，相位 0°/180° 全范围可选
 > （不再限制 10°/20°）。正常PID及功率驱动仍未授权。详见
-> [LOW_POWER_ZCD_BENCH.md](LOW_POWER_ZCD_BENCH.md)。
+> [../../../Docs/Experiments/LOW_POWER_ZCD_BENCH.md](../../../Docs/Experiments/LOW_POWER_ZCD_BENCH.md)。
 >
 # IH01A HEATER 手动移相测试界面（2026-11-02）
 

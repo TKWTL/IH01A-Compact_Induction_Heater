@@ -44,10 +44,10 @@ UDIS=0
 300kHz→180kHz）。所有配置由后台业务共享，退出 Settings 后保持，
 Main 也读取相同的移相角；Main 和 Settings 均按每次10°调节。
 串口 CLI 可按 1° 调整相移、按整数 1kHz 设置 150～400kHz；
-详见 [HEATER_CLI_PROTOCOL.md](HEATER_CLI_PROTOCOL.md)。
+详见 [../../BSP/Console/CLI.md](../../BSP/Console/CLI.md)。
 
 **注意：相位检测补偿不修改 TIM1、功率级使能或硬件过流判据。**
-当前 LagC 来自 [ZCD_PHASE_COMPENSATION.md](ZCD_PHASE_COMPENSATION.md) 的
+当前 LagC 来自 [../../../Docs/Experiments/ZCD_PHASE_COMPENSATION.md](../../../Docs/Experiments/ZCD_PHASE_COMPENSATION.md) 的
 IC2 计数域三段线性模型，仅在160～330kHz、120～180°和CT_RMS≥0.050A
 （ADC有效）时显示；移相/调频仍支持原有全范围。显示 LagC 并不代表
 带锅负载的相位检测误差或 ZVS 裕量已经经过标定。

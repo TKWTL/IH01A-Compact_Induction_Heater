@@ -27,8 +27,8 @@ IH01A 已实现以 TIM1 短时开通功率级、再断开并采集 CT_ZERO/IC2 �
 | 参数 | 本次条件 / 代码配置 | 依据或说明 |
 |---|---|---|
 | MCU | STM32G071，Cortex-M0+ | IH01A 固件 |
-| TIM1 输入时钟 | 128 MHz，PSC=0 | [conv_phase.h](../Firmware/APP/PowerControl/conv_phase.h)、[tim.c](../Firmware/Core/Src/tim.c) |
-| 脉冲频率 | 160 kHz | [pan_probe_config.h](../Firmware/APP/PowerControl/pan_probe_config.h) |
+| TIM1 输入时钟 | 128 MHz，PSC=0 | [conv_phase.h](../../Firmware/APP/PowerControl/conv_phase.h)、[tim.c](../../Firmware/Core/Src/tim.c) |
+| 脉冲频率 | 160 kHz | [pan_probe_config.h](../../Firmware/APP/PowerControl/pan_probe_config.h) |
 | TIM1 ARR | 799 | 128 MHz / (799+1) = 160 kHz |
 | 激励相移 | 180° | PAN_PHASE |
 | 计划激励长度 | 2 个 PWM 周期，名义上 12.5 μs | PAN_CYCLES；**不代表实测 PC6 导通时间** |
@@ -36,7 +36,7 @@ IH01A 已实现以 TIM1 短时开通功率级、再断开并采集 CT_ZERO/IC2 �
 | 断电后收集等待 | 4 ms | PAN_CAPTURE_MS=4 |
 | 布防超时 | 10 ms | PAN_TIMEOUT_MS=10；仅特定状态使用 |
 | IC2 DMA 缓冲 | 48 个 uint16_t | PAN_DMA_LEN=48 |
-| 边沿输入 | PA9 / TIM1_CH2，直接 TI2，上升沿，输入滤波 0 | [tim.c](../Firmware/Core/Src/tim.c) |
+| 边沿输入 | PA9 / TIM1_CH2，直接 TI2，上升沿，输入滤波 0 | [tim.c](../../Firmware/Core/Src/tim.c) |
 | 功率级使能 | PC6 -> FD2204 EN | 由 TIM1 更新中断脉冲控制；保护触发拉低 |
 | 试验供电 | **标称 12 V**（用户确认的本次测试条件） | 串口记录未逐条列出实测 VBUS；不能据此证明每次脉冲的电压瞬态完全相同 |
 
@@ -55,7 +55,7 @@ T_{\mathrm{pulse,nominal}}=2T_{\mathrm{PWM}}=12.5\ \mathrm{\mu s}
 
 ### 2.2 状态机与数据路径
 
-当前实现见 [conv_controller.c](../Firmware/APP/PowerControl/conv_controller.c)：
+当前实现见 [conv_controller.c](../../Firmware/APP/PowerControl/conv_controller.c)：
 
 1. 只有用户使能检锅、显式 RUN 已确认、预约关断时间非零且仍剩余时间，并满足既有 PD/ADC/温度/COMP/Break 互锁时，才运行检锅序列。
 2. 前台保存原 ARR/相移，将下一周期的预装载寄存器设置为 160 kHz / 180°，清理采样缓存并启动 TIM1_CH2 DMA。
@@ -149,11 +149,11 @@ f_{\mathrm{example}}\approx168.64\ \mathrm{kHz}
 
 ### 3.1.1 捕获序列折线图
 
-![六组条件的 IC2 捕获序列](../Images/Testing/pan_ic2_capture_phase.svg)
+![六组条件的 IC2 捕获序列](../../Images/Testing/pan_ic2_capture_phase.svg)
 
 **图 1：** 六次检锅的 TIM1_CH2 / CCR2 模周期计数位置。横轴是**第几次捕获**，不是物理时间；纵轴是 0～799 范围的定时器计数。折线只辅助观察各组捕获位置的差异，**不能解释为电流包络或真实时域连续曲线**。
 
-![CAP 与 CAP-ON_COUNT 捕获数对比](../Images/Testing/pan_capture_count_comparison.svg)
+![CAP 与 CAP-ON_COUNT 捕获数对比](../../Images/Testing/pan_capture_count_comparison.svg)
 
 **图 2：** 蓝柱为记录中的 CAP，橙柱为 CAP−ON_COUNT 的近似指标。橙柱反映既有统计口径下的粗略分段，不应视作经过校准的断电后振荡周期数。图中无锅 2、利乐包装 1、载锅 0 的顺序来自**本组六条**数据，不能用于推定误判率。
 
@@ -178,13 +178,13 @@ f_{\mathrm{example}}\approx168.64\ \mathrm{kHz}
 
 | 无锅 | 利乐牛奶包装贴合 |
 |:---:|:---:|
-| ![无锅检锅波形](../Images/Testing/%23002%20%E6%97%A0%E9%94%85%E6%A3%80%E9%94%85%E6%B3%A2%E5%BD%A2.png) | ![利乐包装贴合波形](../Images/Testing/%23002%20%E8%B4%B4%E5%90%88%E5%88%A9%E4%B9%90%E7%89%9B%E5%A5%B6%E6%B3%A2%E5%BD%A2.png) |
+| ![无锅检锅波形](../../Images/Testing/%23002%20%E6%97%A0%E9%94%85%E6%A3%80%E9%94%85%E6%B3%A2%E5%BD%A2.png) | ![利乐包装贴合波形](../../Images/Testing/%23002%20%E8%B4%B4%E5%90%88%E5%88%A9%E4%B9%90%E7%89%9B%E5%A5%B6%E6%B3%A2%E5%BD%A2.png) |
 | **锅具贴合** | **锅具离线圈 1.6 mm** |
-| ![锅具贴合波形](../Images/Testing/%23002%20%E8%B4%B4%E5%90%88%E6%9C%89%E9%94%85%E6%B3%A2%E5%BD%A2.png) | ![1.6mm距离有锅波形](../Images/Testing/%23002%201.6mm%E6%9C%89%E9%94%85%E6%B3%A2%E5%BD%A2.png) |
+| ![锅具贴合波形](../../Images/Testing/%23002%20%E8%B4%B4%E5%90%88%E6%9C%89%E9%94%85%E6%B3%A2%E5%BD%A2.png) | ![1.6mm距离有锅波形](../../Images/Testing/%23002%201.6mm%E6%9C%89%E9%94%85%E6%B3%A2%E5%BD%A2.png) |
 
 **图 3：** 四种耦合条件下的瞬态波形，测点为原实验所述半桥—L—监测点—C—半桥之间的监测点；并非线圈电流或谐振电容差分电压。截图与具体 SEQ 未做统一触发同步。
 
-![不同条件下的峰峰值比较](../Images/Testing/pan_scope_vpp_comparison.svg)
+![不同条件下的峰峰值比较](../../Images/Testing/pan_scope_vpp_comparison.svg)
 
 **图 4：** 从四张截图读取的 CH1 峰峰值。**无锅为 >160.67 V，已超出可靠显示范围**，图中该柱仅绘出读数所示的下界而非精确峰峰值；不据此计算实际过压倍数或器件裕量。
 
@@ -297,12 +297,12 @@ i(t)=A e^{-\alpha t}\sin(\omega_d t+\phi),\qquad
 
 相关源码入口：
 
-- 检锅参数：[Firmware/APP/PowerControl/pan_probe_config.h](../Firmware/APP/PowerControl/pan_probe_config.h)
-- 激励状态机、更新中断、DMA 与串口输出：[Firmware/APP/PowerControl/conv_controller.c](../Firmware/APP/PowerControl/conv_controller.c)
-- TIM1 捕获通道配置：[Firmware/Core/Src/tim.c](../Firmware/Core/Src/tim.c)
-- 相移和 ARR 映射：[Firmware/APP/PowerControl/conv_phase.c](../Firmware/APP/PowerControl/conv_phase.c)
-- CT_ZERO 相位计算：[Firmware/APP/PowerControl/conv_zcd.c](../Firmware/APP/PowerControl/conv_zcd.c)
-- 脉冲配置主机测试：[Firmware/Tests/host/test_pan_probe_config.c](../Firmware/Tests/host/test_pan_probe_config.c)
+- 检锅参数：[Firmware/APP/PowerControl/pan_probe_config.h](../../Firmware/APP/PowerControl/pan_probe_config.h)
+- 激励状态机、更新中断、DMA 与串口输出：[Firmware/APP/PowerControl/conv_controller.c](../../Firmware/APP/PowerControl/conv_controller.c)
+- TIM1 捕获通道配置：[Firmware/Core/Src/tim.c](../../Firmware/Core/Src/tim.c)
+- 相移和 ARR 映射：[Firmware/APP/PowerControl/conv_phase.c](../../Firmware/APP/PowerControl/conv_phase.c)
+- CT_ZERO 相位计算：[Firmware/APP/PowerControl/conv_zcd.c](../../Firmware/APP/PowerControl/conv_zcd.c)
+- 脉冲配置主机测试：[Firmware/Tests/host/test_pan_probe_config.c](../../Firmware/Tests/host/test_pan_probe_config.c)
 - 既往背景：[Docs/LOW_POWER_ZCD_BENCH.md](LOW_POWER_ZCD_BENCH.md)、[Docs/ZCD_PHASE_COMPENSATION.md](ZCD_PHASE_COMPENSATION.md)
 
 ## 9. 研究结语
