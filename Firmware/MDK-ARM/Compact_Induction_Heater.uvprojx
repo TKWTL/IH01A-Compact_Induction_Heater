@@ -3759,11 +3759,10 @@
               <FileType>1</FileType>
               <FilePath>../APP/MiaoUI/indev/indevDriver.c</FilePath>
             </File>
-
             <File>
-                <FileName>font_fusion_pixel_12_zh.c</FileName>
-                <FileType>1</FileType>
-                <FilePath>../APP/MiaoUI/fonts/font_fusion_pixel_12_zh.c</FilePath>
+              <FileName>font_fusion_pixel_12_zh.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/MiaoUI/fonts/font_fusion_pixel_12_zh.c</FilePath>
             </File>
             <File>
               <FileName>image.c</FileName>
@@ -3776,9 +3775,9 @@
               <FilePath>../APP/MiaoUI/ui_conf.c</FilePath>
             </File>
             <File>
-                <FileName>i18n.c</FileName>
-                <FileType>1</FileType>
-                <FilePath>../APP/i18n.c</FilePath>
+              <FileName>i18n.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/i18n.c</FilePath>
             </File>
             <File>
               <FileName>pd_ui.c</FileName>
